@@ -1,0 +1,66 @@
+import type { Metadata, Viewport } from 'next';
+import { Bebas_Neue, JetBrains_Mono, Space_Grotesk } from 'next/font/google';
+import './globals.css';
+
+const display = Bebas_Neue({
+  variable: '--font-display',
+  subsets: ['latin'],
+  weight: '400',
+});
+
+const sans = Space_Grotesk({
+  variable: '--font-sans',
+  subsets: ['latin'],
+});
+
+const mono = JetBrains_Mono({
+  variable: '--font-mono',
+  subsets: ['latin'],
+});
+
+export const metadata: Metadata = {
+  metadataBase: new URL(process.env.SITE_ORIGIN || 'http://localhost:3000'),
+  title: 'AFTERIMAGE — Your cinematic sensibility',
+  description: 'A private cinematic instrument that develops your film taste into a persona, palette, spirit director, and five precise recommendations.',
+  applicationName: 'AFTERIMAGE',
+  manifest: '/manifest.webmanifest',
+  icons: {
+    icon: [
+      { url: '/icon-192.png', sizes: '192x192', type: 'image/png' },
+      { url: '/icon-512.png', sizes: '512x512', type: 'image/png' },
+    ],
+    apple: [{ url: '/apple-touch-icon.png', sizes: '180x180', type: 'image/png' }],
+  },
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'black-translucent',
+    title: 'AFTERIMAGE',
+  },
+  openGraph: {
+    type: 'website',
+    title: 'AFTERIMAGE — Your cinematic sensibility',
+    description: 'Develop your film taste into a cinematic persona, palette, spirit director, and five precise recommendations.',
+    images: [{ url: '/og.png', width: 1731, height: 909, alt: 'AFTERIMAGE cinematic film projector artwork' }],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'AFTERIMAGE — Your cinematic sensibility',
+    description: 'A private cinematic instrument powered by your ChatGPT account.',
+    images: ['/og.png'],
+  },
+  robots: { index: false, follow: false },
+};
+
+export const viewport: Viewport = {
+  themeColor: '#0B0D14',
+  colorScheme: 'dark',
+  viewportFit: 'cover',
+};
+
+export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  return (
+    <html lang="en">
+      <body className={`${display.variable} ${sans.variable} ${mono.variable}`}>{children}</body>
+    </html>
+  );
+}
