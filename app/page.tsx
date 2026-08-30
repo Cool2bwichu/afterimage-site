@@ -35,6 +35,7 @@ type AuthFlow = { verificationUrl: string; userCode: string } | null;
 export default function Home() {
   const [films, setFilms] = useState<string[]>([]);
   const [draft, setDraft] = useState('');
+  const [creativeBrief, setCreativeBrief] = useState('');
   const [result, setResult] = useState<AfterimageResult | null>(null);
   const [hydrated, setHydrated] = useState(false);
   const [notice, setNotice] = useState('');
@@ -71,6 +72,7 @@ export default function Home() {
       try {
         const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
         if (Array.isArray(saved?.films)) setFilms(saved.films);
+        if (typeof saved?.creativeBrief === 'string') setCreativeBrief(saved.creativeBrief);
         if (saved?.result?.status === 'complete') setResult(saved.result);
       } catch {
         // A damaged local draft should never keep the instrument from opening.
@@ -83,8 +85,8 @@ export default function Home() {
 
   useEffect(() => {
     if (!hydrated) return;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ films, result }));
-  }, [films, result, hydrated]);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ films, creativeBrief, result }));
+  }, [films, creativeBrief, result, hydrated]);
 
   useEffect(() => {
     const connectionCheck = window.setTimeout(() => void refreshConnection(), 0);
@@ -168,7 +170,7 @@ export default function Home() {
       const response = await fetch('/api/develop', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ films }),
+        body: JSON.stringify({ films, creativeBrief }),
       });
       const payload = await response.json();
       if (!response.ok) {
@@ -257,6 +259,25 @@ export default function Home() {
             <span className="reel-count" aria-label={`${films.length} films loaded`}>{String(films.length).padStart(2, '0')} FRAMES</span>
           </div>
 
+          <div className="brief-field">
+            <div className="brief-heading">
+              <label htmlFor="creative-brief">What should this reel be searching for?</label>
+              <span>Optional · {creativeBrief.length}/1200</span>
+            </div>
+            <textarea
+              id="creative-brief"
+              value={creativeBrief}
+              onChange={(event) => {
+                setCreativeBrief(event.target.value);
+                setResult(null);
+              }}
+              placeholder="Moody, brooding, filled with tones of longing…"
+              maxLength={1200}
+              rows={4}
+              disabled={developing}
+            />
+          </div>
+
           <button
             className="develop-button"
             disabled={!ready || developing || connection !== 'connected'}
@@ -304,8 +325,8 @@ export default function Home() {
             <div className="panel-label rec-label">Double Feature Recommendations</div>
             <div className="recommendation-grid">
               {result.recommendations.map((recommendation, index) => (
-                <article className="recommendation-card" key={`${recommendation.title}-${recommendation.year}`}>
-                  <div className="timecode">REEL {String(index + 1).padStart(2, '0')} — {recommendation.timecode}</div>
+                <article className={`recommendation-card ${index === 0 ? 'is-primary' : ''}`} key={`${recommendation.title}-${recommendation.year}`}>
+                  <div className="timecode">{index === 0 ? 'TOTAL SYNTHESIS' : `REEL ${String(index + 1).padStart(2, '0')}`} — {recommendation.timecode}</div>
                   <h3>{recommendation.title}</h3>
                   <div className="year">{recommendation.year}</div>
                   <p>{recommendation.reason}</p>

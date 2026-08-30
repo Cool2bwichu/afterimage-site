@@ -28,9 +28,9 @@ body {
   font-family: var(--font-sans), sans-serif;
 }
 
-button, input { font: inherit; }
+button, input, textarea { font: inherit; }
 
-button:focus-visible, input:focus-visible {
+button:focus-visible, input:focus-visible, textarea:focus-visible {
   outline: 2px solid var(--cyan);
   outline-offset: 3px;
 }
@@ -341,6 +341,61 @@ button:focus-visible, input:focus-visible {
   letter-spacing: .12em;
 }
 
+.brief-field {
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
+}
+
+.brief-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 10px;
+}
+
+.brief-heading label {
+  color: var(--white);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.brief-heading span {
+  flex: 0 0 auto;
+  color: #666977;
+  font-family: var(--font-mono), monospace;
+  font-size: 9px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.brief-field textarea {
+  display: block;
+  width: 100%;
+  min-height: 112px;
+  resize: vertical;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  outline: none;
+  background:
+    linear-gradient(180deg, rgb(232 179 74 / 2%), transparent 65%),
+    var(--void);
+  color: var(--white);
+  font-size: 15px;
+  line-height: 1.55;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.brief-field textarea:focus {
+  border-color: var(--gold-dim);
+  box-shadow: 0 0 0 3px rgb(232 179 74 / 8%);
+}
+
+.brief-field textarea::placeholder { color: #727483; }
+.brief-field textarea:disabled { opacity: .55; cursor: wait; }
+
 .develop-button {
   width: 100%;
   min-height: 54px;
@@ -528,6 +583,13 @@ button:focus-visible, input:focus-visible {
 }
 
 .recommendation-card:hover { border-color: var(--gold-dim); transform: translateY(-2px); }
+.recommendation-card.is-primary {
+  border-color: rgb(232 179 74 / 35%);
+  background:
+    linear-gradient(145deg, rgb(232 179 74 / 7%), transparent 48%),
+    var(--booth);
+}
+.recommendation-card.is-primary .timecode { color: var(--gold); }
 .timecode { margin-bottom: 10px; color: var(--muted); font-size: 10px; letter-spacing: .05em; }
 .recommendation-card h3 { margin: 0 0 2px; font-size: 18px; }
 .recommendation-card .year { margin-bottom: 12px; color: var(--muted); font-size: 13px; }
@@ -575,6 +637,7 @@ footer {
   .chip-input-row { align-items: stretch; }
   .add-button { min-width: 76px; padding-inline: 12px; }
   .reel-status-row { align-items: flex-start; }
+  .brief-heading { align-items: flex-start; }
   .recommendation-grid { grid-template-columns: 1fr; }
   .recommendation-card { min-height: 0; }
   .director { grid-template-columns: 1fr; gap: 7px; }
