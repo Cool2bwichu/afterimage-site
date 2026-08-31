@@ -825,6 +825,16 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
 }
 
 .dossier-title-row > span { color: var(--muted); font-family: var(--font-mono), monospace; font-size: 12px; }
+.dossier-rating {
+  margin: 14px 0 0;
+  color: var(--gold);
+  font-family: var(--font-mono), monospace;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: .1em;
+  line-height: 1.4;
+  text-transform: uppercase;
+}
 .dossier-facts { margin: 16px 0 0; color: var(--cyan); font-size: 12px; line-height: 1.65; }
 .dossier-overview { margin: 22px 0 0; color: rgb(242 239 233 / 80%); font-size: 14px; line-height: 1.7; }
 

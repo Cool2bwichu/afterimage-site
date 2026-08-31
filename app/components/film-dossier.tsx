@@ -53,7 +53,6 @@ export function FilmDossier({
   const facts = matched ? [
     matched.directors.length ? `Directed by ${matched.directors.join(', ')}` : '',
     matched.runtime ? runtimeLabel(matched.runtime) : '',
-    matched.tmdbRating !== null ? `TMDB ${matched.tmdbRating.toFixed(1)} / 10` : '',
     matched.countries.join(', '),
     matched.genres.join(' · '),
   ].filter(Boolean) : [];
@@ -82,6 +81,9 @@ export function FilmDossier({
           <h2 id="dossier-title">{recommendation.title}</h2>
           <span>{recommendation.year}</span>
         </div>
+        {matched?.tmdbRating !== null && matched?.tmdbRating !== undefined ? (
+          <p className="dossier-rating">TMDB RATING · {matched.tmdbRating.toFixed(1)} / 10</p>
+        ) : null}
         {facts.length ? <p className="dossier-facts">{facts.join('  ·  ')}</p> : null}
         {matched?.overview ? <p className="dossier-overview">{matched.overview}</p> : null}
 

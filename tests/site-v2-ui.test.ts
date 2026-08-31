@@ -74,6 +74,8 @@ test('posters and dossiers use only the private enrichment route and verified IM
   assert.match(card, /poster-frame/);
   assert.match(dossier, /imdbUrl\(matched\.imdbId\)/);
   assert.match(dossier, /TMDB.*\/ 10/);
+  assert.match(dossier, /className="dossier-rating"/);
+  assert.match(dossier, /TMDB RATING/);
   assert.match(dossier, /Why it belongs/i);
   assert.match(dossier, /What to watch for/i);
   assert.doesNotMatch(page + card + dossier + enrichmentRoute, /JustWatch|watch\/providers|streaming provider/i);
