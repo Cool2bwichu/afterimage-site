@@ -236,6 +236,7 @@ export default function Home() {
     const recommendations = result.recommendations;
     const complete = recommendations.every((recommendation) => {
       const metadata = metadataByKey[movieKey(recommendation.title, recommendation.year)];
+      if (metadata?.status === 'matched' && metadata.tmdbRating === null) return false;
       return metadata?.status === 'matched' || metadata?.status === 'unmatched';
     });
     if (complete) return;
