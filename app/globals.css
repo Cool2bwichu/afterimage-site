@@ -266,6 +266,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
 }
 
 .chip-input-row input::placeholder { color: #727483; }
+.chip-input-row input:disabled { opacity: .55; cursor: wait; }
 
 .add-button {
   min-width: 88px;
@@ -283,7 +284,8 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
   transition: border-color 150ms ease, background 150ms ease;
 }
 
-.add-button:hover { border-color: var(--gold-dim); background: #222536; }
+.add-button:hover:not(:disabled) { border-color: var(--gold-dim); background: #222536; }
+.add-button:disabled { opacity: .4; cursor: not-allowed; }
 
 .chips {
   display: flex;
@@ -593,8 +595,28 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
 .timecode { margin-bottom: 10px; color: var(--muted); font-size: 10px; letter-spacing: .05em; }
 .recommendation-card h3 { margin: 0 0 2px; font-size: 18px; }
 .recommendation-card .year { margin-bottom: 12px; color: var(--muted); font-size: 13px; }
-.recommendation-card p { margin: 0 0 16px; color: rgb(242 239 233 / 85%); font-size: 13.5px; line-height: 1.55; }
-.pairs-with { margin-top: auto; padding-top: 10px; border-top: 1px solid var(--line); color: var(--cyan); font-size: 12px; }
+.recommendation-card > p { margin: 0 0 16px; color: rgb(242 239 233 / 85%); font-size: 13.5px; line-height: 1.55; }
+
+.watch-for {
+  margin-top: auto;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.watch-for span {
+  color: var(--cyan);
+  font-family: var(--font-mono), monospace;
+  font-size: 9px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+
+.watch-for p {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
 
 footer {
   margin-top: 60px;

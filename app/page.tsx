@@ -1,25 +1,13 @@
 'use client';
 
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-
-type Recommendation = {
-  title: string;
-  year: string;
-  timecode: string;
-  reason: string;
-  pairsWith: string;
-};
-
-type AfterimageResult = {
-  status: 'complete';
-  sourceFilms: string[];
-  persona: string;
-  insight: string;
-  palette: string[];
-  sensibilities: string[];
-  spiritDirector: { name: string; reason: string };
-  recommendations: Recommendation[];
-};
+import type { AfterimageResultV2 } from './lib/reel-state';
+import {
+  buildDevelopPayload,
+  canDevelop,
+  getInputStatus,
+  parseStoredState,
+} from './lib/reel-state';
 
 const STORAGE_KEY = 'afterimage:mobile-state';
 const LEADER_MESSAGES = [
@@ -36,7 +24,7 @@ export default function Home() {
   const [films, setFilms] = useState<string[]>([]);
   const [draft, setDraft] = useState('');
   const [creativeBrief, setCreativeBrief] = useState('');
-  const [result, setResult] = useState<AfterimageResult | null>(null);
+  const [result, setResult] = useState<AfterimageResultV2 | null>(null);
   const [hydrated, setHydrated] = useState(false);
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
@@ -70,10 +58,10 @@ export default function Home() {
   useEffect(() => {
     const hydration = window.setTimeout(() => {
       try {
-        const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
-        if (Array.isArray(saved?.films)) setFilms(saved.films);
-        if (typeof saved?.creativeBrief === 'string') setCreativeBrief(saved.creativeBrief);
-        if (saved?.result?.status === 'complete') setResult(saved.result);
+        const saved = parseStoredState(localStorage.getItem(STORAGE_KEY));
+        setFilms(saved.films);
+        setCreativeBrief(saved.creativeBrief);
+        setResult(saved.result);
       } catch {
         // A damaged local draft should never keep the instrument from opening.
       } finally {
@@ -85,7 +73,7 @@ export default function Home() {
 
   useEffect(() => {
     if (!hydrated) return;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ films, creativeBrief, result }));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: 2, films, creativeBrief, result }));
   }, [films, creativeBrief, result, hydrated]);
 
   useEffect(() => {
@@ -113,17 +101,20 @@ export default function Home() {
     };
   }, [developing]);
 
-  const ready = films.length >= 3;
-  const loadedCopy = useMemo(() => {
-    if (!films.length) return 'Add at least 3 films to develop your reel.';
-    if (!ready) return `Add ${3 - films.length} more ${films.length === 2 ? 'film' : 'films'} to develop your reel.`;
-    return `${films.length} films loaded. Ready when you are.`;
-  }, [films.length, ready]);
+  const ready = canDevelop(films, creativeBrief);
+  const loadedCopy = useMemo(
+    () => getInputStatus(films, creativeBrief),
+    [films, creativeBrief],
+  );
 
   function addFilm(event?: FormEvent) {
     event?.preventDefault();
     const film = draft.trim();
     if (!film) return;
+    if (films.length >= 20) {
+      setNotice('This reference reel is full at 20 films.');
+      return;
+    }
     if (films.some((item) => item.toLocaleLowerCase() === film.toLocaleLowerCase())) {
       setNotice('That film is already threaded into this reel.');
       return;
@@ -170,13 +161,14 @@ export default function Home() {
       const response = await fetch('/api/develop', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ films, creativeBrief }),
+        body: JSON.stringify(buildDevelopPayload(films, creativeBrief)),
       });
-      const payload = await response.json();
+      const payload = await response.json() as { reel?: AfterimageResultV2; error?: string };
       if (!response.ok) {
         if (response.status === 401) setConnection('disconnected');
         throw new Error(payload.error || 'The reel did not come back cleanly.');
       }
+      if (!payload.reel) throw new Error('The reel did not come back cleanly.');
       setResult(payload.reel);
       window.setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80);
     } catch (developError) {
@@ -200,8 +192,9 @@ export default function Home() {
 
         <h1 className="title">AFTERIMAGE</h1>
         <p className="subtitle">
-          What lingers after the credits roll. Add a few films you love — AFTERIMAGE reads their DNA
-          and develops a reel around your actual sensibility, not just your genre.
+          What lingers after the credits roll. Add films you love, describe what you are searching for,
+          or combine both. AFTERIMAGE reads the full signal and develops a reel around your actual
+          sensibility, not just a genre.
         </p>
 
         {connection !== 'connected' ? (
@@ -232,7 +225,7 @@ export default function Home() {
         ) : null}
 
         <section className="panel reel-panel" aria-labelledby="reel-label">
-          <div className="panel-label" id="reel-label">Reel Contents</div>
+          <div className="panel-label" id="reel-label">Reference Reel · Optional</div>
           <form className="chip-input-row" onSubmit={addFilm}>
             <label className="sr-only" htmlFor="film-input">Film title</label>
             <input
@@ -240,9 +233,18 @@ export default function Home() {
               value={draft}
               onChange={(event) => setDraft(event.target.value)}
               placeholder="e.g. In the Mood for Love"
+              maxLength={160}
               autoComplete="off"
+              disabled={developing}
             />
-            <button className="add-button" type="submit" aria-label="Add film">+ Add</button>
+            <button
+              className="add-button"
+              type="submit"
+              aria-label="Add film"
+              disabled={developing || films.length >= 20}
+            >
+              + Add
+            </button>
           </form>
 
           <div className="chips" aria-live="polite">
@@ -262,7 +264,7 @@ export default function Home() {
           <div className="brief-field">
             <div className="brief-heading">
               <label htmlFor="creative-brief">What should this reel be searching for?</label>
-              <span>Optional · {creativeBrief.length}/1200</span>
+              <span>Primary or supporting · {creativeBrief.length}/1200</span>
             </div>
             <textarea
               id="creative-brief"
@@ -330,7 +332,10 @@ export default function Home() {
                   <h3>{recommendation.title}</h3>
                   <div className="year">{recommendation.year}</div>
                   <p>{recommendation.reason}</p>
-                  <div className="pairs-with">Pairs with: {recommendation.pairsWith}</div>
+                  <div className="watch-for">
+                    <span>Watch for</span>
+                    <p>{recommendation.watchFor || 'Program note unavailable for this saved reel.'}</p>
+                  </div>
                 </article>
               ))}
             </div>
