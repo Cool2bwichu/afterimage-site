@@ -1,6 +1,11 @@
 'use client';
 
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { FilmDossier } from './components/film-dossier';
+import { RecommendationCard } from './components/recommendation-card';
+import { fetchFilmEnrichment, persistableEnrichment } from './lib/enrichment-client';
+import type { FilmEnrichment } from './lib/movie-metadata';
+import { movieKey } from './lib/movie-metadata';
 import type { AfterimageResultV2 } from './lib/reel-state';
 import { GenerationPollError, pollGeneration } from './lib/generation-poller';
 import {
@@ -46,6 +51,10 @@ export default function Home() {
   const [draft, setDraft] = useState('');
   const [creativeBrief, setCreativeBrief] = useState('');
   const [result, setResult] = useState<AfterimageResultV2 | null>(null);
+  const [metadataByKey, setMetadataByKey] = useState<Record<string, FilmEnrichment>>({});
+  const [enrichmentPending, setEnrichmentPending] = useState(false);
+  const [selectedRecommendation, setSelectedRecommendation] = useState<number | null>(null);
+  const [dossierOpener, setDossierOpener] = useState<HTMLElement | null>(null);
   const [hydrated, setHydrated] = useState(false);
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
@@ -88,6 +97,7 @@ export default function Home() {
         setFilms(saved.films);
         setCreativeBrief(saved.creativeBrief);
         setResult(saved.result);
+        setMetadataByKey(saved.metadataByKey);
         setActiveJobId(saved.activeJobId);
         if (saved.activeJobId) setJobStatus('queued');
       } catch {
@@ -101,8 +111,15 @@ export default function Home() {
 
   useEffect(() => {
     if (!hydrated) return;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: 2, films, creativeBrief, result, activeJobId }));
-  }, [films, creativeBrief, result, activeJobId, hydrated]);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      version: 3,
+      films,
+      creativeBrief,
+      result,
+      activeJobId,
+      metadataByKey,
+    }));
+  }, [films, creativeBrief, result, activeJobId, metadataByKey, hydrated]);
 
   useEffect(() => {
     const connectionCheck = window.setTimeout(() => void refreshConnection(), 0);
@@ -205,6 +222,43 @@ export default function Home() {
     };
   }, [developing]);
 
+  const recommendationIdentity = useMemo(
+    () => result?.recommendations.map((recommendation) => movieKey(recommendation.title, recommendation.year)).join('::') || '',
+    [result],
+  );
+
+  useEffect(() => {
+    if (!result || !recommendationIdentity) return;
+    const recommendations = result.recommendations;
+    const complete = recommendations.every((recommendation) => {
+      const metadata = metadataByKey[movieKey(recommendation.title, recommendation.year)];
+      return metadata?.status === 'matched' || metadata?.status === 'unmatched';
+    });
+    if (complete) return;
+
+    const controller = new AbortController();
+    const kickoff = window.setTimeout(() => {
+      setEnrichmentPending(true);
+      void fetchFilmEnrichment({ recommendations, signal: controller.signal })
+        .then((films) => {
+          if (controller.signal.aborted) return;
+          setMetadataByKey((current) => ({ ...current, ...persistableEnrichment(films) }));
+        })
+        .catch(() => {
+          // Metadata is deliberately secondary; every recommendation remains complete without it.
+        })
+        .finally(() => {
+          if (!controller.signal.aborted) setEnrichmentPending(false);
+        });
+    }, 0);
+    return () => {
+      window.clearTimeout(kickoff);
+      controller.abort();
+    };
+    // The reel identity is the only fetch trigger; transient metadata failures retry after reopening.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recommendationIdentity]);
+
   const ready = canDevelop(films, creativeBrief);
   const loadedCopy = useMemo(
     () => getInputStatus(films, creativeBrief),
@@ -231,6 +285,8 @@ export default function Home() {
   function removeFilm(index: number) {
     setFilms((current) => current.filter((_, itemIndex) => itemIndex !== index));
     setResult(null);
+    setMetadataByKey({});
+    setSelectedRecommendation(null);
   }
 
   async function startConnection() {
@@ -302,6 +358,8 @@ export default function Home() {
 
       const started = parseJobStart(payload);
       setResult(null);
+      setMetadataByKey({});
+      setSelectedRecommendation(null);
       setActiveJobId(started.jobId);
       setJobStatus('queued');
     } catch (developError) {
@@ -440,6 +498,8 @@ export default function Home() {
               onChange={(event) => {
                 setCreativeBrief(event.target.value);
                 setResult(null);
+                setMetadataByKey({});
+                setSelectedRecommendation(null);
               }}
               placeholder="Moody, brooding, filled with tones of longing…"
               maxLength={1200}
@@ -515,21 +575,48 @@ export default function Home() {
             <div className="panel-label rec-label">Double Feature Recommendations</div>
             <div className="recommendation-grid">
               {result.recommendations.map((recommendation, index) => (
-                <article className={`recommendation-card ${index === 0 ? 'is-primary' : ''}`} key={`${recommendation.title}-${recommendation.year}`}>
-                  <div className="timecode">{index === 0 ? 'TOTAL SYNTHESIS' : `REEL ${String(index + 1).padStart(2, '0')}`} — {recommendation.timecode}</div>
-                  <h3>{recommendation.title}</h3>
-                  <div className="year">{recommendation.year}</div>
-                  <p>{recommendation.reason}</p>
-                  <div className="watch-for">
-                    <span>Watch for</span>
-                    <p>{recommendation.watchFor || 'Program note unavailable for this saved reel.'}</p>
-                  </div>
-                </article>
+                <RecommendationCard
+                  key={`${recommendation.title}-${recommendation.year}`}
+                  recommendation={recommendation}
+                  index={index}
+                  metadata={metadataByKey[movieKey(recommendation.title, recommendation.year)]}
+                  enrichmentPending={enrichmentPending}
+                  onOpen={(event) => {
+                    setDossierOpener(event.currentTarget);
+                    setSelectedRecommendation(index);
+                  }}
+                />
               ))}
             </div>
+
+            <FilmDossier
+              selection={selectedRecommendation === null ? null : {
+                recommendation: result.recommendations[selectedRecommendation],
+                index: selectedRecommendation,
+              }}
+              metadata={selectedRecommendation === null ? undefined : metadataByKey[
+                movieKey(result.recommendations[selectedRecommendation].title, result.recommendations[selectedRecommendation].year)
+              ]}
+              opener={dossierOpener}
+              onClose={() => setSelectedRecommendation(null)}
+            />
           </section>
         ) : null}
 
+        <section className="film-data-credits" aria-label="Film data credits">
+          <details>
+            <summary>Film Data Credits</summary>
+            <div>
+              <a href="https://www.themoviedb.org" target="_blank" rel="noreferrer noopener">
+                <img
+                  src="https://www.themoviedb.org/assets/2/v4/logos/v2/blue_long_2-9665a76b1ae401a510ec1e0ca40ddcb3b0cfe45f1d51b77a308fea0845885648.svg"
+                  alt="The Movie Database (TMDB)"
+                />
+              </a>
+              <p>This product uses the TMDB API but is not endorsed or certified by TMDB.</p>
+            </div>
+          </details>
+        </section>
         <footer>AFTERIMAGE · reasoned live, frame by frame</footer>
       </div>
     </main>

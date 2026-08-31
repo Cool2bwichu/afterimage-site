@@ -66,8 +66,9 @@ test('hydrates an unversioned legacy reel without exposing pairsWith', () => {
     result: completeLegacyResult(),
   }));
 
-  assert.equal(state.version, 2);
+  assert.equal(state.version, 3);
   assert.equal(state.activeJobId, null);
+  assert.deepEqual(state.metadataByKey, {});
   assert.ok(state.result);
   assert.equal(state.result.recommendations.length, 5);
   assert.equal(Object.hasOwn(state.result.recommendations[0], 'pairsWith'), false);
@@ -85,11 +86,12 @@ test('discards a malformed saved reel while preserving valid draft input', () =>
   }));
 
   assert.deepEqual(state, {
-    version: 2,
+    version: 3,
     films: ['Paris, Texas'],
     creativeBrief: 'Desert longing.',
     result: null,
     activeJobId: null,
+    metadataByKey: {},
   });
 });
 
@@ -110,12 +112,29 @@ test('hydrates only a valid UUID v4 as the active generation job', () => {
   }
 });
 
-test('falls back to an empty V2 draft when storage is unreadable', () => {
+test('falls back to an empty V3 draft when storage is unreadable', () => {
   assert.deepEqual(parseStoredState('{not-json'), {
-    version: 2,
+    version: 3,
     films: [],
     creativeBrief: '',
     result: null,
     activeJobId: null,
+    metadataByKey: {},
+  });
+});
+
+test('hydrates only definitive metadata belonging to the saved five-film reel', () => {
+  const result = completeLegacyResult();
+  const key = 'legacy recommendation 1|1975';
+  const state = parseStoredState(JSON.stringify({
+    result,
+    metadataByKey: {
+      [key]: { key, title: 'Legacy Recommendation 1', year: '1975', status: 'unmatched' },
+      'unrelated|2000': { key: 'unrelated|2000', title: 'Unrelated', year: '2000', status: 'unmatched' },
+      'legacy recommendation 2|1976': { key: 'legacy recommendation 2|1976', title: 'Legacy Recommendation 2', year: '1976', status: 'unavailable' },
+    },
+  }));
+  assert.deepEqual(state.metadataByKey, {
+    [key]: { key, title: 'Legacy Recommendation 1', year: '1975', status: 'unmatched' },
   });
 });

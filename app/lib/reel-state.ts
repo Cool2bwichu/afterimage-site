@@ -1,3 +1,6 @@
+import type { FilmEnrichment } from './movie-metadata.ts';
+import { movieKey, parseFilmEnrichment } from './movie-metadata.ts';
+
 export type RecommendationV2 = {
   title: string;
   year: string;
@@ -18,11 +21,12 @@ export type AfterimageResultV2 = {
 };
 
 export type ReelStateV2 = {
-  version: 2;
+  version: 3;
   films: string[];
   creativeBrief: string;
   result: AfterimageResultV2 | null;
   activeJobId: string | null;
+  metadataByKey: Record<string, FilmEnrichment>;
 };
 
 const MAX_FILMS = 20;
@@ -140,25 +144,39 @@ export function buildDevelopPayload(films: readonly string[], creativeBrief: str
 
 export function parseStoredState(raw: string | null): ReelStateV2 {
   const fallback: ReelStateV2 = {
-    version: 2,
+    version: 3,
     films: [],
     creativeBrief: '',
     result: null,
     activeJobId: null,
+    metadataByKey: {},
   };
   if (!raw) return fallback;
 
   try {
     const stored: unknown = JSON.parse(raw);
     if (!isRecord(stored)) return fallback;
+    const result = parseAfterimageResultV2(stored.result);
+    const allowedKeys = new Set(result?.recommendations.map((recommendation) => movieKey(recommendation.title, recommendation.year)) || []);
+    const metadataByKey: Record<string, FilmEnrichment> = {};
+    if (isRecord(stored.metadataByKey)) {
+      for (const [key, rawMetadata] of Object.entries(stored.metadataByKey)) {
+        if (!allowedKeys.has(key) || Object.keys(metadataByKey).length >= 5) continue;
+        const metadata = parseFilmEnrichment(rawMetadata);
+        if (!metadata || metadata.key !== key || metadata.status === 'unavailable') continue;
+        metadataByKey[key] = metadata;
+      }
+    }
+
     return {
-      version: 2,
+      version: 3,
       films: normalizeFilms(stored.films),
       creativeBrief: normalizeBrief(stored.creativeBrief),
-      result: parseAfterimageResultV2(stored.result),
+      result,
       activeJobId: typeof stored.activeJobId === 'string' && GENERATION_JOB_ID.test(stored.activeJobId)
         ? stored.activeJobId
         : null,
+      metadataByKey,
     };
   } catch {
     return fallback;
