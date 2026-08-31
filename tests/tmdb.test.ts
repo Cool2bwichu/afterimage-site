@@ -15,7 +15,7 @@ test('TMDB enrichment keeps the token in headers and safely projects one exact m
       poster_path: '/poster.jpg', overview: 'Two neighbors discover an intimate absence.', runtime: 98,
       release_date: '2000-09-29', genres: [{ name: 'Drama' }], production_countries: [{ name: 'Hong Kong' }],
       credits: { crew: [{ job: 'Director', name: 'Wong Kar-wai' }, { job: 'Writer', name: 'Someone Else' }] },
-      external_ids: { imdb_id: 'tt0118694' }, popularity: 999,
+      external_ids: { imdb_id: 'tt0118694' }, popularity: 999, vote_average: 8.1,
     });
   }) as typeof fetch;
 
@@ -25,6 +25,7 @@ test('TMDB enrichment keeps the token in headers and safely projects one exact m
   assert.doesNotMatch(calls[0].url, new RegExp(token));
   assert.equal(new Headers(calls[0].init?.headers).get('authorization'), `Bearer ${token}`);
   assert.deepEqual(result.status === 'matched' ? result.directors : [], ['Wong Kar-wai']);
+  assert.equal(result.status === 'matched' ? result.tmdbRating : null, 8.1);
   assert.equal(JSON.stringify(result).includes(token), false);
 });
 

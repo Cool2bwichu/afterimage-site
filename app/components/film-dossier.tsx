@@ -53,6 +53,7 @@ export function FilmDossier({
   const facts = matched ? [
     matched.directors.length ? `Directed by ${matched.directors.join(', ')}` : '',
     matched.runtime ? runtimeLabel(matched.runtime) : '',
+    matched.tmdbRating !== null ? `TMDB ${matched.tmdbRating.toFixed(1)} / 10` : '',
     matched.countries.join(', '),
     matched.genres.join(' · '),
   ].filter(Boolean) : [];

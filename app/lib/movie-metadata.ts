@@ -12,6 +12,7 @@ export type FilmEnrichment =
       status: 'matched';
       tmdbId: number;
       imdbId: string | null;
+      tmdbRating: number | null;
       posterUrl: string | null;
       overview: string;
       runtime: number | null;
@@ -137,6 +138,12 @@ export function parseFilmEnrichment(value: unknown): FilmEnrichment | null {
   if (value.status !== 'matched' || !Number.isInteger(value.tmdbId) || Number(value.tmdbId) <= 0) return null;
 
   const imdbId = value.imdbId === null ? null : typeof value.imdbId === 'string' && imdbUrl(value.imdbId) ? value.imdbId : null;
+  const tmdbRating = value.tmdbRating === undefined || value.tmdbRating === null
+    ? null
+    : typeof value.tmdbRating === 'number' && Number.isFinite(value.tmdbRating) && value.tmdbRating >= 0 && value.tmdbRating <= 10
+      ? Math.round(value.tmdbRating * 10) / 10
+      : null;
+  if (value.tmdbRating !== undefined && value.tmdbRating !== null && tmdbRating === null) return null;
   const posterUrl = safePosterUrl(value.posterUrl);
   if (value.posterUrl !== null && posterUrl === null) return null;
   const overview = boundedText(value.overview, 2000, true);
@@ -155,6 +162,7 @@ export function parseFilmEnrichment(value: unknown): FilmEnrichment | null {
     status: 'matched',
     tmdbId: Number(value.tmdbId),
     imdbId,
+    tmdbRating,
     posterUrl,
     overview,
     runtime,

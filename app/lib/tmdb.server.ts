@@ -94,6 +94,10 @@ export function createTmdbClient({
       const runtime = Number.isInteger(details.runtime) && Number(details.runtime) > 0 && Number(details.runtime) < 1000
         ? Number(details.runtime)
         : null;
+      const tmdbRating = typeof details.vote_average === 'number' && Number.isFinite(details.vote_average) &&
+        details.vote_average >= 0 && details.vote_average <= 10
+        ? Math.round(details.vote_average * 10) / 10
+        : null;
       const releaseDate = typeof details.release_date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(details.release_date)
         ? details.release_date
         : null;
@@ -105,6 +109,7 @@ export function createTmdbClient({
         status: 'matched',
         tmdbId: Number(candidate.id),
         imdbId,
+        tmdbRating,
         posterUrl: posterUrl(details.poster_path),
         overview: stringValue(details.overview, 2000),
         runtime,
