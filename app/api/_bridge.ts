@@ -1,6 +1,11 @@
 import { env } from 'cloudflare:workers';
 
 const DEFAULT_TIMEOUT_MS = 150_000;
+const SAFE_JSON_HEADERS = {
+  'Content-Type': 'application/json; charset=utf-8',
+  'Cache-Control': 'no-store',
+  'X-Content-Type-Options': 'nosniff',
+};
 
 type AfterimageRuntime = {
   AFTERIMAGE_BRIDGE_URL?: string;
@@ -20,7 +25,7 @@ export async function forwardToBridge(
   if (!bridgeUrl || !bridgeSecret) {
     return Response.json(
       { error: 'The private intelligence service has not been connected yet.', code: 'BRIDGE_NOT_CONFIGURED' },
-      { status: 503 },
+      { status: 503, headers: SAFE_JSON_HEADERS },
     );
   }
 
@@ -49,11 +54,7 @@ export async function forwardToBridge(
 
     return new Response(payload, {
       status: upstream.status,
-      headers: {
-        'Content-Type': 'application/json; charset=utf-8',
-        'Cache-Control': 'no-store',
-        'X-Content-Type-Options': 'nosniff',
-      },
+      headers: SAFE_JSON_HEADERS,
     });
   } catch (error) {
     const timedOut = error instanceof Error && error.name === 'AbortError';
@@ -64,7 +65,7 @@ export async function forwardToBridge(
           : 'The private intelligence service is temporarily unreachable.',
         code: timedOut ? 'BRIDGE_TIMEOUT' : 'BRIDGE_UNREACHABLE',
       },
-      { status: 502 },
+      { status: 502, headers: SAFE_JSON_HEADERS },
     );
   } finally {
     clearTimeout(timeout);
