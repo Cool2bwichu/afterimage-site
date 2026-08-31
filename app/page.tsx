@@ -2,6 +2,12 @@
 
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { AfterimageResultV2 } from './lib/reel-state';
+import { GenerationPollError, pollGeneration } from './lib/generation-poller';
+import {
+  isGenerationJobId,
+  parseJobStart,
+  parseJobStatus,
+} from './lib/generation-state';
 import {
   buildDevelopPayload,
   canDevelop,
@@ -19,6 +25,21 @@ const LEADER_MESSAGES = [
 
 type ConnectionState = 'checking' | 'connected' | 'disconnected' | 'unreachable';
 type AuthFlow = { verificationUrl: string; userCode: string } | null;
+type JobStatus = 'queued' | 'running' | 'reconnecting' | 'failed' | null;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function responseMessage(value: unknown, fallback: string): string {
+  if (!isRecord(value) || typeof value.error !== 'string') return fallback;
+  const message = value.error.trim();
+  return message ? message.slice(0, 300) : fallback;
+}
+
+function statusError(status: number): Error & { status: number } {
+  return Object.assign(new Error('The reel status request failed.'), { status });
+}
 
 export default function Home() {
   const [films, setFilms] = useState<string[]>([]);
@@ -32,10 +53,16 @@ export default function Home() {
   const [planType, setPlanType] = useState('');
   const [authFlow, setAuthFlow] = useState<AuthFlow>(null);
   const [connecting, setConnecting] = useState(false);
-  const [developing, setDeveloping] = useState(false);
+  const [activeJobId, setActiveJobId] = useState<string | null>(null);
+  const [jobStatus, setJobStatus] = useState<JobStatus>(null);
+  const [starting, setStarting] = useState(false);
+  const [pollRevision, setPollRevision] = useState(0);
   const [leaderNumber, setLeaderNumber] = useState(8);
   const [leaderStep, setLeaderStep] = useState(0);
   const resultsRef = useRef<HTMLElement>(null);
+  const startLockRef = useRef(false);
+  const developing = starting || jobStatus === 'queued' || jobStatus === 'running' || jobStatus === 'reconnecting';
+  const reelLocked = developing || Boolean(activeJobId);
 
   const refreshConnection = useCallback(async (silent = false) => {
     if (!silent) setConnection('checking');
@@ -62,6 +89,8 @@ export default function Home() {
         setFilms(saved.films);
         setCreativeBrief(saved.creativeBrief);
         setResult(saved.result);
+        setActiveJobId(saved.activeJobId);
+        if (saved.activeJobId) setJobStatus('queued');
       } catch {
         // A damaged local draft should never keep the instrument from opening.
       } finally {
@@ -73,8 +102,8 @@ export default function Home() {
 
   useEffect(() => {
     if (!hydrated) return;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: 2, films, creativeBrief, result }));
-  }, [films, creativeBrief, result, hydrated]);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: 2, films, creativeBrief, result, activeJobId }));
+  }, [films, creativeBrief, result, activeJobId, hydrated]);
 
   useEffect(() => {
     const connectionCheck = window.setTimeout(() => void refreshConnection(), 0);
@@ -86,6 +115,81 @@ export default function Home() {
     const timer = window.setInterval(() => void refreshConnection(true), 2200);
     return () => window.clearInterval(timer);
   }, [authFlow, connection, refreshConnection]);
+
+  useEffect(() => {
+    if (!hydrated || !activeJobId || connection !== 'connected') return;
+
+    const controller = new AbortController();
+
+    void (async () => {
+      try {
+        const terminal = await pollGeneration({
+          signal: controller.signal,
+          fetchStatus: async (signal) => {
+            const response = await fetch(`/api/generations/${encodeURIComponent(activeJobId)}`, {
+              cache: 'no-store',
+              signal,
+            });
+            if (!response.ok) throw statusError(response.status);
+
+            let payload: unknown;
+            try {
+              payload = await response.json();
+            } catch {
+              throw statusError(500);
+            }
+            try {
+              return parseJobStatus(payload);
+            } catch {
+              throw statusError(500);
+            }
+          },
+          onStatus: (job) => {
+            if (controller.signal.aborted) return;
+            if (job.status === 'queued' || job.status === 'running') setJobStatus(job.status);
+          },
+          onTransientError: () => {
+            if (!controller.signal.aborted) setJobStatus('reconnecting');
+          },
+        });
+
+        if (controller.signal.aborted) return;
+        if (terminal.status === 'complete') {
+          setResult(terminal.reel);
+          setActiveJobId(null);
+          setJobStatus(null);
+          setError('');
+          setNotice('');
+          window.setTimeout(() => {
+            resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }, 80);
+          return;
+        }
+
+        setJobStatus('failed');
+        setError(terminal.error.message);
+      } catch (pollError) {
+        if (controller.signal.aborted) return;
+        if (pollError instanceof GenerationPollError && pollError.code === 'AUTH_REQUIRED') {
+          setJobStatus('queued');
+          setConnection('disconnected');
+          return;
+        }
+        if (pollError instanceof GenerationPollError && pollError.code === 'JOB_NOT_FOUND') {
+          setActiveJobId(null);
+          setJobStatus(null);
+          setError('');
+          setNotice('That reel job has expired. Your inputs are still here—develop it again.');
+          return;
+        }
+
+        setJobStatus(null);
+        setError(pollError instanceof Error ? pollError.message : 'The reel status could not be checked.');
+      }
+    })();
+
+    return () => controller.abort();
+  }, [activeJobId, connection, hydrated, pollRevision]);
 
   useEffect(() => {
     if (!developing) return;
@@ -150,33 +254,90 @@ export default function Home() {
     }
   }
 
-  async function developReel() {
-    if (!ready || connection !== 'connected' || developing) return;
+  async function developReel(replaceFailedJob = false) {
+    if (
+      !ready ||
+      connection !== 'connected' ||
+      developing ||
+      startLockRef.current ||
+      (activeJobId && !replaceFailedJob)
+    ) return;
+
+    startLockRef.current = true;
     setLeaderNumber(8);
     setLeaderStep(0);
-    setDeveloping(true);
+    setStarting(true);
     setError('');
     setNotice('');
     try {
-      const response = await fetch('/api/develop', {
+      const response = await fetch('/api/generations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(buildDevelopPayload(films, creativeBrief)),
       });
-      const payload = await response.json() as { reel?: AfterimageResultV2; error?: string };
-      if (!response.ok) {
-        if (response.status === 401) setConnection('disconnected');
-        throw new Error(payload.error || 'The reel did not come back cleanly.');
+
+      let payload: unknown;
+      try {
+        payload = await response.json();
+      } catch {
+        payload = null;
       }
-      if (!payload.reel) throw new Error('The reel did not come back cleanly.');
-      setResult(payload.reel);
-      window.setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80);
+
+      if (
+        response.status === 409 &&
+        isRecord(payload) &&
+        payload.code === 'ACTIVE_GENERATION' &&
+        isGenerationJobId(payload.jobId)
+      ) {
+        setActiveJobId(payload.jobId);
+        setJobStatus('queued');
+        setNotice('Resuming the reel already in the gate.');
+        return;
+      }
+
+      if (response.status === 401) setConnection('disconnected');
+      if (response.status !== 202) {
+        throw new Error(responseMessage(payload, 'The reel could not enter the gate.'));
+      }
+
+      const started = parseJobStart(payload);
+      setResult(null);
+      setActiveJobId(started.jobId);
+      setJobStatus('queued');
     } catch (developError) {
-      setError(developError instanceof Error ? developError.message : 'The reel did not come back cleanly.');
+      setError(developError instanceof Error ? developError.message : 'The reel could not enter the gate.');
     } finally {
-      setDeveloping(false);
+      startLockRef.current = false;
+      setStarting(false);
     }
   }
+
+  async function developAgain() {
+    if (jobStatus !== 'failed') return;
+    setActiveJobId(null);
+    setJobStatus(null);
+    setError('');
+    await developReel(true);
+  }
+
+  function dismissFailedJob() {
+    setActiveJobId(null);
+    setJobStatus(null);
+    setError('');
+  }
+
+  function resumePolling() {
+    if (!activeJobId || connection !== 'connected') return;
+    setError('');
+    setJobStatus('queued');
+    setPollRevision((current) => current + 1);
+  }
+
+  const leaderMessage = starting
+    ? 'Threading the reel —'
+    : jobStatus === 'reconnecting'
+      ? 'Finding the reel in the darkroom —'
+      : `${LEADER_MESSAGES[leaderStep]} —`;
 
   return (
     <main className="site-shell">
@@ -235,13 +396,13 @@ export default function Home() {
               placeholder="e.g. In the Mood for Love"
               maxLength={160}
               autoComplete="off"
-              disabled={developing}
+              disabled={reelLocked}
             />
             <button
               className="add-button"
               type="submit"
               aria-label="Add film"
-              disabled={developing || films.length >= 20}
+              disabled={reelLocked || films.length >= 20}
             >
               + Add
             </button>
@@ -255,7 +416,7 @@ export default function Home() {
                   type="button"
                   onClick={() => removeFilm(index)}
                   aria-label={`Remove ${film}`}
-                  disabled={developing}
+                  disabled={reelLocked}
                 >
                   ×
                 </button>
@@ -283,15 +444,15 @@ export default function Home() {
               placeholder="Moody, brooding, filled with tones of longing…"
               maxLength={1200}
               rows={4}
-              disabled={developing}
+              disabled={reelLocked}
             />
           </div>
 
           <button
             className="develop-button"
-            disabled={!ready || developing || connection !== 'connected'}
+            disabled={!ready || reelLocked || connection !== 'connected'}
             type="button"
-            onClick={developReel}
+            onClick={() => void developReel()}
           >
             {developing ? 'Developing…' : 'Develop My Reel'}
           </button>
@@ -301,16 +462,30 @@ export default function Home() {
         {error ? (
           <div className="error-banner" role="alert">
             <p>{error}</p>
-            <button type="button" onClick={connection === 'connected' ? developReel : startConnection}>
-              {connection === 'connected' ? 'Reload the reel' : 'Reconnect'}
-            </button>
+            {jobStatus === 'failed' ? (
+              <div className="error-actions">
+                <button type="button" onClick={() => void developAgain()}>Develop again</button>
+                <button className="is-secondary" type="button" onClick={dismissFailedJob}>Dismiss</button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={connection !== 'connected'
+                  ? startConnection
+                  : activeJobId
+                    ? resumePolling
+                    : () => void developReel()}
+              >
+                {connection !== 'connected' ? 'Reconnect' : activeJobId ? 'Resume reel' : 'Reload the reel'}
+              </button>
+            )}
           </div>
         ) : null}
 
         {developing ? (
           <section className="leader" role="status" aria-live="polite">
             <div className="leader-circle"><span>{leaderNumber}</span></div>
-            <p>{LEADER_MESSAGES[leaderStep]} —</p>
+            <p>{leaderMessage}</p>
           </section>
         ) : null}
 

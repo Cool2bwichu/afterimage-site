@@ -449,11 +449,22 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
   line-height: 1.5;
 }
 
+.error-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
 .error-banner button {
   min-height: 34px;
   border-color: rgb(232 93 93 / 45%);
   background: transparent;
   color: #f18a8a;
+}
+
+.error-banner button.is-secondary {
+  border-color: var(--line);
+  color: var(--muted);
 }
 
 .leader {
