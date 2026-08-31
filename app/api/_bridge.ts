@@ -7,10 +7,15 @@ type AfterimageRuntime = {
   AFTERIMAGE_BRIDGE_SECRET?: string;
 };
 
-export async function forwardToBridge(path: string, request?: Request) {
+export async function forwardToBridge(
+  path: string,
+  request?: Request,
+  options: { timeoutMs?: number } = {},
+) {
   const runtime = env as AfterimageRuntime;
   const bridgeUrl = runtime.AFTERIMAGE_BRIDGE_URL || process.env.AFTERIMAGE_BRIDGE_URL;
   const bridgeSecret = runtime.AFTERIMAGE_BRIDGE_SECRET || process.env.AFTERIMAGE_BRIDGE_SECRET;
+  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 
   if (!bridgeUrl || !bridgeSecret) {
     return Response.json(
@@ -20,7 +25,7 @@ export async function forwardToBridge(path: string, request?: Request) {
   }
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
     const headers = new Headers({
