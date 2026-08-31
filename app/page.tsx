@@ -6,7 +6,7 @@ import { RecommendationCard } from './components/recommendation-card';
 import { fetchFilmEnrichment, persistableEnrichment } from './lib/enrichment-client';
 import type { FilmEnrichment } from './lib/movie-metadata';
 import { movieKey } from './lib/movie-metadata';
-import type { AfterimageResultV2 } from './lib/reel-state';
+import type { AfterimageResultV2, ExcludedFilm } from './lib/reel-state';
 import { GenerationPollError, pollGeneration } from './lib/generation-poller';
 import {
   isGenerationJobId,
@@ -17,6 +17,7 @@ import {
   buildDevelopPayload,
   canDevelop,
   getInputStatus,
+  normalizeExcludedFilms,
   parseStoredState,
 } from './lib/reel-state';
 
@@ -55,6 +56,7 @@ export default function Home() {
   const [enrichmentPending, setEnrichmentPending] = useState(false);
   const [selectedRecommendation, setSelectedRecommendation] = useState<number | null>(null);
   const [dossierOpener, setDossierOpener] = useState<HTMLElement | null>(null);
+  const [excludedFilms, setExcludedFilms] = useState<ExcludedFilm[]>([]);
   const [hydrated, setHydrated] = useState(false);
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
@@ -98,6 +100,7 @@ export default function Home() {
         setCreativeBrief(saved.creativeBrief);
         setResult(saved.result);
         setMetadataByKey(saved.metadataByKey);
+        setExcludedFilms(saved.excludedFilms);
         setActiveJobId(saved.activeJobId);
         if (saved.activeJobId) setJobStatus('queued');
       } catch {
@@ -112,14 +115,15 @@ export default function Home() {
   useEffect(() => {
     if (!hydrated) return;
     localStorage.setItem(STORAGE_KEY, JSON.stringify({
-      version: 3,
+      version: 4,
       films,
       creativeBrief,
       result,
       activeJobId,
       metadataByKey,
+      excludedFilms,
     }));
-  }, [films, creativeBrief, result, activeJobId, metadataByKey, hydrated]);
+  }, [films, creativeBrief, result, activeJobId, metadataByKey, excludedFilms, hydrated]);
 
   useEffect(() => {
     const connectionCheck = window.setTimeout(() => void refreshConnection(), 0);
@@ -310,7 +314,7 @@ export default function Home() {
     }
   }
 
-  async function developReel(replaceFailedJob = false) {
+  async function developReel(replaceFailedJob = false, temporaryExclusions: ExcludedFilm[] = []) {
     if (
       !ready ||
       connection !== 'connected' ||
@@ -329,7 +333,11 @@ export default function Home() {
       const response = await fetch('/api/generations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(buildDevelopPayload(films, creativeBrief)),
+        body: JSON.stringify(buildDevelopPayload(
+          films,
+          creativeBrief,
+          normalizeExcludedFilms([...excludedFilms, ...temporaryExclusions]),
+        )),
       });
 
       let payload: unknown;
@@ -389,6 +397,12 @@ export default function Home() {
     setError('');
     setJobStatus('queued');
     setPollRevision((current) => current + 1);
+  }
+
+  function markNotInterested(recommendation: ExcludedFilm) {
+    setExcludedFilms((current) => normalizeExcludedFilms([...current, recommendation]));
+    setNotice(`${recommendation.title} will stay out of future reels.`);
+    setSelectedRecommendation(null);
   }
 
   const leaderMessage = starting
@@ -589,6 +603,17 @@ export default function Home() {
               ))}
             </div>
 
+            <div className="reroll-panel">
+              <button
+                type="button"
+                onClick={() => void developReel(false, result.recommendations.map(({ title, year }) => ({ title, year })))}
+                disabled={reelLocked || connection !== 'connected'}
+              >
+                Recommend Different Films
+              </button>
+              <p>Keep this prompt and replace all five recommendations.</p>
+            </div>
+
             <FilmDossier
               selection={selectedRecommendation === null ? null : {
                 recommendation: result.recommendations[selectedRecommendation],
@@ -598,6 +623,14 @@ export default function Home() {
                 movieKey(result.recommendations[selectedRecommendation].title, result.recommendations[selectedRecommendation].year)
               ]}
               opener={dossierOpener}
+              notInterested={selectedRecommendation === null ? false : excludedFilms.some((film) =>
+                film.title.toLocaleLowerCase() === result.recommendations[selectedRecommendation].title.toLocaleLowerCase() &&
+                film.year === result.recommendations[selectedRecommendation].year)}
+              onNotInterested={() => {
+                if (selectedRecommendation === null) return;
+                const recommendation = result.recommendations[selectedRecommendation];
+                markNotInterested({ title: recommendation.title, year: recommendation.year });
+              }}
               onClose={() => setSelectedRecommendation(null)}
             />
           </section>

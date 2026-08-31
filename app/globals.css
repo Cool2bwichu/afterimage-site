@@ -713,6 +713,36 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
 
 .open-dossier b { color: var(--cyan); font-size: 11px; }
 
+.reroll-panel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  margin-top: 18px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgb(20 22 31 / 66%);
+}
+
+.reroll-panel button {
+  min-height: 44px;
+  padding: 0 17px;
+  border: 1px solid rgb(79 216 224 / 35%);
+  border-radius: 8px;
+  background: rgb(79 216 224 / 7%);
+  color: var(--cyan);
+  font-family: var(--font-mono), monospace;
+  font-size: 10px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.reroll-panel button:hover:not(:disabled) { background: rgb(79 216 224 / 13%); }
+.reroll-panel button:disabled { opacity: .4; cursor: wait; }
+.reroll-panel p { margin: 0; color: var(--muted); font-size: 11.5px; line-height: 1.5; }
+
 .film-dossier {
   width: min(520px, 100vw);
   max-width: none;
@@ -830,6 +860,33 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
   text-transform: uppercase;
 }
 
+.dossier-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 28px;
+}
+
+.dossier-actions .imdb-link { margin-top: 0; }
+
+.not-interested-button {
+  min-height: 44px;
+  padding: 0 16px;
+  border: 1px solid rgb(232 93 93 / 32%);
+  border-radius: 8px;
+  background: rgb(232 93 93 / 5%);
+  color: #d98686;
+  font-family: var(--font-mono), monospace;
+  font-size: 10px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.not-interested-button:hover:not(:disabled) { background: rgb(232 93 93 / 11%); }
+.not-interested-button:disabled { border-color: var(--line); color: var(--muted); cursor: default; }
+
 .film-data-credits {
   margin-top: 48px;
   border-top: 1px solid var(--line);
@@ -912,6 +969,9 @@ footer {
   }
   .dossier-scroll { padding: 20px 20px max(36px, env(safe-area-inset-bottom)); }
   .dossier-poster { width: min(200px, 52vw); }
+  .reroll-panel { align-items: stretch; flex-direction: column; }
+  .reroll-panel button { width: 100%; }
+  .reroll-panel p { text-align: center; }
   .film-data-credits details > div { align-items: flex-start; flex-direction: column; }
   .director { grid-template-columns: 1fr; gap: 7px; }
 }

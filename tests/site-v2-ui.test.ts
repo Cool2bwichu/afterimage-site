@@ -24,9 +24,12 @@ test('the page wires the flexible V2 state contract into readiness, payload, and
     assert.match(page, new RegExp(`\\b${helper}\\b`));
   }
   assert.match(page, /canDevelop\(films, creativeBrief\)/);
-  assert.match(page, /JSON\.stringify\(buildDevelopPayload\(films, creativeBrief\)\)/);
+  assert.match(
+    page,
+    /buildDevelopPayload\(\s*films,\s*creativeBrief,\s*normalizeExcludedFilms/s,
+  );
   assert.match(page, /parseStoredState\(localStorage\.getItem\(STORAGE_KEY\)\)/);
-  assert.match(page, /version: 3/);
+  assert.match(page, /version: 4/);
   assert.match(page, /metadataByKey/);
 });
 
@@ -74,4 +77,12 @@ test('posters and dossiers use only the private enrichment route and verified IM
   assert.match(dossier, /What to watch for/i);
   assert.doesNotMatch(page + card + dossier + enrichmentRoute, /JustWatch|watch\/providers|streaming provider/i);
   assert.match(page, /This product uses the TMDB API but is not endorsed or certified by TMDB\./);
+});
+
+test('film dossiers can save a not-interested preference and results can request five different films', () => {
+  assert.match(dossier, /Not interested/i);
+  assert.match(dossier, /onNotInterested/);
+  assert.match(page, /Recommend Different Films/);
+  assert.match(page, /result\.recommendations\.map/);
+  assert.match(page, /excludedFilms/);
 });

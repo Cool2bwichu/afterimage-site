@@ -9,6 +9,8 @@ export type RecommendationV2 = {
   watchFor: string;
 };
 
+export type ExcludedFilm = { title: string; year: string };
+
 export type AfterimageResultV2 = {
   status: 'complete';
   sourceFilms: string[];
@@ -21,12 +23,13 @@ export type AfterimageResultV2 = {
 };
 
 export type ReelStateV2 = {
-  version: 3;
+  version: 4;
   films: string[];
   creativeBrief: string;
   result: AfterimageResultV2 | null;
   activeJobId: string | null;
   metadataByKey: Record<string, FilmEnrichment>;
+  excludedFilms: ExcludedFilm[];
 };
 
 const MAX_FILMS = 20;
@@ -65,6 +68,23 @@ function normalizeFilms(value: unknown): string[] {
 function normalizeBrief(value: unknown): string {
   if (typeof value !== 'string') return '';
   return value.trim().slice(0, MAX_BRIEF_LENGTH);
+}
+
+export function normalizeExcludedFilms(value: unknown): ExcludedFilm[] {
+  if (!Array.isArray(value)) return [];
+  const films: ExcludedFilm[] = [];
+  const seen = new Set<string>();
+  for (const candidate of value) {
+    if (!isRecord(candidate) || typeof candidate.title !== 'string' || typeof candidate.year !== 'string') continue;
+    const title = candidate.title.trim();
+    const year = candidate.year.trim();
+    const key = `${title.toLocaleLowerCase()}|${year}`;
+    if (!title || title.length > MAX_FILM_LENGTH || !/^\d{4}$/.test(year) || seen.has(key)) continue;
+    seen.add(key);
+    films.push({ title, year });
+    if (films.length === 100) break;
+  }
+  return films;
 }
 
 function parseTextArray(value: unknown, length: number): string[] | null {
@@ -135,21 +155,28 @@ export function getInputStatus(films: readonly string[], creativeBrief: string):
   return `${filmLabel} loaded. Ready when you are.`;
 }
 
-export function buildDevelopPayload(films: readonly string[], creativeBrief: string) {
+export function buildDevelopPayload(
+  films: readonly string[],
+  creativeBrief: string,
+  excludedFilms: readonly ExcludedFilm[] = [],
+) {
+  const exclusions = normalizeExcludedFilms(excludedFilms);
   return {
     films: normalizeFilms(films),
     creativeBrief: normalizeBrief(creativeBrief),
+    ...(exclusions.length ? { excludedFilms: exclusions } : {}),
   };
 }
 
 export function parseStoredState(raw: string | null): ReelStateV2 {
   const fallback: ReelStateV2 = {
-    version: 3,
+    version: 4,
     films: [],
     creativeBrief: '',
     result: null,
     activeJobId: null,
     metadataByKey: {},
+    excludedFilms: [],
   };
   if (!raw) return fallback;
 
@@ -169,7 +196,7 @@ export function parseStoredState(raw: string | null): ReelStateV2 {
     }
 
     return {
-      version: 3,
+      version: 4,
       films: normalizeFilms(stored.films),
       creativeBrief: normalizeBrief(stored.creativeBrief),
       result,
@@ -177,6 +204,7 @@ export function parseStoredState(raw: string | null): ReelStateV2 {
         ? stored.activeJobId
         : null,
       metadataByKey,
+      excludedFilms: normalizeExcludedFilms(stored.excludedFilms),
     };
   } catch {
     return fallback;

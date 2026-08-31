@@ -59,6 +59,16 @@ test('trims the outgoing brief without requiring three films', () => {
   });
 });
 
+test('adds bounded not-interested films to future generation payloads', () => {
+  assert.deepEqual(buildDevelopPayload([], '  Melancholy over decades.  ', [
+    { title: '  After Yang  ', year: '2021' },
+  ]), {
+    films: [],
+    creativeBrief: 'Melancholy over decades.',
+    excludedFilms: [{ title: 'After Yang', year: '2021' }],
+  });
+});
+
 test('hydrates an unversioned legacy reel without exposing pairsWith', () => {
   const state = parseStoredState(JSON.stringify({
     films: ['Paris, Texas'],
@@ -66,9 +76,10 @@ test('hydrates an unversioned legacy reel without exposing pairsWith', () => {
     result: completeLegacyResult(),
   }));
 
-  assert.equal(state.version, 3);
+  assert.equal(state.version, 4);
   assert.equal(state.activeJobId, null);
   assert.deepEqual(state.metadataByKey, {});
+  assert.deepEqual(state.excludedFilms, []);
   assert.ok(state.result);
   assert.equal(state.result.recommendations.length, 5);
   assert.equal(Object.hasOwn(state.result.recommendations[0], 'pairsWith'), false);
@@ -86,12 +97,13 @@ test('discards a malformed saved reel while preserving valid draft input', () =>
   }));
 
   assert.deepEqual(state, {
-    version: 3,
+    version: 4,
     films: ['Paris, Texas'],
     creativeBrief: 'Desert longing.',
     result: null,
     activeJobId: null,
     metadataByKey: {},
+    excludedFilms: [],
   });
 });
 
@@ -112,14 +124,15 @@ test('hydrates only a valid UUID v4 as the active generation job', () => {
   }
 });
 
-test('falls back to an empty V3 draft when storage is unreadable', () => {
+test('falls back to an empty V4 draft when storage is unreadable', () => {
   assert.deepEqual(parseStoredState('{not-json'), {
-    version: 3,
+    version: 4,
     films: [],
     creativeBrief: '',
     result: null,
     activeJobId: null,
     metadataByKey: {},
+    excludedFilms: [],
   });
 });
 
@@ -137,4 +150,15 @@ test('hydrates only definitive metadata belonging to the saved five-film reel', 
   assert.deepEqual(state.metadataByKey, {
     [key]: { key, title: 'Legacy Recommendation 1', year: '1975', status: 'unmatched' },
   });
+});
+
+test('persists a deduplicated not-interested list independently of the current reel', () => {
+  const state = parseStoredState(JSON.stringify({
+    excludedFilms: [
+      { title: 'After Yang', year: '2021' },
+      { title: ' after yang ', year: '2021' },
+      { title: 'Invalid Year', year: 'twenty' },
+    ],
+  }));
+  assert.deepEqual(state.excludedFilms, [{ title: 'After Yang', year: '2021' }]);
 });

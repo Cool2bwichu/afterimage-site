@@ -17,11 +17,15 @@ export function FilmDossier({
   selection,
   metadata,
   opener,
+  notInterested,
+  onNotInterested,
   onClose,
 }: {
   selection: DossierSelection | null;
   metadata?: FilmEnrichment;
   opener: HTMLElement | null;
+  notInterested: boolean;
+  onNotInterested: () => void;
   onClose: () => void;
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -88,9 +92,14 @@ export function FilmDossier({
           <span>What to watch for</span>
           <p>{recommendation.watchFor || 'Program note unavailable for this saved reel.'}</p>
         </section>
-        {verifiedImdb ? (
-          <a className="imdb-link" href={verifiedImdb} target="_blank" rel="noreferrer noopener">View verified IMDb page ↗</a>
-        ) : null}
+        <div className="dossier-actions">
+          {verifiedImdb ? (
+            <a className="imdb-link" href={verifiedImdb} target="_blank" rel="noreferrer noopener">View verified IMDb page ↗</a>
+          ) : null}
+          <button className="not-interested-button" type="button" onClick={onNotInterested} disabled={notInterested}>
+            {notInterested ? 'Not interested · saved' : 'Not interested'}
+          </button>
+        </div>
       </div>
     </dialog>
   );
