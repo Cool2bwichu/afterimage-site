@@ -29,6 +29,12 @@ test('the optional inputs use the approved copy and client boundaries', () => {
   assert.match(page, /films\.length >= 20/);
 });
 
+test('the visible source reel cannot change while a generation is in flight', () => {
+  const removeButton = page.match(/<button[^>]*onClick=\{\(\) => removeFilm\(index\)\}[^>]*>/)?.[0];
+  assert.ok(removeButton);
+  assert.match(removeButton, /disabled=\{developing\}/);
+});
+
 test('recommendation cards expose collective program notes and no one-film pairing', () => {
   assert.match(page, /className="watch-for"/);
   assert.match(page, /recommendation\.watchFor/);

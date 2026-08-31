@@ -320,7 +320,8 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
   cursor: pointer;
 }
 
-.chip button:hover { color: var(--red); }
+.chip button:hover:not(:disabled) { color: var(--red); }
+.chip button:disabled { opacity: .45; cursor: wait; }
 
 .reel-status-row {
   display: flex;

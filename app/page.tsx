@@ -251,7 +251,14 @@ export default function Home() {
             {films.map((film, index) => (
               <span className="chip" key={`${film}-${index}`}>
                 {film}
-                <button type="button" onClick={() => removeFilm(index)} aria-label={`Remove ${film}`}>×</button>
+                <button
+                  type="button"
+                  onClick={() => removeFilm(index)}
+                  aria-label={`Remove ${film}`}
+                  disabled={developing}
+                >
+                  ×
+                </button>
               </span>
             ))}
           </div>
