@@ -467,6 +467,11 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
   color: var(--muted);
 }
 
+.error-banner button:disabled {
+  opacity: .45;
+  cursor: not-allowed;
+}
+
 .leader {
   display: flex;
   flex-direction: column;

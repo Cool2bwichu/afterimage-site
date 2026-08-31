@@ -73,7 +73,6 @@ export default function Home() {
         setConnection('connected');
         setPlanType(payload.planType || '');
         setAuthFlow(null);
-        setError('');
       } else {
         setConnection(response.status === 503 || response.status === 502 ? 'unreachable' : 'disconnected');
       }
@@ -166,6 +165,7 @@ export default function Home() {
           return;
         }
 
+        if (terminal.error.code === 'AUTH_REQUIRED') setConnection('disconnected');
         setJobStatus('failed');
         setError(terminal.error.message);
       } catch (pollError) {
@@ -464,7 +464,13 @@ export default function Home() {
             <p>{error}</p>
             {jobStatus === 'failed' ? (
               <div className="error-actions">
-                <button type="button" onClick={() => void developAgain()}>Develop again</button>
+                <button
+                  type="button"
+                  onClick={() => void developAgain()}
+                  disabled={connection !== 'connected'}
+                >
+                  Develop again
+                </button>
                 <button className="is-secondary" type="button" onClick={dismissFailedJob}>Dismiss</button>
               </div>
             ) : (
