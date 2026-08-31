@@ -67,6 +67,7 @@ test('hydrates an unversioned legacy reel without exposing pairsWith', () => {
   }));
 
   assert.equal(state.version, 2);
+  assert.equal(state.activeJobId, null);
   assert.ok(state.result);
   assert.equal(state.result.recommendations.length, 5);
   assert.equal(Object.hasOwn(state.result.recommendations[0], 'pairsWith'), false);
@@ -88,7 +89,25 @@ test('discards a malformed saved reel while preserving valid draft input', () =>
     films: ['Paris, Texas'],
     creativeBrief: 'Desert longing.',
     result: null,
+    activeJobId: null,
   });
+});
+
+test('hydrates only a valid UUID v4 as the active generation job', () => {
+  const jobId = '6e70979a-b9d3-4f9a-a67c-3d42f46e356c';
+  assert.equal(parseStoredState(JSON.stringify({ activeJobId: jobId })).activeJobId, jobId);
+
+  for (const activeJobId of [
+    undefined,
+    null,
+    '',
+    '../../6e70979a-b9d3-4f9a-a67c-3d42f46e356c',
+    'abcdefghijklmnopqrstuvwxyz0123456789',
+    '6e70979a-b9d3-1f9a-a67c-3d42f46e356c',
+    42,
+  ]) {
+    assert.equal(parseStoredState(JSON.stringify({ activeJobId })).activeJobId, null);
+  }
 });
 
 test('falls back to an empty V2 draft when storage is unreadable', () => {
@@ -97,5 +116,6 @@ test('falls back to an empty V2 draft when storage is unreadable', () => {
     films: [],
     creativeBrief: '',
     result: null,
+    activeJobId: null,
   });
 });

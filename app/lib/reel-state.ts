@@ -22,12 +22,14 @@ export type ReelStateV2 = {
   films: string[];
   creativeBrief: string;
   result: AfterimageResultV2 | null;
+  activeJobId: string | null;
 };
 
 const MAX_FILMS = 20;
 const MAX_FILM_LENGTH = 160;
 const MAX_BRIEF_LENGTH = 1200;
 const HEX_COLOR = /^#[0-9a-f]{6}$/i;
+const GENERATION_JOB_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -80,7 +82,7 @@ function parseRecommendation(value: unknown): RecommendationV2 | null {
   return { title, year, timecode, reason, watchFor };
 }
 
-function parseResult(value: unknown): AfterimageResultV2 | null {
+export function parseAfterimageResultV2(value: unknown): AfterimageResultV2 | null {
   if (!isRecord(value) || value.status !== 'complete') return null;
 
   const sourceFilms = normalizeFilms(value.sourceFilms);
@@ -137,7 +139,13 @@ export function buildDevelopPayload(films: readonly string[], creativeBrief: str
 }
 
 export function parseStoredState(raw: string | null): ReelStateV2 {
-  const fallback: ReelStateV2 = { version: 2, films: [], creativeBrief: '', result: null };
+  const fallback: ReelStateV2 = {
+    version: 2,
+    films: [],
+    creativeBrief: '',
+    result: null,
+    activeJobId: null,
+  };
   if (!raw) return fallback;
 
   try {
@@ -147,7 +155,10 @@ export function parseStoredState(raw: string | null): ReelStateV2 {
       version: 2,
       films: normalizeFilms(stored.films),
       creativeBrief: normalizeBrief(stored.creativeBrief),
-      result: parseResult(stored.result),
+      result: parseAfterimageResultV2(stored.result),
+      activeJobId: typeof stored.activeJobId === 'string' && GENERATION_JOB_ID.test(stored.activeJobId)
+        ? stored.activeJobId
+        : null,
     };
   } catch {
     return fallback;
