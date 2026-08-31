@@ -1,0 +1,101 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+
+import {
+  buildDevelopPayload,
+  canDevelop,
+  getInputStatus,
+  parseStoredState,
+} from '../app/lib/reel-state.ts';
+
+function legacyRecommendations() {
+  return Array.from({ length: 5 }, (_, index) => ({
+    title: 'Legacy Recommendation ' + (index + 1),
+    year: String(1975 + index),
+    timecode: '00:00:0' + (index + 1) + ':00',
+    reason: 'A complete legacy reason ' + (index + 1) + '.',
+    pairsWith: 'Paris, Texas',
+  }));
+}
+
+function completeLegacyResult() {
+  return {
+    status: 'complete',
+    sourceFilms: ['Paris, Texas'],
+    persona: 'Desert Ghost',
+    insight: 'A complete saved insight.',
+    palette: ['#111111', '#222222', '#333333', '#444444', '#555555'],
+    sensibilities: ['Distance', 'Longing', 'Silence'],
+    spiritDirector: { name: 'A Director', reason: 'A complete saved reason.' },
+    recommendations: legacyRecommendations(),
+  };
+}
+
+test('develops from films, text, or both', () => {
+  assert.equal(canDevelop([], ''), false);
+  assert.equal(canDevelop([], '   '), false);
+  assert.equal(canDevelop([], 'A film about time passing.'), true);
+  assert.equal(canDevelop(['After Yang'], ''), true);
+  assert.equal(canDevelop(['After Yang'], 'Quiet speculative grief.'), true);
+});
+
+test('describes empty, film-only, brief-only, and combined readiness', () => {
+  assert.equal(
+    getInputStatus([], ''),
+    'Add a film or describe the feeling, form, or story you want to find.',
+  );
+  assert.equal(getInputStatus(['After Yang'], ''), '1 film loaded. Ready when you are.');
+  assert.equal(getInputStatus([], 'Quiet speculative grief.'), 'Description loaded. Ready when you are.');
+  assert.equal(
+    getInputStatus(['After Yang', 'Columbus'], 'Quiet speculative grief.'),
+    '2 films and a description loaded. Ready when you are.',
+  );
+});
+
+test('trims the outgoing brief without requiring three films', () => {
+  assert.deepEqual(buildDevelopPayload([], '  Melancholy over decades.  '), {
+    films: [],
+    creativeBrief: 'Melancholy over decades.',
+  });
+});
+
+test('hydrates an unversioned legacy reel without exposing pairsWith', () => {
+  const state = parseStoredState(JSON.stringify({
+    films: ['Paris, Texas'],
+    creativeBrief: '',
+    result: completeLegacyResult(),
+  }));
+
+  assert.equal(state.version, 2);
+  assert.ok(state.result);
+  assert.equal(state.result.recommendations.length, 5);
+  assert.equal(Object.hasOwn(state.result.recommendations[0], 'pairsWith'), false);
+  assert.equal(state.result.recommendations[0].watchFor, '');
+});
+
+test('discards a malformed saved reel while preserving valid draft input', () => {
+  const malformed = completeLegacyResult();
+  malformed.palette = ['#111111'];
+
+  const state = parseStoredState(JSON.stringify({
+    films: ['Paris, Texas'],
+    creativeBrief: '  Desert longing.  ',
+    result: malformed,
+  }));
+
+  assert.deepEqual(state, {
+    version: 2,
+    films: ['Paris, Texas'],
+    creativeBrief: 'Desert longing.',
+    result: null,
+  });
+});
+
+test('falls back to an empty V2 draft when storage is unreadable', () => {
+  assert.deepEqual(parseStoredState('{not-json'), {
+    version: 2,
+    films: [],
+    creativeBrief: '',
+    result: null,
+  });
+});
