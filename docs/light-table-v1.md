@@ -65,6 +65,8 @@ Current deterministic results: 52 Site tests and 89 bridge tests pass. Type chec
 
 Browser acceptance exercised all 20 facet controls, replacement/toggle/clear, persistence, failed start, 202 acceptance, 409 conflict, transient polling error, refresh/resume, failed-job retry, blend-aware reroll, dossier focus, verified ratings/posters, exclusions, mobile composition and reduced motion. A local fixture bridge injected failures while keeping the real Site proxy, bridge validation, durable job store and generation coordinator in the path. The fixture harness is outside production source.
 
+Real acceptance also passed: an initial two-film Light Table request returned a complete extended reel, and a four-channel blend selected through the actual Site completed in 266 seconds through the protected asynchronous routes and refresh/resume flow. Its five recommendations were Driveways (2019), Mademoiselle Chambon (2009), Journey to the Shore (2015), Nowhere Special (2020) and Sweet Bean (2015). All four fingerprint channels and twenty facets survived, and none of the four selected source films returned. The original two-minute deadline failed the first attempt; the corrected five-minute deadline allowed completion. This is a latency limitation, not a speed improvement.
+
 ## Generation deadline
 
 A real four-channel acceptance run exposed the original 120-second response deadline. Light Table turns now have a 300-second deadline; standard V2 retains 120 seconds. An expired Light Table wait requests turn cancellation before archive, and closes its dedicated Codex process if cancellation cannot be acknowledged. The existing resumable job remains the transport throughout. Three regression tests cover these boundaries.

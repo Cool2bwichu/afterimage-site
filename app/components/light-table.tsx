@@ -20,8 +20,8 @@ export function LightTable({ selectedFacets, locked, canSubmit, onRemove, onClea
   onDevelop: () => void;
 }) {
   const count = selectionCount(selectedFacets);
-  const [collapsedByUser, setCollapsedByUser] = useState(false);
-  const expanded = count > 0 && !collapsedByUser;
+  const [expansionOverride, setExpansionOverride] = useState<boolean | null>(null);
+  const expanded = expansionOverride ?? count > 0;
   const [height, setHeight] = useState(80);
   const tableRef = useRef<HTMLElement>(null);
   const toggleRef = useRef<HTMLButtonElement>(null);
@@ -47,7 +47,7 @@ export function LightTable({ selectedFacets, locked, canSubmit, onRemove, onClea
         <div><span className="ai-kicker">Remix the reel</span><h2 ref={titleRef} tabIndex={-1}>The Light Table</h2></div>
         <BlendSummary selectedFacets={selectedFacets} />
       </header>
-      <button ref={toggleRef} className="ai-light-table__mobile-toggle" type="button" disabled={!count} aria-expanded={expanded} aria-controls="ai-light-table-body" onClick={() => setCollapsedByUser(value => !value)}>
+      <button ref={toggleRef} className="ai-light-table__mobile-toggle" type="button" aria-expanded={expanded} aria-controls="ai-light-table-body" onClick={() => setExpansionOverride(!expanded)}>
         <span>Light Table <strong>{count}/4 · {searchBreadth(selectedFacets)}</strong></span>
         <span aria-hidden="true">{expanded ? '−' : '+'}</span>
       </button>

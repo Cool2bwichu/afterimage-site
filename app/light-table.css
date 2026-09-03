@@ -70,6 +70,9 @@
 .ai-light-table.is-empty .ai-light-table__header { border-bottom:0; padding-block:10px; }
 .ai-light-table.is-empty h2 { margin:0; font-size:21px; }
 .ai-light-table__mobile-toggle { display:none; }
+.ai-light-table { display:flex; flex-direction:column; overflow:hidden; }
+.ai-light-table__header,.ai-light-table__mobile-toggle,.ai-light-table__actions { flex-shrink:0; }
+.ai-light-table__body { min-height:0; overflow-y:auto; overscroll-behavior:contain; }
 .ai-facet-flight { display:grid; place-items:center; position:fixed; z-index:100; pointer-events:none; padding:12px; border:1px solid #e8b34a; background:#1b1e2b; color:#f2efe9; font-size:14px; text-align:center; }
 
 @media (min-width:1000px) {
