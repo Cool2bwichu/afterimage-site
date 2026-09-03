@@ -1,0 +1,291 @@
+{
+  "persona": "The Melancholy Futurist",
+  "insight": "You are drawn to films where enormous worlds become intimate chambers for longing, memory, and the things people cannot quite say.",
+  "fingerprint": {
+    "whereItLives": {
+      "label": "Liminal science-fiction melodrama",
+      "explanation": "Genre becomes a borderland where private memory and vast imagined worlds overlap.",
+      "traits": [
+        "speculative drama",
+        "romantic memory",
+        "liminal journeys"
+      ]
+    },
+    "howItFeels": {
+      "label": "Patient longing under glass",
+      "explanation": "The emotion burns slowly, held in restraint until the smallest gesture carries enormous weight.",
+      "traits": [
+        "melancholic",
+        "introspective",
+        "slow-burning"
+      ]
+    },
+    "howItLooks": {
+      "label": "Monumental space, intimate bodies",
+      "explanation": "Carefully composed widescreen environments make people feel both tiny and intensely present.",
+      "traits": [
+        "sculpted widescreen",
+        "nocturnal color",
+        "isolating architecture"
+      ]
+    },
+    "howItSpeaks": {
+      "label": "Sparse words, loaded silences",
+      "explanation": "Meaning lives between brief exchanges, withheld confession, and the pressure of quiet rooms.",
+      "traits": [
+        "sparse dialogue",
+        "subtext",
+        "philosophical quiet"
+      ]
+    }
+  },
+  "recommendations": [
+    {
+      "title": "After Yang",
+      "year": "2021",
+      "reason": "Its quiet future, careful interiors, and attention to memory bring the scale of science fiction down to the fragile size of one family.",
+      "watchFor": "The pauses around ordinary objects, the repeated dance fragments, and how rooms hold people apart even when they are close.",
+      "facets": {
+        "whereItLives": {
+          "label": "Intimate speculative elegy",
+          "explanation": "Science fiction remains human-scale, domestic, and grounded in memory.",
+          "traits": [
+            "speculative drama",
+            "domestic future",
+            "memory"
+          ]
+        },
+        "howItFeels": {
+          "label": "Tender suspended grief",
+          "explanation": "Loss is approached through curiosity and care instead of emotional collapse.",
+          "traits": [
+            "tender",
+            "grief",
+            "contemplative"
+          ]
+        },
+        "howItLooks": {
+          "label": "Domestic futurism",
+          "explanation": "Soft light and designed interiors make the future feel already inhabited.",
+          "traits": [
+            "soft light",
+            "precise composition",
+            "interiors"
+          ]
+        },
+        "howItSpeaks": {
+          "label": "Quiet philosophical fragments",
+          "explanation": "Large questions emerge through short conversations, pauses, and unfinished thoughts.",
+          "traits": [
+            "sparse dialogue",
+            "philosophical",
+            "silence"
+          ]
+        }
+      },
+      "timecode": "00:00:12:00"
+    },
+    {
+      "title": "Millennium Mambo",
+      "year": "2001",
+      "reason": "It turns a young woman looking back on her life into a neon memory current, full of distance, repetition, and time already slipping away.",
+      "watchFor": "The floating camera, blue-green haze, retrospective voiceover, and the way nightlife becomes a memory before it has ended.",
+      "facets": {
+        "whereItLives": {
+          "label": "Nocturnal urban memory",
+          "explanation": "The city is less a setting than a drifting recollection of youth and escape.",
+          "traits": [
+            "urban drama",
+            "nightlife",
+            "memory"
+          ]
+        },
+        "howItFeels": {
+          "label": "Narcotic melancholy",
+          "explanation": "Sadness arrives as a dreamy emotional fog rather than an open wound.",
+          "traits": [
+            "melancholic",
+            "dreamlike",
+            "detached"
+          ]
+        },
+        "howItLooks": {
+          "label": "Neon drift in shallow focus",
+          "explanation": "Colored light and soft focus dissolve the city into sensation.",
+          "traits": [
+            "neon",
+            "shallow focus",
+            "floating camera"
+          ]
+        },
+        "howItSpeaks": {
+          "label": "Detached retrospective narration",
+          "explanation": "A future voice describes the present as though it has already vanished.",
+          "traits": [
+            "voiceover",
+            "retrospective",
+            "elliptical"
+          ]
+        }
+      },
+      "timecode": "00:01:12:00"
+    },
+    {
+      "title": "Columbus",
+      "year": "2017",
+      "reason": "Its architecture, still frames, and emotionally precise conversations turn physical space into a map of people learning whether to stay or leave.",
+      "watchFor": "Balanced frames, reflective glass, long pauses, and how each building quietly clarifies what a character is unable to decide.",
+      "facets": {
+        "whereItLives": {
+          "label": "Architectural chamber drama",
+          "explanation": "A small emotional world is organized around buildings, care, and suspended departure.",
+          "traits": [
+            "chamber drama",
+            "architecture",
+            "place"
+          ]
+        },
+        "howItFeels": {
+          "label": "Restrained longing",
+          "explanation": "Emotion gathers through pauses, withheld decisions, and careful companionship.",
+          "traits": [
+            "melancholic",
+            "restrained",
+            "tender"
+          ]
+        },
+        "howItLooks": {
+          "label": "Geometric stillness",
+          "explanation": "People are held inside balanced architectural frames and deliberate negative space.",
+          "traits": [
+            "static composition",
+            "architecture",
+            "negative space"
+          ]
+        },
+        "howItSpeaks": {
+          "label": "Precise patient conversation",
+          "explanation": "Thoughtful dialogue moves slowly enough for subtext to remain visible.",
+          "traits": [
+            "measured dialogue",
+            "subtext",
+            "intimate"
+          ]
+        }
+      },
+      "timecode": "00:02:12:00"
+    },
+    {
+      "title": "Cure",
+      "year": "1997",
+      "reason": "Its empty rooms and patient procedural rhythm turn psychological uncertainty into something physical, quiet, and almost impossible to escape.",
+      "watchFor": "Blank institutional spaces, distant framing, ambient sound, and conversations that seem ordinary until their footing disappears.",
+      "facets": {
+        "whereItLives": {
+          "label": "Psychological procedural noir",
+          "explanation": "A detective structure opens into uncertainty, moral fog, and destabilized identity.",
+          "traits": [
+            "psychological thriller",
+            "noir",
+            "procedural"
+          ]
+        },
+        "howItFeels": {
+          "label": "Slow-blooming dread",
+          "explanation": "Unease accumulates almost invisibly until the ordinary world feels contaminated.",
+          "traits": [
+            "dread",
+            "hypnotic",
+            "slow-burning"
+          ]
+        },
+        "howItLooks": {
+          "label": "Institutional emptiness",
+          "explanation": "Wide static rooms make people look exposed, isolated, and strangely unprotected.",
+          "traits": [
+            "empty interiors",
+            "wide static shots",
+            "negative space"
+          ]
+        },
+        "howItSpeaks": {
+          "label": "Clipped destabilizing exchanges",
+          "explanation": "Simple questions repeat until language itself begins to loosen reality.",
+          "traits": [
+            "minimal dialogue",
+            "repetition",
+            "uncertainty"
+          ]
+        }
+      },
+      "timecode": "00:03:12:00"
+    },
+    {
+      "title": "The Green Ray",
+      "year": "1986",
+      "reason": "Its wandering summer realism follows loneliness without closing it into despair, leaving room for chance, embarrassment, and a flash of genuine hope.",
+      "watchFor": "Natural light, overheard social rhythms, awkward pauses, and the final instant when landscape and emotion briefly align.",
+      "facets": {
+        "whereItLives": {
+          "label": "Wandering summer realism",
+          "explanation": "A loose seasonal journey allows chance encounters to shape the story.",
+          "traits": [
+            "naturalistic drama",
+            "summer",
+            "wandering"
+          ]
+        },
+        "howItFeels": {
+          "label": "Lonely hope",
+          "explanation": "Isolation remains painful but never completely closes the door on connection.",
+          "traits": [
+            "lonely",
+            "hopeful",
+            "vulnerable"
+          ]
+        },
+        "howItLooks": {
+          "label": "Sunlit natural observation",
+          "explanation": "Available light and unforced framing keep the world immediate and open.",
+          "traits": [
+            "natural light",
+            "location photography",
+            "observational"
+          ]
+        },
+        "howItSpeaks": {
+          "label": "Searching awkward candor",
+          "explanation": "Conversation is exposed, messy, and painfully honest about wanting more.",
+          "traits": [
+            "natural dialogue",
+            "awkward",
+            "emotionally direct"
+          ]
+        }
+      },
+      "timecode": "00:04:12:00"
+    }
+  ],
+  "status": "complete",
+  "sourceFilms": [
+    "Blade Runner 2049",
+    "Paris, Texas",
+    "In the Mood for Love"
+  ],
+  "palette": [
+    "#0b0d14",
+    "#e8b34a",
+    "#4fd8e0",
+    "#75445e",
+    "#e4d8cb"
+  ],
+  "sensibilities": [
+    "Patient longing",
+    "Sculpted space",
+    "Quiet confession"
+  ],
+  "spiritDirector": {
+    "name": "Wim Wenders",
+    "reason": "Distance and tenderness live inside the same frame."
+  }
+}

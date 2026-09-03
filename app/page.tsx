@@ -3,10 +3,14 @@
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FilmDossier } from './components/film-dossier';
 import { RecommendationCard } from './components/recommendation-card';
+import { SearchFingerprint } from './components/search-fingerprint';
+import { LightTable } from './components/light-table';
+import { LIGHT_TABLE_EXPERIENCE, buildBlendPayload, isSameSelectedFacet, removeFacet, selectFacet, selectionCount, type CinematicFacet, type FacetKey, type FacetSource, type SelectedFacets } from './lib/light-table';
+import { animateFacetToLane } from './lib/light-table-motion';
 import { fetchFilmEnrichment, persistableEnrichment } from './lib/enrichment-client';
 import type { FilmEnrichment } from './lib/movie-metadata';
 import { movieKey } from './lib/movie-metadata';
-import type { AfterimageResultV2, ExcludedFilm } from './lib/reel-state';
+import type { AfterimageResultV2, ExcludedFilm, DevelopInput, Experience } from './lib/reel-state';
 import { GenerationPollError, pollGeneration } from './lib/generation-poller';
 import {
   isGenerationJobId,
@@ -19,6 +23,8 @@ import {
   getInputStatus,
   normalizeExcludedFilms,
   parseStoredState,
+  parseAfterimageResultV2,
+  withCurrentExclusions,
 } from './lib/reel-state';
 
 const STORAGE_KEY = 'afterimage:mobile-state';
@@ -49,6 +55,11 @@ function statusError(status: number): Error & { status: number } {
 
 export default function Home() {
   const [films, setFilms] = useState<string[]>([]);
+  const [experience, setExperience] = useState<Experience>();
+  const [selectedFacets, setSelectedFacets] = useState<SelectedFacets>({});
+  const [acceptedInput, setAcceptedInput] = useState<DevelopInput>();
+  const lastAttemptRef = useRef<DevelopInput | undefined>(undefined);
+  const lightTableEnabled = experience === LIGHT_TABLE_EXPERIENCE;
   const [draft, setDraft] = useState('');
   const [creativeBrief, setCreativeBrief] = useState('');
   const [result, setResult] = useState<AfterimageResultV2 | null>(null);
@@ -80,9 +91,9 @@ export default function Home() {
     try {
       const response = await fetch('/api/status', { cache: 'no-store' });
       const payload = await response.json();
-      if (response.ok && payload.authenticated) {
+      if (response.ok && isRecord(payload) && payload.authenticated) {
         setConnection('connected');
-        setPlanType(payload.planType || '');
+        setPlanType(typeof payload.planType === 'string' ? payload.planType : '');
         setAuthFlow(null);
       } else {
         setConnection(response.status === 503 || response.status === 502 ? 'unreachable' : 'disconnected');
@@ -96,9 +107,14 @@ export default function Home() {
     const hydration = window.setTimeout(() => {
       try {
         const saved = parseStoredState(localStorage.getItem(STORAGE_KEY));
+        const requested = new URLSearchParams(window.location.search).get('experience');
+        const mode = requested === null ? saved.experience : requested === LIGHT_TABLE_EXPERIENCE ? LIGHT_TABLE_EXPERIENCE : undefined;
+        setExperience(mode);
+        setSelectedFacets(mode ? saved.selectedFacets ?? {} : {});
+        setAcceptedInput(mode ? saved.acceptedInput : undefined);
         setFilms(saved.films);
         setCreativeBrief(saved.creativeBrief);
-        setResult(saved.result);
+        setResult(parseAfterimageResultV2(saved.result, mode));
         setMetadataByKey(saved.metadataByKey);
         setExcludedFilms(saved.excludedFilms);
         setActiveJobId(saved.activeJobId);
@@ -114,7 +130,7 @@ export default function Home() {
 
   useEffect(() => {
     if (!hydrated) return;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify({
       version: 4,
       films,
       creativeBrief,
@@ -122,8 +138,12 @@ export default function Home() {
       activeJobId,
       metadataByKey,
       excludedFilms,
-    }));
-  }, [films, creativeBrief, result, activeJobId, metadataByKey, excludedFilms, hydrated]);
+      ...(lightTableEnabled ? { experience, selectedFacets, acceptedInput } : {}),
+    })); } catch {
+      const timer = window.setTimeout(() => setNotice('This browser could not save the reel. Keep this page open to retain your selections.'), 0);
+      return () => window.clearTimeout(timer);
+    }
+  }, [films, creativeBrief, result, activeJobId, metadataByKey, excludedFilms, hydrated, experience, lightTableEnabled, selectedFacets, acceptedInput]);
 
   useEffect(() => {
     const connectionCheck = window.setTimeout(() => void refreshConnection(), 0);
@@ -159,7 +179,9 @@ export default function Home() {
               throw statusError(500);
             }
             try {
-              return parseJobStatus(payload);
+              const job = parseJobStatus(payload, experience);
+              if (job.status === 'complete' && acceptedInput?.experience === LIGHT_TABLE_EXPERIENCE && !job.reel.fingerprint) throw new Error('The Light Table result is incomplete.');
+              return job;
             } catch {
               throw statusError(500);
             }
@@ -181,7 +203,7 @@ export default function Home() {
           setError('');
           setNotice('');
           window.setTimeout(() => {
-            resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            resultsRef.current?.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth', block: 'start' });
           }, 80);
           return;
         }
@@ -210,7 +232,7 @@ export default function Home() {
     })();
 
     return () => controller.abort();
-  }, [activeJobId, connection, hydrated, pollRevision]);
+  }, [activeJobId, connection, hydrated, pollRevision, experience, acceptedInput]);
 
   useEffect(() => {
     if (!developing) return;
@@ -300,13 +322,13 @@ export default function Home() {
     try {
       const response = await fetch('/api/connect', { method: 'POST' });
       const payload = await response.json();
-      if (!response.ok) throw new Error(payload.error || 'ChatGPT sign-in could not start.');
+      if (!response.ok || !isRecord(payload)) throw new Error(responseMessage(payload, 'ChatGPT sign-in could not start.'));
       if (payload.alreadyAuthenticated) {
         await refreshConnection();
-      } else {
+      } else if (typeof payload.verificationUrl === 'string' && typeof payload.userCode === 'string') {
         setAuthFlow({ verificationUrl: payload.verificationUrl, userCode: payload.userCode });
         setConnection('disconnected');
-      }
+      } else throw new Error('ChatGPT sign-in could not start.');
     } catch (connectionError) {
       setError(connectionError instanceof Error ? connectionError.message : 'ChatGPT sign-in could not start.');
       setConnection('unreachable');
@@ -315,9 +337,19 @@ export default function Home() {
     }
   }
 
-  async function developReel(replaceFailedJob = false, temporaryExclusions: ExcludedFilm[] = []) {
+  async function developReel(replaceFailedJob = false, temporaryExclusions: ExcludedFilm[] = [], requestOverride?: DevelopInput) {
+    let input: DevelopInput = requestOverride ?? {
+      ...buildDevelopPayload(
+        films,
+        creativeBrief,
+        normalizeExcludedFilms([...excludedFilms, ...temporaryExclusions]),
+      ),
+      ...(lightTableEnabled ? { experience: LIGHT_TABLE_EXPERIENCE } : {}),
+    };
+    try { input = withCurrentExclusions(input, excludedFilms); }
+    catch (inputError) { setError(inputError instanceof Error ? inputError.message : 'The blend could not be submitted.'); return; }
     if (
-      !ready ||
+      (!canDevelop(input.films, input.creativeBrief) && !selectionCount(input.selectedFacets ?? {})) ||
       connection !== 'connected' ||
       developing ||
       startLockRef.current ||
@@ -325,6 +357,7 @@ export default function Home() {
     ) return;
 
     startLockRef.current = true;
+    lastAttemptRef.current = input;
     setLeaderNumber(8);
     setLeaderStep(0);
     setStarting(true);
@@ -334,11 +367,7 @@ export default function Home() {
       const response = await fetch('/api/generations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(buildDevelopPayload(
-          films,
-          creativeBrief,
-          normalizeExcludedFilms([...excludedFilms, ...temporaryExclusions]),
-        )),
+        body: JSON.stringify(input),
       });
 
       let payload: unknown;
@@ -355,6 +384,7 @@ export default function Home() {
         isGenerationJobId(payload.jobId)
       ) {
         setActiveJobId(payload.jobId);
+        setAcceptedInput(undefined);
         setJobStatus('queued');
         setNotice('Resuming the reel already in the gate.');
         return;
@@ -366,6 +396,8 @@ export default function Home() {
       }
 
       const started = parseJobStart(payload);
+      setSelectedFacets({});
+      setAcceptedInput(input.experience === LIGHT_TABLE_EXPERIENCE ? input : undefined);
       setResult(null);
       setMetadataByKey({});
       setSelectedRecommendation(null);
@@ -384,7 +416,7 @@ export default function Home() {
     setActiveJobId(null);
     setJobStatus(null);
     setError('');
-    await developReel(true);
+    await developReel(true, [], acceptedInput);
   }
 
   function dismissFailedJob() {
@@ -406,6 +438,31 @@ export default function Home() {
     setSelectedRecommendation(null);
   }
 
+  function handleSelectFacet(channel: FacetKey, facet: CinematicFacet, source: FacetSource, trigger: HTMLButtonElement) {
+    if (reelLocked) return;
+    const wasSelected = isSameSelectedFacet(channel, selectedFacets[channel], {...facet,source});
+    setSelectedFacets(current => selectFacet(current, channel, facet, source));
+    if (!wasSelected) requestAnimationFrame(() => animateFacetToLane(trigger, channel));
+  }
+
+  function developBlend() {
+    if (!selectionCount(selectedFacets)) return;
+    void developReel(false, [], buildBlendPayload({selectedFacets,excludedFilms}));
+  }
+
+  function recommendDifferentFilms() {
+    if (!result) return;
+    const temporary = result.recommendations.map(({title,year}) => ({title,year}));
+    if (lightTableEnabled && acceptedInput) {
+      const all = [...excludedFilms, ...temporary];
+      if (new Set(all.map(film => `${film.title.trim().toLocaleLowerCase()}|${film.year.trim()}`)).size > 100) {
+        setError('This reroll exceeds the 100-film exclusion limit. Your saved exclusions have been preserved.');
+        return;
+      }
+      void developReel(false, [], {...acceptedInput, excludedFilms:normalizeExcludedFilms(all)});
+    } else void developReel(false, temporary);
+  }
+
   const leaderMessage = starting
     ? 'Threading the reel —'
     : jobStatus === 'reconnecting'
@@ -413,7 +470,7 @@ export default function Home() {
       : `${LEADER_MESSAGES[leaderStep]} —`;
 
   return (
-    <main className="site-shell">
+    <main className={`site-shell${lightTableEnabled ? ' has-light-table' : ''}`}>
       <div className="film-grain" aria-hidden="true" />
       <div className="wrap">
         <header className="masthead">
@@ -430,6 +487,7 @@ export default function Home() {
           or combine both. AFTERIMAGE reads the full signal and develops a reel around your actual
           sensibility, not just a genre.
         </p>
+        {lightTableEnabled ? <div className="ai-mode-note"><span>Light Table · Borrow qualities to develop your next reel.</span><a href="?experience=standard">Use standard reel</a></div> : null}
 
         {connection !== 'connected' ? (
           <section className="connection-panel" aria-live="polite">
@@ -555,7 +613,7 @@ export default function Home() {
                   ? startConnection
                   : activeJobId
                     ? resumePolling
-                    : () => void developReel()}
+                    : () => void developReel(false, [], lastAttemptRef.current)}
               >
                 {connection !== 'connected' ? 'Reconnect' : activeJobId ? 'Resume reel' : 'Reload the reel'}
               </button>
@@ -587,6 +645,8 @@ export default function Home() {
               </div>
             </article>
 
+            {lightTableEnabled && result.fingerprint ? <SearchFingerprint fingerprint={result.fingerprint} insight="Four channels describe this search. Borrow qualities from the films below to shape what comes next." /> : null}
+
             <div className="panel-label rec-label">Double Feature Recommendations</div>
             <div className="recommendation-grid">
               {result.recommendations.map((recommendation, index) => (
@@ -596,6 +656,9 @@ export default function Home() {
                   index={index}
                   metadata={metadataByKey[movieKey(recommendation.title, recommendation.year)]}
                   enrichmentPending={enrichmentPending}
+                  selectedFacets={selectedFacets}
+                  onSelectFacet={lightTableEnabled ? handleSelectFacet : undefined}
+                  facetDisabled={reelLocked}
                   onOpen={(event) => {
                     setDossierOpener(event.currentTarget);
                     setSelectedRecommendation(index);
@@ -607,12 +670,14 @@ export default function Home() {
             <div className="reroll-panel">
               <button
                 type="button"
-                onClick={() => void developReel(false, result.recommendations.map(({ title, year }) => ({ title, year })))}
-                disabled={reelLocked || connection !== 'connected'}
+                onClick={recommendDifferentFilms}
+                disabled={reelLocked || connection !== 'connected' || (lightTableEnabled && Boolean(result.fingerprint) && !acceptedInput)}
               >
                 Recommend Different Films
               </button>
-              <p>Keep this prompt and replace all five recommendations.</p>
+              <p>{lightTableEnabled && result.fingerprint && !acceptedInput
+                ? 'This reel resumed from another session. Borrow qualities or start a new search to continue.'
+                : lightTableEnabled && acceptedInput?.selectedFacets ? 'Keep this blend and replace all five recommendations.' : 'Keep this prompt and replace all five recommendations.'}</p>
             </div>
 
             <FilmDossier
@@ -652,6 +717,10 @@ export default function Home() {
           </details>
         </section>
         <footer>AFTERIMAGE · reasoned live, frame by frame</footer>
+        {lightTableEnabled && (result?.fingerprint || selectionCount(selectedFacets) > 0) ? <LightTable
+          selectedFacets={selectedFacets} locked={reelLocked} canSubmit={connection === 'connected'}
+          onRemove={channel => setSelectedFacets(current => removeFacet(current,channel))}
+          onClear={() => setSelectedFacets({})} onDevelop={developBlend} /> : null}
       </div>
     </main>
   );

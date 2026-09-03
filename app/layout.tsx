@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import { Bebas_Neue, JetBrains_Mono, Space_Grotesk } from 'next/font/google';
 import './globals.css';
+import './light-table.css';
 
 const display = Bebas_Neue({
   variable: '--font-display',

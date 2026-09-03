@@ -1,6 +1,8 @@
 import {
   nextPollDelay,
   type GenerationJob,
+  type CompleteGenerationJob,
+  type FailedGenerationJob,
 } from './generation-state.ts';
 
 export type GenerationPollErrorCode = 'AUTH_REQUIRED' | 'JOB_NOT_FOUND' | 'POLL_FAILED';
@@ -61,7 +63,7 @@ export async function pollGeneration({
   wait = defaultWait,
   onStatus = () => {},
   onTransientError = () => {},
-}: PollGenerationOptions): Promise<GenerationJob> {
+}: PollGenerationOptions): Promise<CompleteGenerationJob | FailedGenerationJob> {
   let attempt = 0;
 
   for (;;) {

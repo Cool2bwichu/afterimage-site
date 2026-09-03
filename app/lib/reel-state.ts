@@ -1,5 +1,16 @@
 import type { FilmEnrichment } from './movie-metadata.ts';
 import { movieKey, parseFilmEnrichment } from './movie-metadata.ts';
+import { LIGHT_TABLE_EXPERIENCE, type FacetMap, type SelectedFacets } from './light-table.ts';
+import { parseFacetMap, parseSelectedFacets } from './light-table-parse.ts';
+
+export type Experience = typeof LIGHT_TABLE_EXPERIENCE | undefined;
+export type DevelopInput = {
+  films: string[];
+  creativeBrief: string;
+  excludedFilms?: ExcludedFilm[];
+  experience?: typeof LIGHT_TABLE_EXPERIENCE;
+  selectedFacets?: SelectedFacets;
+};
 
 export type RecommendationV2 = {
   title: string;
@@ -7,6 +18,7 @@ export type RecommendationV2 = {
   timecode: string;
   reason: string;
   watchFor: string;
+  facets?: FacetMap;
 };
 
 export type ExcludedFilm = { title: string; year: string };
@@ -20,6 +32,7 @@ export type AfterimageResultV2 = {
   sensibilities: string[];
   spiritDirector: { name: string; reason: string };
   recommendations: RecommendationV2[];
+  fingerprint?: FacetMap;
 };
 
 export type ReelStateV2 = {
@@ -30,6 +43,9 @@ export type ReelStateV2 = {
   activeJobId: string | null;
   metadataByKey: Record<string, FilmEnrichment>;
   excludedFilms: ExcludedFilm[];
+  experience?: typeof LIGHT_TABLE_EXPERIENCE;
+  selectedFacets?: SelectedFacets;
+  acceptedInput?: DevelopInput;
 };
 
 const MAX_FILMS = 20;
@@ -93,7 +109,7 @@ function parseTextArray(value: unknown, length: number): string[] | null {
   return parsed.every((item): item is string => item !== null) ? parsed : null;
 }
 
-function parseRecommendation(value: unknown): RecommendationV2 | null {
+function parseRecommendation(value: unknown, extended = false): RecommendationV2 | null {
   if (!isRecord(value)) return null;
 
   const title = requiredText(value.title);
@@ -103,10 +119,12 @@ function parseRecommendation(value: unknown): RecommendationV2 | null {
   const watchFor = value.watchFor === undefined ? '' : typeof value.watchFor === 'string' ? value.watchFor.trim() : null;
 
   if (!title || !year || !/^\d{4}$/.test(year) || !timecode || !reason || watchFor === null) return null;
-  return { title, year, timecode, reason, watchFor };
+  const facets = extended ? parseFacetMap(value.facets) : null;
+  if (extended && !facets) return null;
+  return { title, year, timecode, reason, watchFor, ...(facets ? { facets } : {}) };
 }
 
-export function parseAfterimageResultV2(value: unknown): AfterimageResultV2 | null {
+export function parseAfterimageResultV2(value: unknown, experience?: Experience): AfterimageResultV2 | null {
   if (!isRecord(value) || value.status !== 'complete') return null;
 
   const sourceFilms = normalizeFilms(value.sourceFilms);
@@ -124,7 +142,12 @@ export function parseAfterimageResultV2(value: unknown): AfterimageResultV2 | nu
   if (!directorName || !directorReason) return null;
 
   if (!Array.isArray(value.recommendations) || value.recommendations.length !== 5) return null;
-  const recommendations = value.recommendations.map(parseRecommendation);
+  const extended = experience === LIGHT_TABLE_EXPERIENCE && (
+    value.fingerprint !== undefined || value.recommendations.some(item => isRecord(item) && item.facets !== undefined)
+  );
+  const fingerprint = extended ? parseFacetMap(value.fingerprint) : null;
+  if (extended && !fingerprint) return null;
+  const recommendations = value.recommendations.map(item => parseRecommendation(item, extended));
   if (!recommendations.every((item): item is RecommendationV2 => item !== null)) return null;
 
   return {
@@ -136,6 +159,7 @@ export function parseAfterimageResultV2(value: unknown): AfterimageResultV2 | nu
     sensibilities,
     spiritDirector: { name: directorName, reason: directorReason },
     recommendations,
+    ...(fingerprint ? { fingerprint } : {}),
   };
 }
 
@@ -183,7 +207,8 @@ export function parseStoredState(raw: string | null): ReelStateV2 {
   try {
     const stored: unknown = JSON.parse(raw);
     if (!isRecord(stored)) return fallback;
-    const result = parseAfterimageResultV2(stored.result);
+    const experience = stored.experience === LIGHT_TABLE_EXPERIENCE ? LIGHT_TABLE_EXPERIENCE : undefined;
+    const result = parseAfterimageResultV2(stored.result, experience);
     const allowedKeys = new Set(result?.recommendations.map((recommendation) => movieKey(recommendation.title, recommendation.year)) || []);
     const metadataByKey: Record<string, FilmEnrichment> = {};
     if (isRecord(stored.metadataByKey)) {
@@ -205,8 +230,36 @@ export function parseStoredState(raw: string | null): ReelStateV2 {
         : null,
       metadataByKey,
       excludedFilms: normalizeExcludedFilms(stored.excludedFilms),
+      ...(experience ? {
+        experience,
+        selectedFacets: parseSelectedFacets(stored.selectedFacets),
+        ...(parseAcceptedInput(stored.acceptedInput) ? { acceptedInput: parseAcceptedInput(stored.acceptedInput)! } : {}),
+      } : {}),
     };
   } catch {
     return fallback;
   }
+}
+
+/** Recover the exact accepted intent so a blend retry never inherits old form inputs. */
+export function parseAcceptedInput(value: unknown): DevelopInput | null {
+  if (!isRecord(value) || value.experience !== LIGHT_TABLE_EXPERIENCE || !Array.isArray(value.films) || typeof value.creativeBrief !== 'string') return null;
+  const base = buildDevelopPayload(value.films, value.creativeBrief, normalizeExcludedFilms(value.excludedFilms));
+  if (base.films.length !== value.films.length || value.creativeBrief.length > 1200) return null;
+  const selectedFacets = parseSelectedFacets(value.selectedFacets);
+  if (value.selectedFacets !== undefined && (!isRecord(value.selectedFacets) || Object.keys(selectedFacets).length !== Object.keys(value.selectedFacets).length)) return null;
+  if (!canDevelop(base.films, base.creativeBrief) && !Object.keys(selectedFacets).length) return null;
+  return { ...base, experience: LIGHT_TABLE_EXPERIENCE, ...(Object.keys(selectedFacets).length ? {selectedFacets} : {}) };
+}
+
+export function withCurrentExclusions(input: DevelopInput, current: readonly ExcludedFilm[]): DevelopInput {
+  const all = [...current, ...(input.excludedFilms ?? [])];
+  const identities = new Set(all.map(film => `${film.title.trim().toLocaleLowerCase()}|${film.year.trim()}`));
+  if (input.experience === LIGHT_TABLE_EXPERIENCE && identities.size > 100) {
+    throw new Error('This request exceeds the 100-film exclusion limit. Your saved exclusions have been preserved.');
+  }
+  const excludedFilms = normalizeExcludedFilms(all);
+  const {excludedFilms: previous, ...rest} = input;
+  void previous;
+  return {...rest, ...(excludedFilms.length ? {excludedFilms} : {})};
 }

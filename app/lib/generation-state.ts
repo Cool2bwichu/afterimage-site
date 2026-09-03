@@ -1,6 +1,7 @@
 import {
   parseAfterimageResultV2,
   type AfterimageResultV2,
+  type Experience,
 } from './reel-state.ts';
 
 const JOB_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -68,7 +69,7 @@ export function parseJobStart(value: unknown): JobStart {
   return { jobId: value.jobId, status: 'queued' };
 }
 
-export function parseJobStatus(value: unknown): GenerationJob {
+export function parseJobStatus(value: unknown, experience?: Experience): GenerationJob {
   if (!isRecord(value) || !isGenerationJobId(value.jobId)) return invalidJobPayload();
 
   const jobId = value.jobId;
@@ -80,7 +81,7 @@ export function parseJobStatus(value: unknown): GenerationJob {
   }
 
   if (value.status === 'complete') {
-    const reel = parseAfterimageResultV2(value.reel);
+    const reel = parseAfterimageResultV2(value.reel, experience);
     if (!reel) return invalidJobPayload();
     return { jobId, status: 'complete', createdAt, updatedAt, reel };
   }
