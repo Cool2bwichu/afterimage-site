@@ -533,7 +533,15 @@ export default function Home() {
           or combine both. AFTERIMAGE reads the full signal and develops a reel around your actual
           sensibility, not just a genre.
         </p>
-        {lightTableEnabled ? <div className="ai-mode-note"><span>Light Table · Borrow qualities to develop your next reel.</span><a href="?experience=standard">Use standard reel</a></div> : null}
+        <div className="ai-mode-note">
+          {lightTableEnabled ? <>
+            <span>Light Table · Borrow qualities to develop your next reel.</span>
+            <a href="?experience=standard">Use standard reel</a>
+          </> : <>
+            <span>Light Table · Borrow qualities from recommendations and blend them into your next reel.</span>
+            <a href="?experience=light-table-v1">Enable Light Table</a>
+          </>}
+        </div>
 
         {connection !== 'connected' ? (
           <section className="connection-panel" aria-live="polite">

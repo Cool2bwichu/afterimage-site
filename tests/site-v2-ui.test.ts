@@ -53,6 +53,11 @@ test('the optional inputs use the approved copy and client boundaries', () => {
   assert.match(page, /films\.length >= 20/);
 });
 
+test('Light Table mode can be disabled and re-enabled from the same mode control', () => {
+  assert.match(page, /href="\?experience=standard">Use standard reel/);
+  assert.match(page, /href="\?experience=light-table-v1">Enable Light Table/);
+});
+
 test('the visible source reel cannot change while a generation is in flight', () => {
   const removeButton = page.match(/<button[^>]*onClick=\{\(\) => removeFilm\(index\)\}[^>]*>/)?.[0];
   assert.ok(removeButton);
