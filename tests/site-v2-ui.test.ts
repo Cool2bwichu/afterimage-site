@@ -40,7 +40,8 @@ test('the page starts, resumes, and explicitly acknowledges generation jobs', ()
   assert.match(page, /That reel job has expired\. Your inputs are still here—develop it again\./);
   assert.match(page, /Finding the reel in the darkroom —/);
   assert.match(page, /Threading the reel —/);
-  assert.match(page, />\s*Develop again\s*</);
+  assert.match(page, /'Develop selected blend' : 'Start a new reel'/);
+  assert.match(page, /: 'Develop again'/);
   assert.match(page, />Dismiss</);
 });
 

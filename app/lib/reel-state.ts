@@ -45,7 +45,9 @@ export type ReelStateV2 = {
   excludedFilms: ExcludedFilm[];
   experience?: typeof LIGHT_TABLE_EXPERIENCE;
   selectedFacets?: SelectedFacets;
+  selectedReelIdentity?: string;
   acceptedInput?: DevelopInput;
+  acceptedInputJobId?: string;
 };
 
 const MAX_FILMS = 20;
@@ -109,7 +111,7 @@ function parseTextArray(value: unknown, length: number): string[] | null {
   return parsed.every((item): item is string => item !== null) ? parsed : null;
 }
 
-function parseRecommendation(value: unknown, extended = false): RecommendationV2 | null {
+function parseRecommendation(value: unknown): RecommendationV2 | null {
   if (!isRecord(value)) return null;
 
   const title = requiredText(value.title);
@@ -119,9 +121,7 @@ function parseRecommendation(value: unknown, extended = false): RecommendationV2
   const watchFor = value.watchFor === undefined ? '' : typeof value.watchFor === 'string' ? value.watchFor.trim() : null;
 
   if (!title || !year || !/^\d{4}$/.test(year) || !timecode || !reason || watchFor === null) return null;
-  const facets = extended ? parseFacetMap(value.facets) : null;
-  if (extended && !facets) return null;
-  return { title, year, timecode, reason, watchFor, ...(facets ? { facets } : {}) };
+  return { title, year, timecode, reason, watchFor };
 }
 
 export function parseAfterimageResultV2(value: unknown, experience?: Experience): AfterimageResultV2 | null {
@@ -142,13 +142,16 @@ export function parseAfterimageResultV2(value: unknown, experience?: Experience)
   if (!directorName || !directorReason) return null;
 
   if (!Array.isArray(value.recommendations) || value.recommendations.length !== 5) return null;
-  const extended = experience === LIGHT_TABLE_EXPERIENCE && (
-    value.fingerprint !== undefined || value.recommendations.some(item => isRecord(item) && item.facets !== undefined)
-  );
-  const fingerprint = extended ? parseFacetMap(value.fingerprint) : null;
-  if (extended && !fingerprint) return null;
-  const recommendations = value.recommendations.map(item => parseRecommendation(item, extended));
+  const recommendations = value.recommendations.map(item => parseRecommendation(item));
   if (!recommendations.every((item): item is RecommendationV2 => item !== null)) return null;
+
+  const fingerprint = experience === LIGHT_TABLE_EXPERIENCE ? parseFacetMap(value.fingerprint) : null;
+  const recommendationFacets = experience === LIGHT_TABLE_EXPERIENCE
+    ? value.recommendations.map(item => parseFacetMap(isRecord(item) ? item.facets : undefined))
+    : [];
+  const hasCompleteExtension = Boolean(
+    fingerprint && recommendationFacets.every((facets): facets is FacetMap => facets !== null),
+  );
 
   return {
     status: 'complete',
@@ -158,8 +161,53 @@ export function parseAfterimageResultV2(value: unknown, experience?: Experience)
     palette,
     sensibilities,
     spiritDirector: { name: directorName, reason: directorReason },
-    recommendations,
-    ...(fingerprint ? { fingerprint } : {}),
+    recommendations: hasCompleteExtension
+      ? recommendations.map((recommendation, index) => ({ ...recommendation, facets: recommendationFacets[index]! }))
+      : recommendations,
+    ...(hasCompleteExtension ? { fingerprint: fingerprint! } : {}),
+  };
+}
+
+export function getRecommendationIdentity(result: Pick<AfterimageResultV2, 'recommendations'> | null | undefined): string {
+  return result?.recommendations
+    .map((recommendation) => movieKey(recommendation.title, recommendation.year))
+    .join('::') ?? '';
+}
+
+export function acceptedInputForResumedJob(
+  resumedJobId: string,
+  acceptedInputJobId: string | undefined,
+  acceptedInput: DevelopInput | undefined,
+): DevelopInput | undefined {
+  return acceptedInput && acceptedInputJobId === resumedJobId ? acceptedInput : undefined;
+}
+
+export type LightTableJobLifecycleState = {
+  activeJobId: string | null;
+  selectedFacets: SelectedFacets;
+  selectedReelIdentity: string;
+  acceptedInput?: DevelopInput;
+  acceptedInputJobId?: string;
+};
+
+export type LightTableJobLifecycleEvent =
+  | { type: 'conflict'; jobId: string }
+  | { type: 'failed' }
+  | { type: 'complete'; jobId: string };
+
+export function transitionLightTableJob(
+  state: LightTableJobLifecycleState,
+  event: LightTableJobLifecycleEvent,
+): LightTableJobLifecycleState {
+  if (event.type === 'failed') return state;
+  if (event.type === 'conflict') return { ...state, activeJobId: event.jobId };
+
+  const acceptedInput = acceptedInputForResumedJob(event.jobId, state.acceptedInputJobId, state.acceptedInput);
+  return {
+    activeJobId: null,
+    selectedFacets: {},
+    selectedReelIdentity: '',
+    ...(acceptedInput ? { acceptedInput, acceptedInputJobId: event.jobId } : {}),
   };
 }
 
@@ -209,6 +257,7 @@ export function parseStoredState(raw: string | null): ReelStateV2 {
     if (!isRecord(stored)) return fallback;
     const experience = stored.experience === LIGHT_TABLE_EXPERIENCE ? LIGHT_TABLE_EXPERIENCE : undefined;
     const result = parseAfterimageResultV2(stored.result, experience);
+    const resultIdentity = getRecommendationIdentity(result);
     const allowedKeys = new Set(result?.recommendations.map((recommendation) => movieKey(recommendation.title, recommendation.year)) || []);
     const metadataByKey: Record<string, FilmEnrichment> = {};
     if (isRecord(stored.metadataByKey)) {
@@ -219,21 +268,40 @@ export function parseStoredState(raw: string | null): ReelStateV2 {
         metadataByKey[key] = metadata;
       }
     }
+    const parsedSelections = parseSelectedFacets(stored.selectedFacets);
+    const storedSelectionIdentity = typeof stored.selectedReelIdentity === 'string' ? stored.selectedReelIdentity : '';
+    const selectionsBelongToResult = Boolean(
+      resultIdentity &&
+      (!storedSelectionIdentity || storedSelectionIdentity === resultIdentity) &&
+      Object.values(parsedSelections).every((facet) => allowedKeys.has(movieKey(facet.source.title, facet.source.year))),
+    );
+    const selectedFacets = selectionsBelongToResult ? parsedSelections : {};
+    const selectedReelIdentity = Object.keys(selectedFacets).length ? resultIdentity : '';
+    const activeJobId = typeof stored.activeJobId === 'string' && GENERATION_JOB_ID.test(stored.activeJobId)
+      ? stored.activeJobId
+      : null;
+    const acceptedInput = parseAcceptedInput(stored.acceptedInput) ?? undefined;
+    const storedAcceptedInputJobId = typeof stored.acceptedInputJobId === 'string' && GENERATION_JOB_ID.test(stored.acceptedInputJobId)
+      ? stored.acceptedInputJobId
+      : undefined;
+    const acceptedInputJobId = acceptedInput
+      ? storedAcceptedInputJobId ?? (!Object.hasOwn(stored, 'acceptedInputJobId') ? activeJobId ?? undefined : undefined)
+      : undefined;
 
     return {
       version: 4,
       films: normalizeFilms(stored.films),
       creativeBrief: normalizeBrief(stored.creativeBrief),
       result,
-      activeJobId: typeof stored.activeJobId === 'string' && GENERATION_JOB_ID.test(stored.activeJobId)
-        ? stored.activeJobId
-        : null,
+      activeJobId,
       metadataByKey,
       excludedFilms: normalizeExcludedFilms(stored.excludedFilms),
       ...(experience ? {
         experience,
-        selectedFacets: parseSelectedFacets(stored.selectedFacets),
-        ...(parseAcceptedInput(stored.acceptedInput) ? { acceptedInput: parseAcceptedInput(stored.acceptedInput)! } : {}),
+        selectedFacets,
+        ...(selectedReelIdentity ? { selectedReelIdentity } : {}),
+        ...(acceptedInput ? { acceptedInput } : {}),
+        ...(acceptedInputJobId ? { acceptedInputJobId } : {}),
       } : {}),
     };
   } catch {

@@ -51,25 +51,27 @@ export function LightTable({ selectedFacets, locked, canSubmit, onRemove, onClea
         <span>Light Table <strong>{count}/4 · {searchBreadth(selectedFacets)}</strong></span>
         <span aria-hidden="true">{expanded ? '−' : '+'}</span>
       </button>
-      <div className="ai-light-table__body" id="ai-light-table-body">
-        <div className="ai-light-table__lanes">
-          {FACET_KEYS.map(channel => {
-            const facet = selectedFacets[channel];
-            const meta = FACET_META[channel];
-            return <div key={channel} className={`ai-light-table__lane ${meta.className} ${facet ? 'is-filled' : ''}`} data-light-table-lane={channel}>
-              <div className="ai-light-table__lane-label"><i aria-hidden="true">{meta.icon}</i>{meta.label}</div>
-              {facet ? <div className="ai-light-table__selection">
-                <div><strong>{facet.label}</strong><small>{facet.source.title} · {facet.source.year}</small></div>
-                <button type="button" disabled={locked} aria-label={`Remove ${meta.label}: ${facet.label}`} onClick={() => { onRemove(channel); restoreTableFocus(); }}>×</button>
-              </div> : <span className="ai-light-table__open">Open to surprise</span>}
-            </div>;
-          })}
+      <div className="ai-light-table__content" id="ai-light-table-body">
+        <div className="ai-light-table__body">
+          <div className="ai-light-table__lanes">
+            {FACET_KEYS.map(channel => {
+              const facet = selectedFacets[channel];
+              const meta = FACET_META[channel];
+              return <div key={channel} className={`ai-light-table__lane ${meta.className} ${facet ? 'is-filled' : ''}`} data-light-table-lane={channel}>
+                <div className="ai-light-table__lane-label"><i aria-hidden="true">{meta.icon}</i>{meta.label}</div>
+                {facet ? <div className="ai-light-table__selection">
+                  <div><strong>{facet.label}</strong><small>{facet.source.title} · {facet.source.year}</small></div>
+                  <button type="button" disabled={locked} aria-label={`Remove ${meta.label}: ${facet.label}`} onClick={() => { onRemove(channel); restoreTableFocus(); }}>×</button>
+                </div> : <span className="ai-light-table__open">Open to surprise</span>}
+              </div>;
+            })}
+          </div>
         </div>
-      </div>
-      <div className="ai-light-table__actions">
-        <p>{count ? `${4-count} ${4-count === 1 ? 'channel remains' : 'channels remain'} open to surprise.` : 'Choose one quality per channel.'}</p>
-        <button type="button" className="ai-light-table__clear" disabled={!count || locked} onClick={() => { onClear(); restoreTableFocus(); }}>Clear table</button>
-        <button type="button" className="ai-light-table__develop" disabled={!count || locked || !canSubmit} onClick={onDevelop}>{locked ? 'Developing…' : 'Develop This Blend'} <span aria-hidden="true">↗</span></button>
+        <div className="ai-light-table__actions">
+          <p>{count ? `${4-count} ${4-count === 1 ? 'channel remains' : 'channels remain'} open to surprise.` : 'Choose one quality per channel.'}</p>
+          <button type="button" className="ai-light-table__clear" disabled={!count || locked} onClick={() => { onClear(); restoreTableFocus(); }}>Clear table</button>
+          <button type="button" className="ai-light-table__develop" disabled={!count || locked || !canSubmit} onClick={onDevelop}>{locked ? 'Developing…' : 'Develop This Blend'} <span aria-hidden="true">↗</span></button>
+        </div>
       </div>
     </aside>
   </>;

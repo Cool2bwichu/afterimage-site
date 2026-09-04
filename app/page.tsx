@@ -20,10 +20,13 @@ import {
 import {
   buildDevelopPayload,
   canDevelop,
+  acceptedInputForResumedJob,
   getInputStatus,
+  getRecommendationIdentity,
   normalizeExcludedFilms,
   parseStoredState,
   parseAfterimageResultV2,
+  transitionLightTableJob,
   withCurrentExclusions,
 } from './lib/reel-state';
 
@@ -57,7 +60,9 @@ export default function Home() {
   const [films, setFilms] = useState<string[]>([]);
   const [experience, setExperience] = useState<Experience>();
   const [selectedFacets, setSelectedFacets] = useState<SelectedFacets>({});
+  const [selectedReelIdentity, setSelectedReelIdentity] = useState('');
   const [acceptedInput, setAcceptedInput] = useState<DevelopInput>();
+  const [acceptedInputJobId, setAcceptedInputJobId] = useState('');
   const lastAttemptRef = useRef<DevelopInput | undefined>(undefined);
   const lightTableEnabled = experience === LIGHT_TABLE_EXPERIENCE;
   const [draft, setDraft] = useState('');
@@ -85,6 +90,9 @@ export default function Home() {
   const startLockRef = useRef(false);
   const developing = starting || jobStatus === 'queued' || jobStatus === 'running' || jobStatus === 'reconnecting';
   const reelLocked = developing || Boolean(activeJobId);
+  const acceptedRetryInput = lightTableEnabled && activeJobId
+    ? acceptedInputForResumedJob(activeJobId, acceptedInputJobId || undefined, acceptedInput)
+    : undefined;
 
   const refreshConnection = useCallback(async (silent = false) => {
     if (!silent) setConnection('checking');
@@ -111,7 +119,9 @@ export default function Home() {
         const mode = requested === null ? saved.experience : requested === LIGHT_TABLE_EXPERIENCE ? LIGHT_TABLE_EXPERIENCE : undefined;
         setExperience(mode);
         setSelectedFacets(mode ? saved.selectedFacets ?? {} : {});
+        setSelectedReelIdentity(mode ? saved.selectedReelIdentity ?? '' : '');
         setAcceptedInput(mode ? saved.acceptedInput : undefined);
+        setAcceptedInputJobId(mode ? saved.acceptedInputJobId ?? '' : '');
         setFilms(saved.films);
         setCreativeBrief(saved.creativeBrief);
         setResult(parseAfterimageResultV2(saved.result, mode));
@@ -138,12 +148,12 @@ export default function Home() {
       activeJobId,
       metadataByKey,
       excludedFilms,
-      ...(lightTableEnabled ? { experience, selectedFacets, acceptedInput } : {}),
+      ...(lightTableEnabled ? { experience, selectedFacets, selectedReelIdentity, acceptedInput, acceptedInputJobId } : {}),
     })); } catch {
       const timer = window.setTimeout(() => setNotice('This browser could not save the reel. Keep this page open to retain your selections.'), 0);
       return () => window.clearTimeout(timer);
     }
-  }, [films, creativeBrief, result, activeJobId, metadataByKey, excludedFilms, hydrated, experience, lightTableEnabled, selectedFacets, acceptedInput]);
+  }, [films, creativeBrief, result, activeJobId, metadataByKey, excludedFilms, hydrated, experience, lightTableEnabled, selectedFacets, selectedReelIdentity, acceptedInput, acceptedInputJobId]);
 
   useEffect(() => {
     const connectionCheck = window.setTimeout(() => void refreshConnection(), 0);
@@ -179,9 +189,7 @@ export default function Home() {
               throw statusError(500);
             }
             try {
-              const job = parseJobStatus(payload, experience);
-              if (job.status === 'complete' && acceptedInput?.experience === LIGHT_TABLE_EXPERIENCE && !job.reel.fingerprint) throw new Error('The Light Table result is incomplete.');
-              return job;
+              return parseJobStatus(payload, experience);
             } catch {
               throw statusError(500);
             }
@@ -197,6 +205,22 @@ export default function Home() {
 
         if (controller.signal.aborted) return;
         if (terminal.status === 'complete') {
+          if (lightTableEnabled) {
+            const completed = transitionLightTableJob({
+              activeJobId,
+              selectedFacets,
+              selectedReelIdentity,
+              acceptedInput,
+              acceptedInputJobId: acceptedInputJobId || undefined,
+            }, { type: 'complete', jobId: terminal.jobId });
+            setSelectedFacets(completed.selectedFacets);
+            setSelectedReelIdentity(completed.selectedReelIdentity);
+            setAcceptedInput(completed.acceptedInput);
+            setAcceptedInputJobId(completed.acceptedInputJobId ?? '');
+          } else {
+            setSelectedFacets({});
+            setSelectedReelIdentity('');
+          }
           setResult(terminal.reel);
           setActiveJobId(null);
           setJobStatus(null);
@@ -232,7 +256,7 @@ export default function Home() {
     })();
 
     return () => controller.abort();
-  }, [activeJobId, connection, hydrated, pollRevision, experience, acceptedInput]);
+  }, [activeJobId, connection, hydrated, pollRevision, experience, lightTableEnabled, selectedFacets, selectedReelIdentity, acceptedInput, acceptedInputJobId]);
 
   useEffect(() => {
     if (!developing) return;
@@ -249,7 +273,7 @@ export default function Home() {
   }, [developing]);
 
   const recommendationIdentity = useMemo(
-    () => result?.recommendations.map((recommendation) => movieKey(recommendation.title, recommendation.year)).join('::') || '',
+    () => getRecommendationIdentity(result),
     [result],
   );
 
@@ -292,6 +316,11 @@ export default function Home() {
     [films, creativeBrief],
   );
 
+  function clearFacetSelections() {
+    setSelectedFacets({});
+    setSelectedReelIdentity('');
+  }
+
   function addFilm(event?: FormEvent) {
     event?.preventDefault();
     const film = draft.trim();
@@ -311,6 +340,7 @@ export default function Home() {
 
   function removeFilm(index: number) {
     setFilms((current) => current.filter((_, itemIndex) => itemIndex !== index));
+    clearFacetSelections();
     setResult(null);
     setMetadataByKey({});
     setSelectedRecommendation(null);
@@ -383,8 +413,18 @@ export default function Home() {
         payload.code === 'ACTIVE_GENERATION' &&
         isGenerationJobId(payload.jobId)
       ) {
-        setActiveJobId(payload.jobId);
-        setAcceptedInput(undefined);
+        const resumed = transitionLightTableJob({
+          activeJobId,
+          selectedFacets,
+          selectedReelIdentity,
+          acceptedInput,
+          acceptedInputJobId: acceptedInputJobId || undefined,
+        }, { type: 'conflict', jobId: payload.jobId });
+        setActiveJobId(resumed.activeJobId);
+        setSelectedFacets(resumed.selectedFacets);
+        setSelectedReelIdentity(resumed.selectedReelIdentity);
+        setAcceptedInput(resumed.acceptedInput);
+        setAcceptedInputJobId(resumed.acceptedInputJobId ?? '');
         setJobStatus('queued');
         setNotice('Resuming the reel already in the gate.');
         return;
@@ -396,8 +436,9 @@ export default function Home() {
       }
 
       const started = parseJobStart(payload);
-      setSelectedFacets({});
+      clearFacetSelections();
       setAcceptedInput(input.experience === LIGHT_TABLE_EXPERIENCE ? input : undefined);
+      setAcceptedInputJobId(input.experience === LIGHT_TABLE_EXPERIENCE ? started.jobId : '');
       setResult(null);
       setMetadataByKey({});
       setSelectedRecommendation(null);
@@ -413,10 +454,13 @@ export default function Home() {
 
   async function developAgain() {
     if (jobStatus !== 'failed') return;
+    const nextInput = lightTableEnabled && !acceptedRetryInput && selectionCount(selectedFacets)
+      ? buildBlendPayload({selectedFacets,excludedFilms})
+      : lightTableEnabled ? acceptedRetryInput : lastAttemptRef.current;
     setActiveJobId(null);
     setJobStatus(null);
     setError('');
-    await developReel(true, [], acceptedInput);
+    await developReel(true, [], nextInput);
   }
 
   function dismissFailedJob() {
@@ -439,9 +483,11 @@ export default function Home() {
   }
 
   function handleSelectFacet(channel: FacetKey, facet: CinematicFacet, source: FacetSource, trigger: HTMLButtonElement) {
-    if (reelLocked) return;
+    if (reelLocked || !recommendationIdentity) return;
     const wasSelected = isSameSelectedFacet(channel, selectedFacets[channel], {...facet,source});
-    setSelectedFacets(current => selectFacet(current, channel, facet, source));
+    const next = selectFacet(selectedFacets, channel, facet, source);
+    setSelectedFacets(next);
+    setSelectedReelIdentity(selectionCount(next) ? recommendationIdentity : '');
     if (!wasSelected) requestAnimationFrame(() => animateFacetToLane(trigger, channel));
   }
 
@@ -570,6 +616,7 @@ export default function Home() {
               value={creativeBrief}
               onChange={(event) => {
                 setCreativeBrief(event.target.value);
+                clearFacetSelections();
                 setResult(null);
                 setMetadataByKey({});
                 setSelectedRecommendation(null);
@@ -602,7 +649,9 @@ export default function Home() {
                   onClick={() => void developAgain()}
                   disabled={connection !== 'connected'}
                 >
-                  Develop again
+                  {lightTableEnabled && !acceptedRetryInput
+                    ? selectionCount(selectedFacets) ? 'Develop selected blend' : 'Start a new reel'
+                    : 'Develop again'}
                 </button>
                 <button className="is-secondary" type="button" onClick={dismissFailedJob}>Dismiss</button>
               </div>
@@ -719,8 +768,12 @@ export default function Home() {
         <footer>AFTERIMAGE · reasoned live, frame by frame</footer>
         {lightTableEnabled && (result?.fingerprint || selectionCount(selectedFacets) > 0) ? <LightTable
           selectedFacets={selectedFacets} locked={reelLocked} canSubmit={connection === 'connected'}
-          onRemove={channel => setSelectedFacets(current => removeFacet(current,channel))}
-          onClear={() => setSelectedFacets({})} onDevelop={developBlend} /> : null}
+          onRemove={channel => {
+            const next = removeFacet(selectedFacets,channel);
+            setSelectedFacets(next);
+            if (!selectionCount(next)) setSelectedReelIdentity('');
+          }}
+          onClear={clearFacetSelections} onDevelop={developBlend} /> : null}
       </div>
     </main>
   );

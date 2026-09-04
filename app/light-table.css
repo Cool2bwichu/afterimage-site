@@ -72,6 +72,7 @@
 .ai-light-table__mobile-toggle { display:none; }
 .ai-light-table { display:flex; flex-direction:column; overflow:hidden; }
 .ai-light-table__header,.ai-light-table__mobile-toggle,.ai-light-table__actions { flex-shrink:0; }
+.ai-light-table__content { display:flex; flex-direction:column; min-height:0; }
 .ai-light-table__body { min-height:0; overflow-y:auto; overscroll-behavior:contain; }
 .ai-facet-flight { display:grid; place-items:center; position:fixed; z-index:100; pointer-events:none; padding:12px; border:1px solid #e8b34a; background:#1b1e2b; color:#f2efe9; font-size:14px; text-align:center; }
 
@@ -93,8 +94,8 @@
   .ai-light-table__mobile-toggle { display:flex; align-items:center; justify-content:space-between; width:100%; padding:12px 16px; min-height:60px; text-align:left; border:0; color:var(--gold); background:transparent; font:500 13px/1.5 var(--font-mono),monospace; }
   .ai-light-table__mobile-toggle strong { display:block; color:var(--white); font-size:14px; font-weight:500; }
   .ai-light-table__mobile-toggle > span:last-child { font-size:24px; }
-  .ai-light-table__body { display:none; }
-  .ai-light-table.is-expanded .ai-light-table__body { display:block; }
+  .ai-light-table__content { display:none; }
+  .ai-light-table.is-expanded .ai-light-table__content { display:flex; }
   .ai-light-table__lanes { grid-template-columns:repeat(2,minmax(0,1fr)); border-top:1px solid var(--line); }
   .ai-light-table__lane { border-bottom:1px solid var(--line); }
   .ai-light-table__lane:nth-child(2n) { border-right:0; }
