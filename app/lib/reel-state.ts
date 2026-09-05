@@ -19,6 +19,7 @@ export type RecommendationV2 = {
   reason: string;
   watchFor: string;
   facets?: FacetMap;
+  programNotes?: { carriesThrough: string; takesYouFurther: string };
 };
 
 export type ExcludedFilm = { title: string; year: string };
@@ -48,6 +49,8 @@ export type ReelStateV2 = {
   selectedReelIdentity?: string;
   acceptedInput?: DevelopInput;
   acceptedInputJobId?: string;
+  displayedInput?: DevelopInput;
+  displayedReelIdentity?: string;
 };
 
 const MAX_FILMS = 20;
@@ -121,7 +124,12 @@ function parseRecommendation(value: unknown): RecommendationV2 | null {
   const watchFor = value.watchFor === undefined ? '' : typeof value.watchFor === 'string' ? value.watchFor.trim() : null;
 
   if (!title || !year || !/^\d{4}$/.test(year) || !timecode || !reason || watchFor === null) return null;
-  return { title, year, timecode, reason, watchFor };
+  const rawNotes = isRecord(value.programNotes) ? value.programNotes : null;
+  const carriesThrough = rawNotes ? requiredText(rawNotes.carriesThrough) : null;
+  const takesYouFurther = rawNotes ? requiredText(rawNotes.takesYouFurther) : null;
+  const programNotes = carriesThrough && takesYouFurther && carriesThrough.length <= 240 && takesYouFurther.length <= 240
+    ? { carriesThrough, takesYouFurther } : undefined;
+  return { title, year, timecode, reason, watchFor, ...(programNotes ? { programNotes } : {}) };
 }
 
 export function parseAfterimageResultV2(value: unknown, experience?: Experience): AfterimageResultV2 | null {
@@ -281,6 +289,9 @@ export function parseStoredState(raw: string | null): ReelStateV2 {
       ? stored.activeJobId
       : null;
     const acceptedInput = parseAcceptedInput(stored.acceptedInput) ?? undefined;
+    const displayedInput = resultIdentity && stored.displayedReelIdentity === resultIdentity
+      ? parseAcceptedInput(stored.displayedInput) ?? undefined
+      : resultIdentity && !activeJobId && !Object.hasOwn(stored, 'displayedReelIdentity') ? acceptedInput : undefined;
     const storedAcceptedInputJobId = typeof stored.acceptedInputJobId === 'string' && GENERATION_JOB_ID.test(stored.acceptedInputJobId)
       ? stored.acceptedInputJobId
       : undefined;
@@ -301,6 +312,7 @@ export function parseStoredState(raw: string | null): ReelStateV2 {
         selectedFacets,
         ...(selectedReelIdentity ? { selectedReelIdentity } : {}),
         ...(acceptedInput ? { acceptedInput } : {}),
+        ...(displayedInput ? { displayedInput, displayedReelIdentity: resultIdentity } : {}),
         ...(acceptedInputJobId ? { acceptedInputJobId } : {}),
       } : {}),
     };

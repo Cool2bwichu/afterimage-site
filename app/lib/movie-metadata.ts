@@ -14,6 +14,7 @@ export type FilmEnrichment =
       imdbId: string | null;
       tmdbRating: number | null;
       posterUrl: string | null;
+      backdropUrl?: string | null;
       overview: string;
       runtime: number | null;
       releaseDate: string | null;
@@ -49,13 +50,13 @@ function boundedStrings(value: unknown, maxItems: number, maxLength = 120): stri
   return values.every((item): item is string => item !== null) ? values : null;
 }
 
-function safePosterUrl(value: unknown): string | null {
+function safePosterUrl(value: unknown, backdrop = false): string | null {
   if (value === null) return null;
   if (typeof value !== 'string' || value.length > 500) return null;
   try {
     const url = new URL(value);
     if (url.protocol !== 'https:' || url.origin !== 'https://image.tmdb.org') return null;
-    if (!url.pathname.startsWith('/t/p/w500/')) return null;
+    if (!url.pathname.startsWith(backdrop ? '/t/p/w1280/' : '/t/p/w500/')) return null;
     return url.toString();
   } catch {
     return null;
@@ -146,6 +147,8 @@ export function parseFilmEnrichment(value: unknown): FilmEnrichment | null {
   if (value.tmdbRating !== undefined && value.tmdbRating !== null && tmdbRating === null) return null;
   const posterUrl = safePosterUrl(value.posterUrl);
   if (value.posterUrl !== null && posterUrl === null) return null;
+  const backdropUrl = value.backdropUrl === undefined ? undefined : safePosterUrl(value.backdropUrl, true);
+  if (value.backdropUrl !== undefined && value.backdropUrl !== null && backdropUrl === null) return null;
   const overview = boundedText(value.overview, 2000, true);
   const runtime = value.runtime === null ? null : Number.isInteger(value.runtime) && Number(value.runtime) > 0 && Number(value.runtime) < 1000 ? Number(value.runtime) : null;
   const releaseDate = value.releaseDate === null ? null : boundedText(value.releaseDate, 10);
@@ -164,6 +167,7 @@ export function parseFilmEnrichment(value: unknown): FilmEnrichment | null {
     imdbId,
     tmdbRating,
     posterUrl,
+    ...(backdropUrl !== undefined ? { backdropUrl } : {}),
     overview,
     runtime,
     releaseDate,

@@ -1,21 +1,16 @@
 import type { Metadata, Viewport } from 'next';
-import { Bebas_Neue, JetBrains_Mono, Space_Grotesk } from 'next/font/google';
+import { Cormorant_Garamond, DM_Sans } from 'next/font/google';
 import './globals.css';
 import './light-table.css';
 
-const display = Bebas_Neue({
+const display = Cormorant_Garamond({
   variable: '--font-display',
   subsets: ['latin'],
-  weight: '400',
+  weight: ['400', '500'],
 });
 
-const sans = Space_Grotesk({
+const sans = DM_Sans({
   variable: '--font-sans',
-  subsets: ['latin'],
-});
-
-const mono = JetBrains_Mono({
-  variable: '--font-mono',
   subsets: ['latin'],
 });
 
@@ -53,7 +48,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: '#0B0D14',
+  themeColor: '#0b100e',
   colorScheme: 'dark',
   viewportFit: 'cover',
 };
@@ -61,7 +56,7 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">
-      <body className={`${display.variable} ${sans.variable} ${mono.variable}`}>{children}</body>
+      <body className={`${display.variable} ${sans.variable}`}>{children}</body>
     </html>
   );
 }

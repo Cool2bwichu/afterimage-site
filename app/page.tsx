@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { FormEvent, type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FilmDossier } from './components/film-dossier';
 import { RecommendationCard } from './components/recommendation-card';
 import { SearchFingerprint } from './components/search-fingerprint';
@@ -31,13 +31,6 @@ import {
 } from './lib/reel-state';
 
 const STORAGE_KEY = 'afterimage:mobile-state';
-const LEADER_MESSAGES = [
-  'Reading the visual grammar',
-  'Listening for rhythm',
-  'Tracing the emotional register',
-  'Spooling the double features',
-];
-
 type ConnectionState = 'checking' | 'connected' | 'disconnected' | 'unreachable';
 type AuthFlow = { verificationUrl: string; userCode: string } | null;
 type JobStatus = 'queued' | 'running' | 'reconnecting' | 'failed' | null;
@@ -61,6 +54,7 @@ export default function Home() {
   const [experience, setExperience] = useState<Experience>();
   const [selectedFacets, setSelectedFacets] = useState<SelectedFacets>({});
   const [selectedReelIdentity, setSelectedReelIdentity] = useState('');
+  const [displayedInput, setDisplayedInput] = useState<DevelopInput>();
   const [acceptedInput, setAcceptedInput] = useState<DevelopInput>();
   const [acceptedInputJobId, setAcceptedInputJobId] = useState('');
   const lastAttemptRef = useRef<DevelopInput | undefined>(undefined);
@@ -77,15 +71,15 @@ export default function Home() {
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
   const [connection, setConnection] = useState<ConnectionState>('checking');
-  const [planType, setPlanType] = useState('');
   const [authFlow, setAuthFlow] = useState<AuthFlow>(null);
   const [connecting, setConnecting] = useState(false);
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [jobStatus, setJobStatus] = useState<JobStatus>(null);
   const [starting, setStarting] = useState(false);
   const [pollRevision, setPollRevision] = useState(0);
-  const [leaderNumber, setLeaderNumber] = useState(8);
-  const [leaderStep, setLeaderStep] = useState(0);
+  const [composerOpen, setComposerOpen] = useState(false);
+  const [jobStartedAt, setJobStartedAt] = useState<number | null>(null);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const resultsRef = useRef<HTMLElement>(null);
   const startLockRef = useRef(false);
   const developing = starting || jobStatus === 'queued' || jobStatus === 'running' || jobStatus === 'reconnecting';
@@ -101,7 +95,6 @@ export default function Home() {
       const payload = await response.json();
       if (response.ok && isRecord(payload) && payload.authenticated) {
         setConnection('connected');
-        setPlanType(typeof payload.planType === 'string' ? payload.planType : '');
         setAuthFlow(null);
       } else {
         setConnection(response.status === 503 || response.status === 502 ? 'unreachable' : 'disconnected');
@@ -121,6 +114,7 @@ export default function Home() {
         setSelectedFacets(mode ? saved.selectedFacets ?? {} : {});
         setSelectedReelIdentity(mode ? saved.selectedReelIdentity ?? '' : '');
         setAcceptedInput(mode ? saved.acceptedInput : undefined);
+        setDisplayedInput(mode ? saved.displayedInput : undefined);
         setAcceptedInputJobId(mode ? saved.acceptedInputJobId ?? '' : '');
         setFilms(saved.films);
         setCreativeBrief(saved.creativeBrief);
@@ -148,12 +142,12 @@ export default function Home() {
       activeJobId,
       metadataByKey,
       excludedFilms,
-      ...(lightTableEnabled ? { experience, selectedFacets, selectedReelIdentity, acceptedInput, acceptedInputJobId } : {}),
+      ...(lightTableEnabled ? { experience, selectedFacets, selectedReelIdentity, acceptedInput, acceptedInputJobId, displayedInput: displayedInput ?? null, displayedReelIdentity: getRecommendationIdentity(result) } : {}),
     })); } catch {
       const timer = window.setTimeout(() => setNotice('This browser could not save the reel. Keep this page open to retain your selections.'), 0);
       return () => window.clearTimeout(timer);
     }
-  }, [films, creativeBrief, result, activeJobId, metadataByKey, excludedFilms, hydrated, experience, lightTableEnabled, selectedFacets, selectedReelIdentity, acceptedInput, acceptedInputJobId]);
+  }, [films, creativeBrief, result, activeJobId, metadataByKey, excludedFilms, hydrated, experience, lightTableEnabled, selectedFacets, selectedReelIdentity, acceptedInput, acceptedInputJobId, displayedInput]);
 
   useEffect(() => {
     const connectionCheck = window.setTimeout(() => void refreshConnection(), 0);
@@ -196,7 +190,10 @@ export default function Home() {
           },
           onStatus: (job) => {
             if (controller.signal.aborted) return;
-            if (job.status === 'queued' || job.status === 'running') setJobStatus(job.status);
+            if (job.status === 'queued' || job.status === 'running') {
+              setJobStatus(job.status);
+              setJobStartedAt(Date.parse(job.createdAt));
+            }
           },
           onTransientError: () => {
             if (!controller.signal.aborted) setJobStatus('reconnecting');
@@ -221,7 +218,9 @@ export default function Home() {
             setSelectedFacets({});
             setSelectedReelIdentity('');
           }
+          setDisplayedInput(lightTableEnabled ? acceptedInputForResumedJob(activeJobId, acceptedInputJobId || undefined, acceptedInput) : undefined);
           setResult(terminal.reel);
+          setComposerOpen(false);
           setActiveJobId(null);
           setJobStatus(null);
           setError('');
@@ -259,18 +258,11 @@ export default function Home() {
   }, [activeJobId, connection, hydrated, pollRevision, experience, lightTableEnabled, selectedFacets, selectedReelIdentity, acceptedInput, acceptedInputJobId]);
 
   useEffect(() => {
-    if (!developing) return;
-    const countTimer = window.setInterval(() => {
-      setLeaderNumber((current) => current <= 1 ? 8 : current - 1);
-    }, 420);
-    const copyTimer = window.setInterval(() => {
-      setLeaderStep((current) => (current + 1) % LEADER_MESSAGES.length);
-    }, 2200);
-    return () => {
-      window.clearInterval(countTimer);
-      window.clearInterval(copyTimer);
-    };
-  }, [developing]);
+    if (!developing || jobStartedAt === null) return;
+    const update = () => setElapsedSeconds(Math.max(0, Math.floor((Date.now() - jobStartedAt) / 1000)));
+    const timer = window.setInterval(update, 1000);
+    return () => window.clearInterval(timer);
+  }, [developing, jobStartedAt]);
 
   const recommendationIdentity = useMemo(
     () => getRecommendationIdentity(result),
@@ -283,6 +275,7 @@ export default function Home() {
     const complete = recommendations.every((recommendation) => {
       const metadata = metadataByKey[movieKey(recommendation.title, recommendation.year)];
       if (metadata?.status === 'matched' && metadata.tmdbRating === null) return false;
+      if (metadata?.status === 'matched' && metadata.backdropUrl === undefined) return false;
       return metadata?.status === 'matched' || metadata?.status === 'unmatched';
     });
     if (complete) return;
@@ -388,8 +381,8 @@ export default function Home() {
 
     startLockRef.current = true;
     lastAttemptRef.current = input;
-    setLeaderNumber(8);
-    setLeaderStep(0);
+    setJobStartedAt(null);
+    setElapsedSeconds(0);
     setStarting(true);
     setError('');
     setNotice('');
@@ -439,8 +432,7 @@ export default function Home() {
       clearFacetSelections();
       setAcceptedInput(input.experience === LIGHT_TABLE_EXPERIENCE ? input : undefined);
       setAcceptedInputJobId(input.experience === LIGHT_TABLE_EXPERIENCE ? started.jobId : '');
-      setResult(null);
-      setMetadataByKey({});
+      // Retain the last complete reel while its replacement develops.
       setSelectedRecommendation(null);
       setActiveJobId(started.jobId);
       setJobStatus('queued');
@@ -499,62 +491,60 @@ export default function Home() {
   function recommendDifferentFilms() {
     if (!result) return;
     const temporary = result.recommendations.map(({title,year}) => ({title,year}));
-    if (lightTableEnabled && acceptedInput) {
+    if (lightTableEnabled && displayedInput) {
       const all = [...excludedFilms, ...temporary];
       if (new Set(all.map(film => `${film.title.trim().toLocaleLowerCase()}|${film.year.trim()}`)).size > 100) {
         setError('This reroll exceeds the 100-film exclusion limit. Your saved exclusions have been preserved.');
         return;
       }
-      void developReel(false, [], {...acceptedInput, excludedFilms:normalizeExcludedFilms(all)});
+      void developReel(false, [], {...displayedInput, excludedFilms:normalizeExcludedFilms(all)});
     } else void developReel(false, temporary);
   }
 
   const leaderMessage = starting
-    ? 'Threading the reel —'
+    ? 'Starting your reel'
     : jobStatus === 'reconnecting'
-      ? 'Finding the reel in the darkroom —'
-      : `${LEADER_MESSAGES[leaderStep]} —`;
+      ? 'Reconnecting to your reel'
+      : jobStatus === 'queued' ? 'Your reel is queued' : 'Your reel is developing';
 
   return (
-    <main className={`site-shell${lightTableEnabled ? ' has-light-table' : ''}`}>
-      <div className="film-grain" aria-hidden="true" />
+    <main data-ready={hydrated} className={`site-shell${lightTableEnabled ? ' has-light-table' : ''}${result ? ' has-reel' : ''}`}
+      style={{ '--reel-color': result?.palette[2] || '#254438' } as CSSProperties}>
       <div className="wrap">
         <header className="masthead">
-          <div className="eyebrow"><span aria-hidden="true" />Now Screening</div>
-          <div className={`privacy-mark ${connection === 'connected' ? 'is-connected' : ''}`}>
-            <i aria-hidden="true" />
-            {connection === 'connected' ? `ChatGPT ${planType || 'connected'}` : 'Private print'}
+          <h1 className="title">AFTERIMAGE<span className="brand-print" aria-hidden="true"><i /><i /><i /><i /></span></h1>
+          <div className="masthead-actions">
+            <span className={`privacy-mark ${connection === 'connected' ? 'is-connected' : ''}`}>
+              <i aria-hidden="true" />{connection === 'connected' ? 'Connected' : connection === 'checking' ? 'Connecting…' : 'Not connected'}
+            </span>
+            <div className="ai-mode-note">
+              {lightTableEnabled ? <a href="?experience=standard">Use standard reel</a> : <a href="?experience=light-table-v1">Enable Light Table</a>}
+            </div>
           </div>
         </header>
 
-        <h1 className="title">AFTERIMAGE</h1>
-        <p className="subtitle">
-          What lingers after the credits roll. Add films you love, describe what you are searching for,
-          or combine both. AFTERIMAGE reads the full signal and develops a reel around your actual
-          sensibility, not just a genre.
-        </p>
-        <div className="ai-mode-note">
-          {lightTableEnabled ? <>
-            <span>Light Table · Borrow qualities to develop your next reel.</span>
-            <a href="?experience=standard">Use standard reel</a>
-          </> : <>
-            <span>Light Table · Borrow qualities from recommendations and blend them into your next reel.</span>
-            <a href="?experience=light-table-v1">Enable Light Table</a>
-          </>}
-        </div>
+        {!hydrated ? <p className="opening" role="status">Opening your reel…</p> : null}
+        {!result ? <div className="arrival">
+          <h2>Find what stays with you.</h2>
+          <p className="subtitle">Add films you love, describe what you are searching for,
+            or combine both.</p>
+        </div> : <section className="request-summary" aria-label="Current reel references">
+          <div><span className="panel-label">Your starting point</span><p>{result.sourceFilms.length ? result.sourceFilms.join(' · ') : 'A blend of selected qualities'}</p></div>
+          <button type="button" onClick={() => setComposerOpen(!composerOpen)} disabled={reelLocked}>{composerOpen ? 'Close inputs' : 'Refine request'} <span aria-hidden="true">{composerOpen ? '−' : '+'}</span></button>
+        </section>}
 
-        {connection !== 'connected' ? (
+        {connection !== 'connected' && connection !== 'checking' ? (
           <section className="connection-panel" aria-live="polite">
             <div>
               <div className="connection-kicker">Private Intelligence</div>
-              <h2>{connection === 'checking' ? 'Checking your print…' : 'Connect your ChatGPT account'}</h2>
+              <h2>Connect your ChatGPT account</h2>
               <p>
                 {connection === 'unreachable'
-                  ? 'The private reel service is not online yet. Your films and saved reel remain on this device.'
-                  : 'One private sign-in lets AFTERIMAGE use your plan’s Codex intelligence without an API key.'}
+                  ? 'The reel service is unavailable. Your films and saved reel remain on this device.'
+                  : 'Connect to develop recommendations. Your existing reel stays available while you reconnect.'}
               </p>
             </div>
-            {connection !== 'checking' && !authFlow ? (
+            {!authFlow ? (
               <button type="button" onClick={startConnection} disabled={connecting}>
                 {connecting ? 'Starting…' : 'Connect ChatGPT'}
               </button>
@@ -570,7 +560,7 @@ export default function Home() {
           </section>
         ) : null}
 
-        <section className="panel reel-panel" aria-labelledby="reel-label">
+        <section className="panel reel-panel" aria-labelledby="reel-label" hidden={Boolean(result) && !composerOpen}>
           <div className="panel-label" id="reel-label">Reference Reel · Optional</div>
           <form className="chip-input-row" onSubmit={addFilm}>
             <label className="sr-only" htmlFor="film-input">Film title</label>
@@ -646,6 +636,10 @@ export default function Home() {
           </button>
         </section>
 
+        {lightTableEnabled && result && !result.fingerprint ? <div className="notice mode-upgrade" role="status">
+          <span>Light Table is on. Develop a new reel to reveal qualities you can borrow.</span>
+          <button type="button" onClick={() => setComposerOpen(true)} disabled={reelLocked}>Open inputs</button>
+        </div> : null}
         {notice ? <div className="notice" role="status">{notice}</div> : null}
         {error ? (
           <div className="error-banner" role="alert">
@@ -680,31 +674,18 @@ export default function Home() {
 
         {developing ? (
           <section className="leader" role="status" aria-live="polite">
-            <div className="leader-circle"><span>{leaderNumber}</span></div>
-            <p>{leaderMessage}</p>
+            <span className="status-orbit" aria-hidden="true" />
+            <div><p>{leaderMessage}</p><span>{result ? 'Your previous reel is still here. You can browse it while you wait.' : 'You can refresh this page; your accepted reel will resume.'}</span></div>
+            {jobStartedAt !== null ? <time aria-live="off" className="elapsed">{Math.floor(elapsedSeconds / 60)}:{String(elapsedSeconds % 60).padStart(2, '0')} elapsed</time> : null}
           </section>
         ) : null}
 
-        {!developing && result ? (
+        {result ? (
           <section className="results" aria-live="polite" ref={resultsRef}>
-            <article className="panel persona-panel">
-              <div className="palette" aria-label="Your cinematic palette">
-                {result.palette.map((color) => <span key={color} style={{ background: color }} />)}
-              </div>
-              <h2 className="persona">{result.persona}</h2>
-              <p className="insight">{result.insight}</p>
-              <div className="sensibilities">
-                {result.sensibilities.map((item) => <span key={item}>{item}</span>)}
-              </div>
-              <div className="director">
-                <span className="director-label">Spirit Director</span>
-                <p><strong>{result.spiritDirector.name}</strong> — {result.spiritDirector.reason}</p>
-              </div>
-            </article>
+            <div className={developing ? "reel-heading" : "sr-only"}><h2>{developing ? 'Your previous reel' : 'Your reel'}</h2><span>Five films, considered together.</span></div>
 
-            {lightTableEnabled && result.fingerprint ? <SearchFingerprint fingerprint={result.fingerprint} insight="Four channels describe this search. Borrow qualities from the films below to shape what comes next." /> : null}
+            {lightTableEnabled && result.fingerprint ? <SearchFingerprint fingerprint={result.fingerprint} insight={result.insight} /> : null}
 
-            <div className="panel-label rec-label">Double Feature Recommendations</div>
             <div className="recommendation-grid">
               {result.recommendations.map((recommendation, index) => (
                 <RecommendationCard
@@ -724,17 +705,31 @@ export default function Home() {
               ))}
             </div>
 
+            <details className="persona-panel"><summary><span>About this reel</span><strong>{result.persona}</strong><span aria-hidden="true">+</span></summary><div className="persona-details">
+              <div className="palette" aria-label="Your cinematic palette">
+                {result.palette.map((color) => <span key={color} style={{ background: color }} />)}
+              </div>
+              <p className="insight">{result.insight}</p>
+              <div className="sensibilities">
+                {result.sensibilities.map((item) => <span key={item}>{item}</span>)}
+              </div>
+              <div className="director">
+                <span className="director-label">Spirit Director</span>
+                <p><strong>{result.spiritDirector.name}</strong> — {result.spiritDirector.reason}</p>
+              </div>
+            </div></details>
+
             <div className="reroll-panel">
               <button
                 type="button"
                 onClick={recommendDifferentFilms}
-                disabled={reelLocked || connection !== 'connected' || (lightTableEnabled && Boolean(result.fingerprint) && !acceptedInput)}
+                disabled={reelLocked || connection !== 'connected' || (lightTableEnabled && Boolean(result.fingerprint) && !displayedInput)}
               >
                 Recommend Different Films
               </button>
-              <p>{lightTableEnabled && result.fingerprint && !acceptedInput
+              <p>{lightTableEnabled && result.fingerprint && !displayedInput
                 ? 'This reel resumed from another session. Borrow qualities or start a new search to continue.'
-                : lightTableEnabled && acceptedInput?.selectedFacets ? 'Keep this blend and replace all five recommendations.' : 'Keep this prompt and replace all five recommendations.'}</p>
+                : lightTableEnabled && displayedInput?.selectedFacets ? 'Keep this blend and replace all five recommendations.' : 'Keep this prompt and replace all five recommendations.'}</p>
             </div>
 
             <FilmDossier
@@ -745,6 +740,9 @@ export default function Home() {
               metadata={selectedRecommendation === null ? undefined : metadataByKey[
                 movieKey(result.recommendations[selectedRecommendation].title, result.recommendations[selectedRecommendation].year)
               ]}
+              selectedFacets={selectedFacets}
+              onSelectFacet={lightTableEnabled ? handleSelectFacet : undefined}
+              facetDisabled={reelLocked}
               opener={dossierOpener}
               notInterested={selectedRecommendation === null ? false : excludedFilms.some((film) =>
                 film.title.toLocaleLowerCase() === result.recommendations[selectedRecommendation].title.toLocaleLowerCase() &&

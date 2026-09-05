@@ -26,9 +26,9 @@ function namedValues(value: unknown, maxItems: number): string[] {
     .slice(0, maxItems);
 }
 
-function posterUrl(path: unknown): string | null {
+function posterUrl(path: unknown, size = 'w500'): string | null {
   if (typeof path !== 'string' || !/^\/[A-Za-z0-9._-]+\.(?:jpg|jpeg|png|webp)$/i.test(path)) return null;
-  return `https://image.tmdb.org/t/p/w500${path}`;
+  return `https://image.tmdb.org/t/p/${size}${path}`;
 }
 
 function identity(input: EnrichmentInput, status: 'unmatched' | 'unavailable'): FilmEnrichment {
@@ -111,6 +111,7 @@ export function createTmdbClient({
         imdbId,
         tmdbRating,
         posterUrl: posterUrl(details.poster_path),
+        backdropUrl: posterUrl(details.backdrop_path, 'w1280'),
         overview: stringValue(details.overview, 2000),
         runtime,
         releaseDate,

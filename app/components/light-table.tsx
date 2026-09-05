@@ -30,9 +30,13 @@ export function LightTable({ selectedFacets, locked, canSubmit, onRemove, onClea
   useEffect(() => {
     const table = tableRef.current;
     if (!table) return;
-    const observer = new ResizeObserver(() => setHeight(table.getBoundingClientRect().height));
+    const observer = new ResizeObserver(() => {
+      const measured = table.getBoundingClientRect().height;
+      setHeight(measured);
+      document.documentElement.style.setProperty('--light-table-height', `${measured}px`);
+    });
     observer.observe(table);
-    return () => observer.disconnect();
+    return () => { observer.disconnect(); document.documentElement.style.removeProperty('--light-table-height'); };
   }, []);
 
   function restoreTableFocus() {
@@ -46,12 +50,13 @@ export function LightTable({ selectedFacets, locked, canSubmit, onRemove, onClea
       <header className="ai-light-table__header">
         <div><span className="ai-kicker">Remix the reel</span><h2 ref={titleRef} tabIndex={-1}>The Light Table</h2></div>
         <BlendSummary selectedFacets={selectedFacets} />
+        <button type="button" className="ai-light-table__desktop-toggle" aria-expanded={expanded} aria-controls="ai-light-table-body" onClick={() => setExpansionOverride(!expanded)}>{expanded ? 'Collapse −' : 'Expand +'}</button>
       </header>
       <button ref={toggleRef} className="ai-light-table__mobile-toggle" type="button" aria-expanded={expanded} aria-controls="ai-light-table-body" onClick={() => setExpansionOverride(!expanded)}>
         <span>Light Table <strong>{count}/4 · {searchBreadth(selectedFacets)}</strong></span>
         <span aria-hidden="true">{expanded ? '−' : '+'}</span>
       </button>
-      <div className="ai-light-table__content" id="ai-light-table-body">
+      <div className="ai-light-table__content" id="ai-light-table-body" hidden={!expanded}>
         <div className="ai-light-table__body">
           <div className="ai-light-table__lanes">
             {FACET_KEYS.map(channel => {

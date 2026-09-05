@@ -38,8 +38,8 @@ test('the page starts, resumes, and explicitly acknowledges generation jobs', ()
   assert.match(page, /fetch\(`\/api\/generations\/\$\{encodeURIComponent\(activeJobId\)\}`/);
   assert.match(page, /Resuming the reel already in the gate\./);
   assert.match(page, /That reel job has expired\. Your inputs are still here—develop it again\./);
-  assert.match(page, /Finding the reel in the darkroom —/);
-  assert.match(page, /Threading the reel —/);
+  assert.match(page, /Reconnecting to your reel/);
+  assert.match(page, /Starting your reel/);
   assert.match(page, /'Develop selected blend' : 'Start a new reel'/);
   assert.match(page, /: 'Develop again'/);
   assert.match(page, />Dismiss</);
@@ -71,7 +71,7 @@ test('recommendation cards expose collective program notes and no one-film pairi
   assert.doesNotMatch(page + card + dossier, /pairsWith|pairs-with/i);
   assert.match(css, /\.watch-for\s*\{/);
   assert.doesNotMatch(css, /\.pairs-with\s*\{/);
-  assert.match(card, /TOTAL SYNTHESIS/);
+  assert.match(card, /CLOSEST TO YOUR REQUEST/);
 });
 
 test('posters and dossiers use only the private enrichment route and verified IMDb IDs', () => {
