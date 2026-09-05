@@ -81,9 +81,12 @@ export default function Home() {
   const [jobStartedAt, setJobStartedAt] = useState<number | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const resultsRef = useRef<HTMLElement>(null);
+  const filmInputRef = useRef<HTMLInputElement>(null);
   const startLockRef = useRef(false);
   const developing = starting || jobStatus === 'queued' || jobStatus === 'running' || jobStatus === 'reconnecting';
   const reelLocked = developing || Boolean(activeJobId);
+  const resetLocked = starting || Boolean(activeJobId && jobStatus !== 'failed');
+  const hasSession = Boolean(result || films.length || draft || creativeBrief || activeJobId || excludedFilms.length || selectionCount(selectedFacets));
   const acceptedRetryInput = lightTableEnabled && activeJobId
     ? acceptedInputForResumedJob(activeJobId, acceptedInputJobId || undefined, acceptedInput)
     : undefined;
@@ -501,6 +504,35 @@ export default function Home() {
     } else void developReel(false, temporary);
   }
 
+  function startOver() {
+    if (resetLocked || startLockRef.current) return;
+    setFilms([]);
+    setDraft('');
+    setCreativeBrief('');
+    setResult(null);
+    setMetadataByKey({});
+    setEnrichmentPending(false);
+    setSelectedRecommendation(null);
+    setDossierOpener(null);
+    setExcludedFilms([]);
+    clearFacetSelections();
+    setDisplayedInput(undefined);
+    setAcceptedInput(undefined);
+    setAcceptedInputJobId('');
+    lastAttemptRef.current = undefined;
+    setActiveJobId(null);
+    setJobStatus(null);
+    setJobStartedAt(null);
+    setElapsedSeconds(0);
+    setError('');
+    setNotice('Fresh start. Add films you love or describe what you are looking for.');
+    setComposerOpen(true);
+    requestAnimationFrame(() => {
+      filmInputRef.current?.focus({ preventScroll: true });
+      window.scrollTo({ top: 0, behavior: 'instant' });
+    });
+  }
+
   const leaderMessage = starting
     ? 'Starting your reel'
     : jobStatus === 'reconnecting'
@@ -520,6 +552,10 @@ export default function Home() {
             <div className="ai-mode-note">
               {lightTableEnabled ? <a href="?experience=standard">Use standard reel</a> : <a href="?experience=light-table-v1">Enable Light Table</a>}
             </div>
+            {hydrated && hasSession ? <button className="start-over" type="button" onClick={startOver} disabled={resetLocked}
+              title={resetLocked ? 'Available when this reel finishes developing' : 'Clear this reel, its inputs, and selected qualities'}>
+              Start over <span aria-hidden="true">↺</span>
+            </button> : null}
           </div>
         </header>
 
@@ -566,6 +602,7 @@ export default function Home() {
             <label className="sr-only" htmlFor="film-input">Film title</label>
             <input
               id="film-input"
+              ref={filmInputRef}
               value={draft}
               onChange={(event) => setDraft(event.target.value)}
               placeholder="e.g. In the Mood for Love"
