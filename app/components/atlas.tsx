@@ -86,7 +86,7 @@ export function AtlasWorkspace(props: Props) {
   const neighbor = atlas ? atlas.neighbors[selected < 0 ? 0 : selected] : null;
   const allMetadata = { ...metadataByKey, ...metadata };
   const getMetadata = (film: FacetSource) => allMetadata[movieKey(film.title, film.year)];
-  const requestLabel = requestCaption(stop?.inputKey || '');
+  const historyFilms = JSON.stringify(saved.maps.map(map => ({ title: map.atlas.anchor.title, year: map.atlas.anchor.year })).sort((a, b) => movieKey(a.title, a.year).localeCompare(movieKey(b.title, b.year))));
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -189,6 +189,19 @@ export function AtlasWorkspace(props: Props) {
     return () => controller.abort();
   }, [atlas]);
 
+  useEffect(() => {
+    const anchors: FacetSource[] = JSON.parse(historyFilms);
+    if (!anchors.length) return;
+    const controller = new AbortController();
+    void Promise.all(Array.from({ length: Math.ceil(anchors.length / 5) }, async (_, index) => {
+      const response = await fetch('/api/films/enrich', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ films: anchors.slice(index * 5, index * 5 + 5) }), signal: controller.signal });
+      if (!response.ok) return;
+      const records = parseEnrichmentResponse(await response.json());
+      if (!controller.signal.aborted) setMetadata(current => ({ ...current, ...Object.fromEntries(records.map(item => [item.key, item])) }));
+    })).catch(() => {});
+    return () => controller.abort();
+  }, [historyFilms]);
+
   const isOpen = Boolean(target);
   useEffect(() => {
     if (!isOpen) return;
@@ -242,9 +255,10 @@ export function AtlasWorkspace(props: Props) {
 
   return <dialog ref={dialog} className={`atlas-dialog${expanded ? ' atlas-map-expanded' : ''}`} aria-labelledby="atlas-title" onCancel={event => { event.preventDefault(); onClose(); }}>
     <div className="atlas-shell">
-      <aside className="atlas-filmrail" aria-label="Films in this Atlas"><span className="atlas-rail-motto">A more<br />human<br />algorithm</span>
-        {atlas ? [atlas.anchor, ...atlas.neighbors].map((film, i) => <button key={movieKey(film.title, film.year)} aria-label={`Select ${film.title}`} aria-pressed={selected === i - 1} onClick={() => select(i - 1)}><Artwork film={film} metadata={getMetadata(film)} /></button>) : null}
-        <p>Films connect.<br />Something<br />stays with you.</p>
+      <aside className="atlas-filmrail" aria-label="Your explored Atlases">
+        <span className="atlas-rail-motto">Your<br />Atlases</span>
+        <nav aria-label="Revisit an Atlas">{[...saved.maps].reverse().map(map => <button key={map.id} aria-label={`Return to ${map.atlas.anchor.title} Atlas (${map.atlas.anchor.year})`} aria-current={map.id === stop?.id ? 'page' : undefined} title={requestCaption(map.inputKey)} onClick={() => revisit(map.id)}><span className="atlas-history-image"><Artwork film={map.atlas.anchor} metadata={getMetadata(map.atlas.anchor)} /></span><strong>{map.atlas.anchor.title}</strong><small>{map.atlas.anchor.year}{map.id === stop?.id ? ' · Here' : ''}</small></button>)}</nav>
+        <p>{saved.maps.length ? 'Pick up a thread.' : 'Your explored maps will live here.'}</p>
       </aside>
       <header className="atlas-masthead"><button className="atlas-brand" aria-label="Afterimage home" onClick={onClose}>AFTERIMAGE<small>Better films find you</small></button>
         <nav aria-label="Atlas navigation"><button className="is-active" aria-current="page" onClick={() => { setExpanded(false); dialog.current?.scrollTo({ top: 0, behavior: 'instant' }); }}>Atlas</button><button ref={back} onClick={onClose}>Your reel <span aria-hidden="true">↗</span></button></nav><em>Different stories.<br />The same human longing.</em>
@@ -306,7 +320,7 @@ export function AtlasWorkspace(props: Props) {
         </section>
 
         {atlas && neighbor ? <aside className="atlas-insights" aria-label="Connection insights">
-          <section className="atlas-why" aria-live="polite"><span className="atlas-section-title">{selected < 0 ? 'The thread through this Atlas' : `Why ${active?.title} belongs`} <i>↗</i></span><p>{selected < 0 ? atlas.thesis : neighbor.whyHere}</p><small>Drawn from this request: {requestLabel}</small></section>
+          <section className="atlas-why"><h2 className="atlas-why-title" aria-live="polite">{selected < 0 ? 'The thread through this Atlas' : `Why ${active?.title} belongs`}</h2><p aria-live="polite">{selected < 0 ? atlas.thesis : neighbor.whyHere}</p>{selected >= 0 ? <button className="atlas-explore-film" disabled={busy || !connected} onClick={event => { if (active) onExplore(active, event.currentTarget); }}>Explore this film’s Atlas <span aria-hidden="true">↗</span></button> : <p className="atlas-why-hint">Select a connected film to explore its own Atlas.</p>}</section>
           <section className="atlas-comparison atlas-relationship" aria-labelledby="atlas-comparison-title">
             <h2 id="atlas-comparison-title" className="atlas-section-title">How they connect</h2>
             {selected >= 0 ? <>
@@ -327,15 +341,17 @@ export function AtlasWorkspace(props: Props) {
               <details key={movieKey(neighbor.title, neighbor.year)}><summary>Where they differ <span>+</span></summary><p>{neighbor.difference}</p></details>
             </> : <p className="atlas-comparison-empty">Choose a film on the map to see what it shares with <em>{atlas.anchor.title}</em> — and where it differs.</p>}
           </section>
-          <section className="atlas-neighbors"><span className="atlas-section-title">Closest connections <span>01 — 03</span></span>{atlas.neighbors.slice(0, 3).map((film, i) => <button key={film.title} aria-pressed={selected === i} onClick={() => select(i)}><Artwork film={film} metadata={getMetadata(film)} /><span><strong>{film.title} <small>{film.year}</small></strong><em>{film.label}</em></span><i>↗</i></button>)}</section>
-          <div className="atlas-small-panels"><section><span className="atlas-section-title">Further echoes</span>{atlas.neighbors.slice(3).map((film, i) => <button key={film.title} onClick={() => select(i + 3)}><Artwork film={film} metadata={getMetadata(film)} /><span>{film.title}<small>{film.label}</small></span></button>)}</section><section><span className="atlas-section-title">Follow this film</span><p>{selected < 0 ? "Choose a neighboring film to follow its connections." : "A new constellation, with your request still in view."}</p>{selected >= 0 ? <button className="atlas-new-map" disabled={busy || !connected} onClick={event => { if (active) onExplore(active, event.currentTarget); }}>Explore from<br /><strong>{active?.title}</strong> ↗</button> : null}</section></div>
+          <details className="atlas-other-connections"><summary>More connections <span aria-hidden="true">+</span></summary><div className="atlas-neighbors">{atlas.neighbors.map((film, i) => <button key={movieKey(film.title, film.year)} aria-pressed={selected === i} onClick={() => select(i)}><Artwork film={film} metadata={getMetadata(film)} /><span><strong>{film.title} <small>{film.year}</small></strong><em>{film.label}</em></span></button>)}</div></details>
         </aside> : null}
       </div>
 
-      {atlas ? <section className="atlas-programme" aria-label="Your next watch from this connection"><span className="atlas-eyebrow">Your next watch from this connection</span><div>{atlas.neighbors.map((film, i) => <button key={film.title} aria-pressed={selected === i} onClick={() => select(i)}><div className="atlas-programme-image"><Artwork film={film} metadata={getMetadata(film)} /><span aria-hidden="true">↗</span></div><strong>{film.title}</strong><small>{film.year}</small><p>{film.label}</p></button>)}<p className="atlas-programme-motto">New films.<br />Familiar feelings.<br />A wider you.</p></div></section> : null}
-      {active && onBorrow ? <section className="atlas-borrow"><div><span className="atlas-eyebrow">Carry something with you</span><h2>Borrow a quality from <em>{active.title}</em></h2></div><div className="atlas-borrow-grid">{FACET_KEYS.map(channel => <FacetTab key={channel} channel={channel} facet={active.facets[channel]} source={active} selected={selectedFacets[channel]} disabled={busy} onSelect={onBorrow} />)}</div></section> : null}
+      {atlas ? <section className="atlas-workbench" aria-labelledby="atlas-workbench-title">
+        <header className="atlas-workbench-heading"><div><span className="atlas-eyebrow">Make your next reel</span><h2 id="atlas-workbench-title">The Light Table</h2></div><p>{onBorrow ? 'Choose a film. Reveal its fingerprint. Borrow the qualities you want to carry into your next reel.' : 'Choose a film to explore its fingerprint.'}</p></header>
+        <div className="atlas-programme" aria-label="Choose a film to reveal its fingerprint"><div>{[atlas.anchor, ...atlas.neighbors].map((film, i) => <button key={movieKey(film.title, film.year)} aria-label={`Show ${film.title} fingerprint`} aria-pressed={selected === i - 1} aria-controls="atlas-film-fingerprint" onClick={() => select(i - 1)}><div className="atlas-programme-image"><Artwork film={film} metadata={getMetadata(film)} /><span aria-hidden="true">{selected === i - 1 ? '−' : '+'}</span></div><strong>{film.title}</strong><small>{film.year}</small><p>{selected === i - 1 ? 'Fingerprint open' : 'Reveal fingerprint'}</p></button>)}</div></div>
+        {active ? <section className="atlas-borrow" id="atlas-film-fingerprint" aria-labelledby="atlas-fingerprint-title"><div><span className="atlas-eyebrow">{onBorrow ? 'Borrow a quality' : 'Cinematic fingerprint'}</span><h3 id="atlas-fingerprint-title" aria-live="polite">{active.title} <small>{active.year}</small></h3></div><div className="atlas-borrow-grid">{FACET_KEYS.map(channel => onBorrow ? <FacetTab key={channel} channel={channel} facet={active.facets[channel]} source={active} selected={selectedFacets[channel]} disabled={busy} onSelect={onBorrow} /> : <div key={channel} className="atlas-fingerprint-reading"><small>{FACET_META[channel].label}</small><strong>{active.facets[channel].label}</strong><p>{active.facets[channel].explanation}</p></div>)}</div></section> : null}
+        {lightTable}
+      </section> : null}
       <footer className="atlas-footer"><span>AFTERIMAGE</span><span>Films connect us to a larger you</span><small>Film identities & imagery: TMDB · Connections: AFTERIMAGE editorial interpretation</small></footer>
-      {lightTable}
     </div>
   </dialog>;
 }

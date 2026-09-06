@@ -11,7 +11,7 @@ export function BlendSummary({ selectedFacets }: { selectedFacets: SelectedFacet
   </div>;
 }
 
-export function LightTable({ selectedFacets, locked, canSubmit, onRemove, onClear, onDevelop, embedded = false }: {
+export function LightTable({ selectedFacets, locked, canSubmit, onRemove, onClear, onDevelop, embedded = false, workspace = false }: {
   selectedFacets: SelectedFacets;
   locked: boolean;
   canSubmit: boolean;
@@ -19,16 +19,18 @@ export function LightTable({ selectedFacets, locked, canSubmit, onRemove, onClea
   onClear: () => void;
   onDevelop: () => void;
   embedded?: boolean;
+  workspace?: boolean;
 }) {
   const count = selectionCount(selectedFacets);
   const [expansionOverride, setExpansionOverride] = useState<boolean | null>(null);
-  const expanded = expansionOverride ?? (!embedded && count > 0);
+  const expanded = workspace || (expansionOverride ?? (!embedded && count > 0));
   const [height, setHeight] = useState(80);
   const tableRef = useRef<HTMLElement>(null);
   const toggleRef = useRef<HTMLButtonElement>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
 
   useEffect(() => {
+    if (workspace) return;
     const table = tableRef.current;
     if (!table) return;
     const observer = new ResizeObserver(() => {
@@ -38,18 +40,18 @@ export function LightTable({ selectedFacets, locked, canSubmit, onRemove, onClea
     });
     observer.observe(table);
     return () => { observer.disconnect(); document.documentElement.style.removeProperty('--light-table-height'); };
-  }, []);
+  }, [workspace]);
 
   function restoreTableFocus() {
-    const target = window.matchMedia('(max-width: 760px)').matches ? toggleRef.current : titleRef.current;
+    const target = !workspace && window.matchMedia('(max-width: 760px)').matches ? toggleRef.current : titleRef.current;
     target?.focus({ preventScroll: true });
   }
 
   return <>
     {!embedded ? <div aria-hidden="true" style={{ height: height + 28 }} /> : null}
-    <aside ref={tableRef} className={`ai-light-table ${count ? 'has-selections' : 'is-empty'} ${expanded ? 'is-expanded' : ''}`} aria-label="The Light Table">
+    <aside ref={tableRef} className={`ai-light-table ${workspace ? 'is-workspace' : ''} ${count ? 'has-selections' : 'is-empty'} ${expanded ? 'is-expanded' : ''}`} aria-label="The Light Table">
       <header className="ai-light-table__header">
-        <div><span className="ai-kicker">Remix the reel</span><h2 ref={titleRef} tabIndex={-1}>The Light Table</h2></div>
+        <div><span className="ai-kicker">Remix the reel</span><h2 ref={titleRef} tabIndex={-1}>{workspace ? 'Your blend' : 'The Light Table'}</h2></div>
         <BlendSummary selectedFacets={selectedFacets} />
         {!expanded && count > 0 ? <div className="ai-selected-summary">{FACET_KEYS.filter(channel => selectedFacets[channel]).map(channel => <span key={channel} className={FACET_META[channel].className}><i aria-hidden="true" />{selectedFacets[channel]!.label}<small>{selectedFacets[channel]!.source.title}</small></span>)}</div> : null}
         <button type="button" className="ai-light-table__desktop-toggle" aria-expanded={expanded} aria-controls="ai-light-table-body" onClick={() => setExpansionOverride(!expanded)}>{expanded ? 'Collapse −' : 'Expand +'}</button>

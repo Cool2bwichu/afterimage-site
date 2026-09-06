@@ -615,7 +615,7 @@ export default function Home() {
       : jobStatus === 'queued' ? 'Your reel is queued' : 'Your reel is developing';
 
   const lightTable = lightTableEnabled && (result?.fingerprint || selectionCount(selectedFacets) > 0) ? <LightTable
-    embedded={selectedRecommendation !== null || Boolean(atlasTarget)}
+    embedded={selectedRecommendation !== null || Boolean(atlasTarget)} workspace={Boolean(atlasTarget)}
     selectedFacets={selectedFacets} locked={reelLocked} canSubmit={connection === 'connected'}
     onRemove={channel => {
       const next = removeFacet(selectedFacets,channel);
