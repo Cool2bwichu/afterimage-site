@@ -8,12 +8,14 @@ import { parseEnrichmentResponse, movieKey, imdbUrl, type FilmEnrichment } from 
 import { parseJobStart } from '../lib/generation-state';
 import { LikeButton } from './like-button';
 import { FacetTab } from './facet-tab';
+import { AtlasFilmSearch } from './atlas-film-search';
 
 type Props = {
   target: AtlasInput | null; opener: HTMLElement | null; connected: boolean; preferSaved: boolean;
   onClose: () => void; onBusy: (busy: boolean) => void;
   metadataByKey: Record<string, FilmEnrichment>; likedKeys: Set<string>;
-  onLike: (film: FacetSource) => void; onExplore: (film: FacetSource, opener: HTMLElement) => void;
+  onLike: (film: FacetSource) => void; onExplore: (film: FacetSource, opener: HTMLElement, request: AtlasInput['request']) => void;
+  onSearchExplore: (film: FacetSource, opener: HTMLElement) => void;
   selectedFacets: SelectedFacets; onBorrow?: (channel: FacetKey, facet: CinematicFacet, source: FacetSource, trigger: HTMLButtonElement) => void;
   lightTable: ReactNode;
 };
@@ -263,6 +265,7 @@ export function AtlasWorkspace(props: Props) {
       <header className="atlas-masthead"><button className="atlas-brand" aria-label="Afterimage home" onClick={onClose}>AFTERIMAGE<small>Better films find you</small></button>
         <nav aria-label="Atlas navigation"><button className="is-active" aria-current="page" onClick={() => { setExpanded(false); dialog.current?.scrollTo({ top: 0, behavior: 'instant' }); }}>Atlas</button><button ref={back} onClick={onClose}>Your reel <span aria-hidden="true">↗</span></button></nav><em>Different stories.<br />The same human longing.</em>
       </header>
+      <AtlasFilmSearch busy={busy} connected={connected} onDevelop={props.onSearchExplore} />
       {saved.maps.length > 1 ? <nav className="atlas-trail" aria-label="Atlas exploration trail" ref={trailNavigation}>
         <span className="atlas-trail-label">Your trail</span>
         <button className="atlas-trail-arrow" disabled={saved.cursor <= 0} onClick={() => travel(saved.cursor - 1)} aria-label="Previous map in your trail">←</button>
@@ -320,7 +323,7 @@ export function AtlasWorkspace(props: Props) {
         </section>
 
         {atlas && neighbor ? <aside className="atlas-insights" aria-label="Connection insights">
-          <section className="atlas-why"><h2 className="atlas-why-title" aria-live="polite">{selected < 0 ? 'The thread through this Atlas' : `Why ${active?.title} belongs`}</h2><p aria-live="polite">{selected < 0 ? atlas.thesis : neighbor.whyHere}</p>{selected >= 0 ? <button className="atlas-explore-film" disabled={busy || !connected} onClick={event => { if (active) onExplore(active, event.currentTarget); }}>Explore this film’s Atlas <span aria-hidden="true">↗</span></button> : <p className="atlas-why-hint">Select a connected film to explore its own Atlas.</p>}</section>
+          <section className="atlas-why"><h2 className="atlas-why-title" aria-live="polite">{selected < 0 ? 'The thread through this Atlas' : `Why ${active?.title} belongs`}</h2><p aria-live="polite">{selected < 0 ? atlas.thesis : neighbor.whyHere}</p>{selected >= 0 ? <button className="atlas-explore-film" disabled={busy || !connected} onClick={event => { if (active && stop) onExplore(active, event.currentTarget, JSON.parse(stop.inputKey)[1]); }}>Explore this film’s Atlas <span aria-hidden="true">↗</span></button> : <p className="atlas-why-hint">Select a connected film to explore its own Atlas.</p>}</section>
           <section className="atlas-comparison atlas-relationship" aria-labelledby="atlas-comparison-title">
             <h2 id="atlas-comparison-title" className="atlas-section-title">How they connect</h2>
             {selected >= 0 ? <>

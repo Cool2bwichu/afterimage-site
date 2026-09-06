@@ -624,9 +624,12 @@ export default function Home() {
     }}
     onClear={clearFacetSelections} onDevelop={developBlend} /> : null;
 
-  function openAtlas(film: FacetSource, opener: HTMLElement, resume = false) {
+  function openAtlas(film: FacetSource, opener: HTMLElement, resume = false, fromSearch = false, mapRequest?: DevelopInput) {
     if (!result) return;
-    const request: DevelopInput = {
+    const request: DevelopInput = fromSearch ? {
+      films: [`${film.title} (${film.year})`], creativeBrief: '',
+      ...(lightTableEnabled ? { experience: LIGHT_TABLE_EXPERIENCE } : {}),
+    } : mapRequest ? { ...mapRequest } : {
       ...(displayedInput || { films: result.sourceFilms, creativeBrief }),
       ...(lightTableEnabled ? { experience: LIGHT_TABLE_EXPERIENCE } : {}),
       ...(selectionCount(selectedFacets) ? { experience: LIGHT_TABLE_EXPERIENCE, selectedFacets } : {}),
@@ -957,7 +960,7 @@ export default function Home() {
         {selectedRecommendation === null && !atlasTarget ? lightTable : null}
         <AtlasWorkspace key={atlasResetRevision} target={atlasTarget} opener={atlasOpener} onClose={closeAtlas} onBusy={setAtlasBusy} preferSaved={atlasResume}
           connected={connection === 'connected'} metadataByKey={metadataByKey} likedKeys={likedKeys} onLike={toggleLike}
-          onExplore={openAtlas} selectedFacets={selectedFacets} onBorrow={lightTableEnabled ? handleSelectFacet : undefined} lightTable={atlasTarget ? lightTable : null} />
+          onExplore={(film, opener, request) => openAtlas(film, opener, false, false, request)} onSearchExplore={(film, opener) => openAtlas(film, opener, false, true)} selectedFacets={selectedFacets} onBorrow={lightTableEnabled ? handleSelectFacet : undefined} lightTable={atlasTarget ? lightTable : null} />
         </div>
       </div>
     </main>

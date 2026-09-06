@@ -1,5 +1,6 @@
 import type { EnrichmentInput, FilmEnrichment } from './movie-metadata.ts';
 import { imdbUrl, selectExactMovie } from './movie-metadata.ts';
+import { parseFilmSearchResults } from './film-search.ts';
 
 type FetchLike = typeof fetch;
 
@@ -129,5 +130,15 @@ export function createTmdbClient({
     return Promise.all(inputs.map(enrichOne));
   }
 
-  return { enrichOne, enrichMany };
+  async function searchFilms(query: string) {
+    const url = new URL(`${baseUrl}/search/movie`);
+    url.search = new URLSearchParams({ query, include_adult: 'false', language: 'en-US', page: '1' }).toString();
+    const raw = await requestJson(url);
+    if (!isRecord(raw) || !Array.isArray(raw.results)) throw new Error('Incomplete film search.');
+    return parseFilmSearchResults(raw.results.filter(item => isRecord(item) && item.adult !== true).map(item => ({
+      id: item.id, title: item.title, year: typeof item.release_date === 'string' ? item.release_date.slice(0, 4) : '', posterUrl: posterUrl(item.poster_path),
+    })));
+  }
+
+  return { enrichOne, enrichMany, searchFilms };
 }
