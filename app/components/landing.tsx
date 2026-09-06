@@ -8,6 +8,12 @@ const FILMS = {
   columbus: { title: 'Columbus', year: '2017', director: 'Kogonada', image: 'https://image.tmdb.org/t/p/w1280/xN88RKXxjPAcQsdBz6XavZ00PFh.jpg' },
   mood: { title: 'In the Mood for Love', year: '2000', director: 'Wong Kar-wai', image: 'https://image.tmdb.org/t/p/w1280/ffQFnAUm2Uu4RU0nijpjPRf9TBT.jpg' },
 };
+export type WelcomeFilm = keyof typeof FILMS;
+export function nextWelcomeFilm(previous: string | null): WelcomeFilm {
+  const sequence: WelcomeFilm[] = ['yang', 'columbus', 'mood'];
+  const index = sequence.findIndex(key => key === previous);
+  return sequence[index < 0 ? 1 : (index + 1) % sequence.length];
+}
 const CHAPTERS = [
   { name: 'Your reel', title: 'Five films. A thread between them.', copy: 'Name a film you love, describe a feeling, or combine both. Get five recommendations with a reason for each one.' },
   { name: 'The Light Table', title: 'Keep the feeling. Change the film.', copy: 'Borrow the mood of one film, the visual language of another. Combine the qualities you want to carry into your next reel.' },
@@ -22,7 +28,8 @@ function Still({ film, eager = false }: { film: typeof FILMS.yang; eager?: boole
   const [failed, setFailed] = useState(false);
   return failed ? <div className="welcome-image-fallback">{film.title}</div> : <img src={film.image} alt={`${film.title} film still`} loading={eager ? 'eager' : 'lazy'} fetchPriority={eager ? 'high' : 'auto'} decoding="async" onError={() => setFailed(true)} />;
 }
-export function Landing({ onStart, hasDraft, hasReel = false }: { onStart: (prompt?: string) => void; hasDraft: boolean; hasReel?: boolean }) {
+export function Landing({ onStart, hasDraft, hasReel = false, featuredFilm }: { featuredFilm: WelcomeFilm; onStart: (prompt?: string) => void; hasDraft: boolean; hasReel?: boolean }) {
+  const featured = FILMS[featuredFilm];
   const [chapter, setChapter] = useState(0);
   const [qualities, setQualities] = useState([true, true]);
   const [connection, setConnection] = useState<'columbus' | 'mood'>('columbus');
@@ -34,7 +41,7 @@ export function Landing({ onStart, hasDraft, hasReel = false }: { onStart: (prom
   }
   return <div className="welcome">
     <section className="welcome-hero" aria-labelledby="welcome-title">
-      <div className="welcome-hero-image"><Still film={FILMS.yang} eager /></div>
+      <div className="welcome-hero-image"><Still key={featuredFilm} film={featured} eager /></div>
       <div className="welcome-hero-copy">
         <p className="welcome-prelude">For the love of film.</p>
         <h2 id="welcome-title" tabIndex={-1}>Some films stay.<br />Find the next one.</h2>
@@ -42,7 +49,7 @@ export function Landing({ onStart, hasDraft, hasReel = false }: { onStart: (prom
         <div className="welcome-actions"><button className="welcome-primary" onClick={() => onStart()}>{hasReel ? 'Return to your reel' : hasDraft ? 'Continue your request' : 'Find my next film'} <span aria-hidden="true">↗</span></button><a href="#discover-afterimage">Take a look inside <span aria-hidden="true">↓</span></a></div>
         <p className="welcome-footnote">Your taste is the starting point.</p>
       </div>
-      <div className="welcome-film-credit"><span>On the screen</span><strong>After Yang</strong><span>2022 · Kogonada</span></div>
+      <div className="welcome-film-credit"><span>On the screen</span><strong>{featured.title}</strong><span>{featured.year} · {featured.director}</span></div>
     </section>
     {!hasDraft ? <section className="welcome-starting-points" aria-label="Ideas for your first reel"><p>Or begin with a feeling</p><div>{STARTERS.map(starter => <button key={starter.name} onClick={() => onStart(starter.prompt)}>{starter.name}<span aria-hidden="true">↗</span></button>)}</div></section> : null}
     <section className="welcome-discovery" id="discover-afterimage" aria-labelledby="welcome-discovery-title">

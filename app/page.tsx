@@ -3,7 +3,7 @@
 import { FormEvent, type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FilmDossier } from './components/film-dossier';
 import { AtlasWorkspace } from './components/atlas';
-import { Landing } from './components/landing';
+import { Landing, nextWelcomeFilm, type WelcomeFilm } from './components/landing';
 import { ATLAS_STORAGE_KEY, buildAtlasInput, type AtlasInput } from './lib/atlas';
 import { ATLAS_TRAIL_STORAGE_KEY } from './lib/atlas-trail';
 import { RecommendationCard } from './components/recommendation-card';
@@ -95,6 +95,7 @@ export default function Home() {
   const [pollRevision, setPollRevision] = useState(0);
   const [composerOpen, setComposerOpen] = useState(false);
   const [landingOpen, setLandingOpen] = useState(true);
+  const [featuredFilm, setFeaturedFilm] = useState<WelcomeFilm>('columbus');
   const [welcomeRequested, setWelcomeRequested] = useState(false);
   const [jobStartedAt, setJobStartedAt] = useState<number | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
@@ -129,6 +130,11 @@ export default function Home() {
   useEffect(() => {
     const hydration = window.setTimeout(() => {
       try {
+        setFeaturedFilm(nextWelcomeFilm(localStorage.getItem('afterimage:welcome-film:v1')));
+      } catch {
+        // The welcome image remains available when browser storage is blocked.
+      }
+      try {
         const saved = parseStoredState(localStorage.getItem(STORAGE_KEY));
         setLikedFilms(parseLikedFilms(localStorage.getItem(TASTE_STORAGE_KEY)));
         setWelcomeRequested(new URLSearchParams(window.location.search).get('welcome') === '1');
@@ -156,6 +162,16 @@ export default function Home() {
     }, 0);
     return () => window.clearTimeout(hydration);
   }, []);
+
+  useEffect(() => {
+    if (!showLanding) return;
+    try {
+      // Remember only a displayed feature, separately from the user's reel and taste.
+      localStorage.setItem('afterimage:welcome-film:v1', featuredFilm);
+    } catch {
+      // Remembering the previous image is optional.
+    }
+  }, [showLanding, featuredFilm]);
 
   function saveLikes(next: LikedFilm[]) {
     try {
@@ -666,7 +682,7 @@ export default function Home() {
             </button> : null}
           </div>}
         </header>
-        {showLanding ? <Landing onStart={enterReel} hasDraft={hasSession} hasReel={Boolean(result)} /> : null}
+        {showLanding ? <Landing featuredFilm={featuredFilm} onStart={enterReel} hasDraft={hasSession} hasReel={Boolean(result)} /> : null}
         <div className="reel-workspace" hidden={showLanding}>
         {!hydrated ? <p className="opening" role="status">Opening your reel…</p> : null}
         {!result ? <div className="arrival">
