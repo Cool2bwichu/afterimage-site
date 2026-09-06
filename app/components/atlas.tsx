@@ -246,7 +246,7 @@ export function AtlasWorkspace(props: Props) {
         {atlas ? [atlas.anchor, ...atlas.neighbors].map((film, i) => <button key={movieKey(film.title, film.year)} aria-label={`Select ${film.title}`} aria-pressed={selected === i - 1} onClick={() => select(i - 1)}><Artwork film={film} metadata={getMetadata(film)} /></button>) : null}
         <p>Films connect.<br />Something<br />stays with you.</p>
       </aside>
-      <header className="atlas-masthead"><div className="atlas-brand">AFTERIMAGE<small>Better films find you</small></div>
+      <header className="atlas-masthead"><button className="atlas-brand" aria-label="Afterimage home" onClick={onClose}>AFTERIMAGE<small>Better films find you</small></button>
         <nav aria-label="Atlas navigation"><button className="is-active" aria-current="page" onClick={() => { setExpanded(false); dialog.current?.scrollTo({ top: 0, behavior: 'instant' }); }}>Atlas</button><button ref={back} onClick={onClose}>Your reel <span aria-hidden="true">↗</span></button></nav><em>Different stories.<br />The same human longing.</em>
       </header>
       {saved.maps.length > 1 ? <nav className="atlas-trail" aria-label="Atlas exploration trail" ref={trailNavigation}>

@@ -4,6 +4,7 @@ import './globals.css';
 import './light-table.css';
 import './projection-room.css';
 import './atlas.css';
+import './landing.css';
 
 const display = Cormorant_Garamond({
   variable: '--font-display',
@@ -19,7 +20,7 @@ const sans = DM_Sans({
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.SITE_ORIGIN || 'http://localhost:3000'),
   title: 'AFTERIMAGE — Your cinematic sensibility',
-  description: 'A private cinematic instrument that develops your film taste into a persona, palette, spirit director, and five precise recommendations.',
+  description: 'Discover films through the feelings, images and ideas you love. Find your next reel, blend qualities with the Light Table, and explore connections in Atlas.',
   applicationName: 'AFTERIMAGE',
   manifest: '/manifest.webmanifest',
   icons: {
@@ -37,13 +38,13 @@ export const metadata: Metadata = {
   openGraph: {
     type: 'website',
     title: 'AFTERIMAGE — Your cinematic sensibility',
-    description: 'Develop your film taste into a cinematic persona, palette, spirit director, and five precise recommendations.',
+    description: 'Find your next film through the feelings, images and ideas that stay with you.',
     images: [{ url: '/og.png', width: 1731, height: 909, alt: 'AFTERIMAGE cinematic film projector artwork' }],
   },
   twitter: {
     card: 'summary_large_image',
     title: 'AFTERIMAGE — Your cinematic sensibility',
-    description: 'A private cinematic instrument powered by your ChatGPT account.',
+    description: 'Find your next reel, shape it with the Light Table, and follow the connections in Atlas.',
     images: ['/og.png'],
   },
   robots: { index: false, follow: false },

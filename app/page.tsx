@@ -3,6 +3,7 @@
 import { FormEvent, type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FilmDossier } from './components/film-dossier';
 import { AtlasWorkspace } from './components/atlas';
+import { Landing } from './components/landing';
 import { ATLAS_STORAGE_KEY, buildAtlasInput, type AtlasInput } from './lib/atlas';
 import { ATLAS_TRAIL_STORAGE_KEY } from './lib/atlas-trail';
 import { RecommendationCard } from './components/recommendation-card';
@@ -93,6 +94,8 @@ export default function Home() {
   const [starting, setStarting] = useState(false);
   const [pollRevision, setPollRevision] = useState(0);
   const [composerOpen, setComposerOpen] = useState(false);
+  const [landingOpen, setLandingOpen] = useState(true);
+  const [welcomeRequested, setWelcomeRequested] = useState(false);
   const [jobStartedAt, setJobStartedAt] = useState<number | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const resultsRef = useRef<HTMLElement>(null);
@@ -102,6 +105,7 @@ export default function Home() {
   const reelLocked = developing || Boolean(activeJobId) || atlasBusy;
   const resetLocked = starting || Boolean(activeJobId && jobStatus !== 'failed') || atlasBusy;
   const hasSession = Boolean(result || films.length || draft || creativeBrief || activeJobId || excludedFilms.length || selectionCount(selectedFacets));
+  const showLanding = hydrated && !activeJobId && (welcomeRequested || (landingOpen && !result));
   const acceptedRetryInput = lightTableEnabled && activeJobId
     ? acceptedInputForResumedJob(activeJobId, acceptedInputJobId || undefined, acceptedInput)
     : undefined;
@@ -127,6 +131,7 @@ export default function Home() {
       try {
         const saved = parseStoredState(localStorage.getItem(STORAGE_KEY));
         setLikedFilms(parseLikedFilms(localStorage.getItem(TASTE_STORAGE_KEY)));
+        setWelcomeRequested(new URLSearchParams(window.location.search).get('welcome') === '1');
         const requested = new URLSearchParams(window.location.search).get('experience');
         const mode = requested === null ? saved.experience : requested === LIGHT_TABLE_EXPERIENCE ? LIGHT_TABLE_EXPERIENCE : undefined;
         setExperience(mode);
@@ -135,6 +140,7 @@ export default function Home() {
         setAcceptedInput(mode ? saved.acceptedInput : undefined);
         setDisplayedInput(mode ? saved.displayedInput : undefined);
         setAcceptedInputJobId(mode ? saved.acceptedInputJobId ?? '' : '');
+        setLandingOpen(!saved.result && !saved.films.length && !saved.creativeBrief && !saved.activeJobId);
         setFilms(saved.films);
         setCreativeBrief(saved.creativeBrief);
         setResult(parseAfterimageResultV2(saved.result, mode));
@@ -556,6 +562,7 @@ export default function Home() {
   function startOver() {
     if (resetLocked || startLockRef.current) return;
     setAtlasTarget(null);
+    setLandingOpen(true);
     try { localStorage.removeItem(ATLAS_STORAGE_KEY); localStorage.removeItem(ATLAS_TRAIL_STORAGE_KEY); } catch { /* The current view still resets. */ }
     setAtlasResetRevision(current => current + 1);
     setFilms([]);
@@ -580,7 +587,7 @@ export default function Home() {
     setNotice('Fresh start. Add films you love or describe what you are looking for.');
     setComposerOpen(true);
     requestAnimationFrame(() => {
-      filmInputRef.current?.focus({ preventScroll: true });
+      document.getElementById('welcome-title')?.focus({ preventScroll: true });
       window.scrollTo({ top: 0, behavior: 'instant' });
     });
   }
@@ -614,13 +621,38 @@ export default function Home() {
     setSelectedRecommendation(null);
   }
 
+  function leaveWelcomePreview() {
+    setWelcomeRequested(false);
+    const url = new URL(location.href); url.searchParams.delete('welcome'); url.hash = '';
+    history.replaceState(history.state, '', url);
+  }
+  function enterReel(prompt?: string) {
+    leaveWelcomePreview();
+    if (result) { goHome(); return; }
+    if (prompt !== undefined && !hasSession) setCreativeBrief(prompt);
+    if (!hasSession && new URLSearchParams(location.search).get('experience') !== 'standard') setExperience(LIGHT_TABLE_EXPERIENCE);
+    setLandingOpen(false);
+    setComposerOpen(true);
+    requestAnimationFrame(() => {
+      window.scrollTo({ top: 0, behavior: 'instant' });
+      if (prompt) document.getElementById('creative-brief')?.focus({ preventScroll: true });
+      else filmInputRef.current?.focus({ preventScroll: true });
+    });
+  }
+  function goHome() {
+    leaveWelcomePreview();
+    if (result) setComposerOpen(false);
+    else if (!activeJobId && !starting) setLandingOpen(true);
+    requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: 'instant' }));
+  }
+
   return (
-    <main data-ready={hydrated} className={`site-shell projection-room${lightTableEnabled ? ' has-light-table' : ''}${result ? ' has-reel' : ''}`}
+    <main data-ready={hydrated} className={`site-shell projection-room${lightTableEnabled ? ' has-light-table' : ''}${result ? ' has-reel' : ''}${showLanding ? ' is-landing' : ''}`}
       style={{ '--reel-color': result?.palette[2] || '#254438' } as CSSProperties}>
       <div className="wrap">
         <header className="masthead">
-          <h1 className="title">AFTERIMAGE<span className="brand-print" aria-hidden="true"><i /><i /><i /><i /></span></h1>
-          <div className="masthead-actions">
+          <h1 className="title"><button type="button" aria-label="Afterimage home" onClick={goHome}>AFTERIMAGE<span className="brand-print" aria-hidden="true"><i /><i /><i /><i /></span></button></h1>
+          {showLanding ? <nav className="welcome-home-nav" aria-label="Welcome navigation"><a href="#discover-afterimage">How it works</a><button onClick={() => enterReel()}>{hasSession ? 'Continue' : 'Begin'} <span aria-hidden="true">↗</span></button></nav> : <div className="masthead-actions">
             {result ? <button type="button" className="atlas-open-button" disabled={developing} onClick={event => openAtlas(result.recommendations[0], event.currentTarget, true)}>Atlas ↗</button> : null}
             <span className={`privacy-mark ${connection === 'connected' ? 'is-connected' : ''}`}>
               <i aria-hidden="true" />{connection === 'connected' ? 'Connected' : connection === 'checking' ? 'Connecting…' : 'Not connected'}
@@ -632,9 +664,10 @@ export default function Home() {
               title={resetLocked ? 'Available when this reel finishes developing' : 'Clear this reel, its inputs, and selected qualities'}>
               Start over <span aria-hidden="true">↺</span>
             </button> : null}
-          </div>
+          </div>}
         </header>
-
+        {showLanding ? <Landing onStart={enterReel} hasDraft={hasSession} hasReel={Boolean(result)} /> : null}
+        <div className="reel-workspace" hidden={showLanding}>
         {!hydrated ? <p className="opening" role="status">Opening your reel…</p> : null}
         {!result ? <div className="arrival">
           <h2>Find what stays with you.</h2>
@@ -909,6 +942,7 @@ export default function Home() {
         <AtlasWorkspace key={atlasResetRevision} target={atlasTarget} opener={atlasOpener} onClose={closeAtlas} onBusy={setAtlasBusy} preferSaved={atlasResume}
           connected={connection === 'connected'} metadataByKey={metadataByKey} likedKeys={likedKeys} onLike={toggleLike}
           onExplore={openAtlas} selectedFacets={selectedFacets} onBorrow={lightTableEnabled ? handleSelectFacet : undefined} lightTable={atlasTarget ? lightTable : null} />
+        </div>
       </div>
     </main>
   );
