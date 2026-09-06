@@ -2,6 +2,8 @@
 
 import { FormEvent, type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FilmDossier } from './components/film-dossier';
+import { AtlasWorkspace } from './components/atlas';
+import { ATLAS_STORAGE_KEY, buildAtlasInput, type AtlasInput } from './lib/atlas';
 import { RecommendationCard } from './components/recommendation-card';
 import { SearchFingerprint } from './components/search-fingerprint';
 import { LightTable } from './components/light-table';
@@ -67,6 +69,15 @@ export default function Home() {
   const [enrichmentPending, setEnrichmentPending] = useState(false);
   const [selectedRecommendation, setSelectedRecommendation] = useState<number | null>(null);
   const [dossierOpener, setDossierOpener] = useState<HTMLElement | null>(null);
+  const [atlasTarget, setAtlasTarget] = useState<AtlasInput | null>(null);
+  const [atlasOpener, setAtlasOpener] = useState<HTMLElement | null>(null);
+  const [atlasBusy, setAtlasBusy] = useState(false);
+  const [atlasResume, setAtlasResume] = useState(false);
+  const [atlasResetRevision, setAtlasResetRevision] = useState(0);
+  const closeAtlas = useCallback(() => {
+    if (window.history.state?.afterimageAtlas) window.history.back();
+    else setAtlasTarget(null);
+  }, []);
   const [excludedFilms, setExcludedFilms] = useState<ExcludedFilm[]>([]);
   const [likedFilms, setLikedFilms] = useState<LikedFilm[]>([]);
   const likedKeys = useMemo(() => new Set(likedFilms.map(film => movieKey(film.title, film.year))), [likedFilms]);
@@ -87,8 +98,8 @@ export default function Home() {
   const filmInputRef = useRef<HTMLInputElement>(null);
   const startLockRef = useRef(false);
   const developing = starting || jobStatus === 'queued' || jobStatus === 'running' || jobStatus === 'reconnecting';
-  const reelLocked = developing || Boolean(activeJobId);
-  const resetLocked = starting || Boolean(activeJobId && jobStatus !== 'failed');
+  const reelLocked = developing || Boolean(activeJobId) || atlasBusy;
+  const resetLocked = starting || Boolean(activeJobId && jobStatus !== 'failed') || atlasBusy;
   const hasSession = Boolean(result || films.length || draft || creativeBrief || activeJobId || excludedFilms.length || selectionCount(selectedFacets));
   const acceptedRetryInput = lightTableEnabled && activeJobId
     ? acceptedInputForResumedJob(activeJobId, acceptedInputJobId || undefined, acceptedInput)
@@ -523,6 +534,7 @@ export default function Home() {
   }
 
   function developBlend() {
+    setAtlasTarget(null);
     if (!selectionCount(selectedFacets)) return;
     void developReel(false, [], buildBlendPayload({selectedFacets,excludedFilms}));
   }
@@ -542,6 +554,9 @@ export default function Home() {
 
   function startOver() {
     if (resetLocked || startLockRef.current) return;
+    setAtlasTarget(null);
+    try { localStorage.removeItem(ATLAS_STORAGE_KEY); } catch { /* The current view still resets. */ }
+    setAtlasResetRevision(current => current + 1);
     setFilms([]);
     setDraft('');
     setCreativeBrief('');
@@ -576,7 +591,7 @@ export default function Home() {
       : jobStatus === 'queued' ? 'Your reel is queued' : 'Your reel is developing';
 
   const lightTable = lightTableEnabled && (result?.fingerprint || selectionCount(selectedFacets) > 0) ? <LightTable
-    embedded={selectedRecommendation !== null}
+    embedded={selectedRecommendation !== null || Boolean(atlasTarget)}
     selectedFacets={selectedFacets} locked={reelLocked} canSubmit={connection === 'connected'}
     onRemove={channel => {
       const next = removeFacet(selectedFacets,channel);
@@ -585,6 +600,19 @@ export default function Home() {
     }}
     onClear={clearFacetSelections} onDevelop={developBlend} /> : null;
 
+  function openAtlas(film: FacetSource, opener: HTMLElement, resume = false) {
+    if (!result) return;
+    const request: DevelopInput = {
+      ...(displayedInput || { films: result.sourceFilms, creativeBrief }),
+      ...(lightTableEnabled ? { experience: LIGHT_TABLE_EXPERIENCE } : {}),
+      ...(selectionCount(selectedFacets) ? { experience: LIGHT_TABLE_EXPERIENCE, selectedFacets } : {}),
+    };
+    setAtlasOpener(atlasTarget ? atlasOpener : selectedRecommendation !== null ? dossierOpener || opener : opener);
+    setAtlasResume(resume);
+    setAtlasTarget(buildAtlasInput(film, request, excludedFilms, likedFilms));
+    setSelectedRecommendation(null);
+  }
+
   return (
     <main data-ready={hydrated} className={`site-shell projection-room${lightTableEnabled ? ' has-light-table' : ''}${result ? ' has-reel' : ''}`}
       style={{ '--reel-color': result?.palette[2] || '#254438' } as CSSProperties}>
@@ -592,6 +620,7 @@ export default function Home() {
         <header className="masthead">
           <h1 className="title">AFTERIMAGE<span className="brand-print" aria-hidden="true"><i /><i /><i /><i /></span></h1>
           <div className="masthead-actions">
+            {result ? <button type="button" className="atlas-open-button" disabled={developing} onClick={event => openAtlas(result.recommendations[0], event.currentTarget, true)}>Atlas ↗</button> : null}
             <span className={`privacy-mark ${connection === 'connected' ? 'is-connected' : ''}`}>
               <i aria-hidden="true" />{connection === 'connected' ? 'Connected' : connection === 'checking' ? 'Connecting…' : 'Not connected'}
             </span>
@@ -792,6 +821,8 @@ export default function Home() {
               ))}
             </div>
 
+            <section className="atlas-entry"><div><h3>Atlas</h3><p>Films are never alone. Explore the connections around a film, and find what carries through.</p></div><button type="button" disabled={developing} onClick={event => openAtlas(result.recommendations[0], event.currentTarget)}>Explore connections ↗</button></section>
+
             <details className="persona-panel"><summary><span>About this reel</span><strong>{result.persona}</strong><span aria-hidden="true">+</span></summary><div className="persona-details">
               <div className="palette" aria-label="Your cinematic palette">
                 {result.palette.map((color) => <span key={color} style={{ background: color }} />)}
@@ -820,6 +851,7 @@ export default function Home() {
             </div>
 
             <FilmDossier
+              onOpenAtlas={(film, opener) => openAtlas(film, opener)}
               liked={selectedRecommendation !== null && likedKeys.has(movieKey(result.recommendations[selectedRecommendation].title, result.recommendations[selectedRecommendation].year))}
               onToggleLike={() => { if (selectedRecommendation !== null) toggleLike(result.recommendations[selectedRecommendation]); }}
               recommendations={result.recommendations}
@@ -872,7 +904,10 @@ export default function Home() {
           </details>
         </section>
         <footer>AFTERIMAGE · reasoned live, frame by frame</footer>
-        {selectedRecommendation === null ? lightTable : null}
+        {selectedRecommendation === null && !atlasTarget ? lightTable : null}
+        <AtlasWorkspace key={atlasResetRevision} target={atlasTarget} opener={atlasOpener} onClose={closeAtlas} onBusy={setAtlasBusy} preferSaved={atlasResume}
+          connected={connection === 'connected'} metadataByKey={metadataByKey} likedKeys={likedKeys} onLike={toggleLike}
+          onExplore={openAtlas} selectedFacets={selectedFacets} onBorrow={lightTableEnabled ? handleSelectFacet : undefined} lightTable={atlasTarget ? lightTable : null} />
       </div>
     </main>
   );

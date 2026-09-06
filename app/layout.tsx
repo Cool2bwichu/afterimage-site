@@ -3,6 +3,7 @@ import { Cormorant_Garamond, DM_Sans } from 'next/font/google';
 import './globals.css';
 import './light-table.css';
 import './projection-room.css';
+import './atlas.css';
 
 const display = Cormorant_Garamond({
   variable: '--font-display',

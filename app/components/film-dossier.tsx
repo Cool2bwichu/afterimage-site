@@ -32,6 +32,7 @@ export function FilmDossier({
   lightTable,
   liked = false,
   onToggleLike,
+  onOpenAtlas,
 }: {
   selection: DossierSelection | null;
   metadata?: FilmEnrichment;
@@ -48,6 +49,7 @@ export function FilmDossier({
   lightTable?: ReactNode;
   liked?: boolean;
   onToggleLike?: () => void;
+  onOpenAtlas?: (film: FacetSource, opener: HTMLElement) => void;
 }) {
   const [failedArtwork, setFailedArtwork] = useState<Set<string>>(() => new Set());
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -140,6 +142,7 @@ export function FilmDossier({
         {recommendation.facets && onSelectFacet ? <section className="dossier-borrow" aria-label="Borrow a quality"><h3>Borrow a quality</h3><div className="ai-facet-rail">{FACET_KEYS.map(channel => <FacetTab key={channel} channel={channel} facet={recommendation.facets![channel]} source={{title:recommendation.title,year:recommendation.year}} selected={selectedFacets[channel]} disabled={facetDisabled} onSelect={onSelectFacet} />)}</div></section> : null}
         {recommendation.facets && onSelectFacet ? <details className="quality-notes"><summary>About these qualities +</summary>{FACET_KEYS.map(channel => <p key={channel}><strong>{recommendation.facets![channel].label}</strong>{recommendation.facets![channel].explanation}</p>)}</details> : null}
         <div className="dossier-actions">
+          {onOpenAtlas ? <button className="atlas-open-button" type="button" disabled={facetDisabled} onClick={event => onOpenAtlas(recommendation, event.currentTarget)}>Explore in Atlas ↗</button> : null}
           {verifiedImdb ? (
             <a className="imdb-link" href={verifiedImdb} target="_blank" rel="noreferrer noopener">View verified IMDb page ↗</a>
           ) : null}
