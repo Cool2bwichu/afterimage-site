@@ -18,7 +18,6 @@ type Props = {
   lightTable: ReactNode;
 };
 const POSITIONS = [[29, 20], [75, 20], [14, 47], [88, 47], [30, 76], [74, 76]];
-const LABELS = [[39, 36], [63, 36], [29, 43], [73, 43], [32, 64], [70, 64]];
 const AFFINITY = { close: 'Close', echo: 'Echo', contrast: 'Contrast' };
 const LENS_LABELS: Record<FacetKey, string> = {
   whereItLives: 'World & setting',
@@ -295,7 +294,6 @@ export function AtlasWorkspace(props: Props) {
             {atlas ? <>
               <button className={`atlas-node is-anchor${selected === -1 ? ' is-selected' : ''}`} style={{ '--x': '50%', '--y': '47%' } as CSSProperties} aria-label={`Select anchor film ${atlas.anchor.title}`} aria-pressed={selected === -1} onClick={() => select(-1)}><span className="atlas-node-image"><Artwork film={atlas.anchor} metadata={getMetadata(atlas.anchor)} /></span><span className="atlas-node-title">{atlas.anchor.title}<small>{atlas.anchor.year}</small></span></button>
               {atlas.neighbors.map((film, i) => <button key={movieKey(film.title, film.year)} className={`atlas-node${selected === i ? ' is-selected' : ''}`} data-affinity={lens === 'all' ? undefined : film.lenses[lens].affinity} style={{ '--x': `${POSITIONS[i][0]}%`, '--y': `${POSITIONS[i][1]}%`, '--arrival': `${i * 65 + 100}ms` } as CSSProperties} aria-label={`Explore ${film.title}: ${film.label}${lens === 'all' ? '' : `. ${FACET_META[lens].label}: ${AFFINITY[film.lenses[lens].affinity]}`}`} aria-pressed={selected === i} onClick={() => select(i)} onKeyDown={event => { if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') { event.preventDefault(); const index = (i + (event.key === 'ArrowRight' ? 1 : 5)) % 6; select(index); dialog.current?.querySelectorAll<HTMLButtonElement>('.atlas-node:not(.is-anchor)')[index]?.focus(); } }}><span className="atlas-node-image"><Artwork film={film} metadata={getMetadata(film)} /></span><span className="atlas-node-title">{film.title}<small>{film.year}</small></span></button>)}
-              {atlas.neighbors.map((film, i) => <span key={i} className={`atlas-edge-label${selected === i ? ' is-selected' : ''}`} data-affinity={lens === 'all' ? undefined : film.lenses[lens].affinity} style={{ left: `${LABELS[i][0]}%`, top: `${LABELS[i][1]}%` }}>{lens === 'all' ? film.label : AFFINITY[film.lenses[lens].affinity]}</span>)}
             </> : <div className="atlas-empty-orbit"><span />{saved.pending?.anchor.title || target?.anchor.title}<small>{saved.pending?.anchor.year || target?.anchor.year}</small></div>}
           </div>
           <p className="atlas-mobile-caption" data-affinity={selected >= 0 && neighbor && lens !== 'all' ? neighbor.lenses[lens].affinity : undefined} aria-live="polite">{selected >= 0 && neighbor ? <button onClick={() => dialog.current?.querySelector('.atlas-relationship')?.scrollIntoView({ block: 'start', behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' })}>{lens === 'all' ? neighbor.label : `${FACET_META[lens].compactLabel}: ${AFFINITY[neighbor.lenses[lens].affinity]}`} · Read connection ↓</button> : "Choose a film to explore its connection."}</p>
