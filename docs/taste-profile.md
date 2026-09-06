@@ -1,0 +1,13 @@
+# Persistent film Likes
+
+A Like means the viewer has seen and enjoyed the film. The reel and dossier share an undoable heart control; Your taste lists saved films and allows individual removal or an explicit full reset. Start over clears the session, preserving this separate history. Selecting Not interested removes a conflicting Like; liking again removes that session exclusion.
+
+Persistence is browser-local under `afterimage:liked-films:v1`, independent of the reel's versioned storage. Storage failure reports a message without falsely applying a saved state. Other tabs receive storage changes. There is no cross-device or account profile. History is bounded to 500 distinct title/year identities to keep request and model context costs finite; reaching the limit reports it without evicting older Likes.
+
+Every new generation sends `likedFilms` separately from `films`, `creativeBrief`, `selectedFacets`, and exclusions. This includes fresh reels, blends, rerolls and retries. Changes made while a job is running apply to subsequent submissions, never to that job's accepted input. The backend must deploy before the new Site for Likes to have an effect.
+
+The companion bridge validates the history and supplies it to V2 (default) and both opt-in V3 stages. Current explicit requirements govern eligibility; background taste only helps distinguish similarly strong matches. Every distinct Like is one observation, with recurring patterns supporting stronger inferences. Editorial influence follows 0.15*n/(n+9): 1.5% for one Like, slowly approaching but never reaching 15%. These percentages are prompt guidance, not measured model probabilities, trained parameters, or an enforced numerical reranker. They cannot guarantee semantic compliance. Real user-rated comparisons are still needed to tune useful preference influence without narrowing discovery.
+
+Liked title/year identities are hard output exclusions in V2 normalization and V3 final validation; V3 also removes them before final selection. Identity matching is title/year based, like existing exclusions; alternate titles or release-year discrepancies remain a limitation. All history strings are treated as untrusted descriptive data. The bridge job store does not add a persistent server taste profile.
+
+Validation: frontend storage/deduplication/undo tests; backend validation, bounded influence, all prompt paths, actual V2 client forwarding and seen-film rejection, V3 filtering. Browser checks cover Like/dossier shared state, refresh persistence, Start over retaining history, undo, and a captured selected-blend request with Likes separate from exact qualities. No live recommendation was generated for this change, so recommendation-quality improvement is not claimed.

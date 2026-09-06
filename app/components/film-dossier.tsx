@@ -1,11 +1,12 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { FilmEnrichment } from '../lib/movie-metadata';
-import { imdbUrl } from '../lib/movie-metadata';
+import { imdbUrl, movieKey } from '../lib/movie-metadata';
 import { FacetTab } from './facet-tab';
 import { FACET_KEYS, type FacetKey, type CinematicFacet, type FacetSource, type SelectedFacets } from '../lib/light-table';
 import type { RecommendationV2 } from '../lib/reel-state';
+import { LikeButton } from './like-button';
 
 export type DossierSelection = { recommendation: RecommendationV2; index: number };
 
@@ -25,6 +26,12 @@ export function FilmDossier({
   notInterested,
   onNotInterested,
   onClose,
+  recommendations = [],
+  metadataByKey = {},
+  onSelectFilm,
+  lightTable,
+  liked = false,
+  onToggleLike,
 }: {
   selection: DossierSelection | null;
   metadata?: FilmEnrichment;
@@ -35,15 +42,22 @@ export function FilmDossier({
   notInterested: boolean;
   onNotInterested: () => void;
   onClose: () => void;
+  recommendations?: RecommendationV2[];
+  metadataByKey?: Record<string, FilmEnrichment>;
+  onSelectFilm?: (index: number) => void;
+  lightTable?: ReactNode;
+  liked?: boolean;
+  onToggleLike?: () => void;
 }) {
   const [failedArtwork, setFailedArtwork] = useState<Set<string>>(() => new Set());
   const dialogRef = useRef<HTMLDialogElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
 
   const selectionKey = selection ? `${selection.recommendation.title}|${selection.recommendation.year}` : null;
+  const isOpen = Boolean(selection);
 
   useEffect(() => {
-    if (!selectionKey) return;
+    if (!isOpen) return;
     const dialog = dialogRef.current;
     if (!dialog) return;
     const previousOverflow = document.body.style.overflow;
@@ -55,7 +69,13 @@ export function FilmDossier({
       if (dialog.open) dialog.close();
       if (opener?.isConnected) opener.focus();
     };
-  }, [opener, selectionKey]);
+  }, [opener, isOpen]);
+
+  useEffect(() => {
+    if (!selectionKey) return;
+    dialogRef.current?.querySelector('.dossier-scroll')?.scrollTo({ top: 0 });
+    closeRef.current?.focus();
+  }, [selectionKey]);
 
   if (!selection) return null;
   const { recommendation, index } = selection;
@@ -72,7 +92,7 @@ export function FilmDossier({
 
   return (
     <dialog
-      className="film-dossier"
+      className="film-dossier projection-dossier"
       ref={dialogRef}
       aria-labelledby="dossier-title"
       onCancel={(event) => {
@@ -83,22 +103,25 @@ export function FilmDossier({
     >
       <div className="dossier-scroll">
         <header className="dossier-header">
+          <button ref={closeRef} type="button" onClick={() => dialogRef.current?.close()} aria-label="Close film dossier">← Back to your reel</button>
           <span>{String(index + 1).padStart(2, '0')} / 05 · Film dossier</span>
-          <button ref={closeRef} type="button" onClick={() => dialogRef.current?.close()} aria-label="Close film dossier">Back to reel ×</button>
         </header>
 
         <div className={`dossier-layout${backdrop ? ' has-backdrop' : ''}`}>
         {artwork ? (
           <div className={`dossier-poster${backdrop ? ' has-backdrop' : ''}`}><img src={artwork} alt={`${recommendation.title} ${backdrop ? 'backdrop' : 'poster'}`} onError={() => setFailedArtwork(previous => new Set([...previous, artwork]))} /></div>
         ) : null}
-        <div className="dossier-copy"><div className="dossier-title-row">
+        <div className="dossier-copy"><div className="dossier-introduction"><div className="dossier-title-row">
           <h2 id="dossier-title">{recommendation.title}</h2>
           <span>{recommendation.year}</span>
+          {onToggleLike ? <LikeButton film={recommendation} liked={liked} onToggle={onToggleLike} /> : null}
         </div>
         {matched?.tmdbRating !== null && matched?.tmdbRating !== undefined ? (
           <p className="dossier-rating">TMDB RATING · {matched.tmdbRating.toFixed(1)} / 10</p>
         ) : null}
         {facts.length ? <p className="dossier-facts">{facts.join('  ·  ')}</p> : null}
+        </div>
+        <div className="dossier-columns"><div className="dossier-reading">
         {matched?.overview ? <details className="dossier-story"><summary>Story outline +</summary><p className="dossier-overview">{matched.overview}</p></details> : null}
 
         <section className="dossier-note">
@@ -113,7 +136,9 @@ export function FilmDossier({
           <span>What to watch for</span>
           <p>{recommendation.watchFor || 'Program note unavailable for this saved reel.'}</p>
         </section>
+        </div><div className="dossier-qualities">
         {recommendation.facets && onSelectFacet ? <section className="dossier-borrow" aria-label="Borrow a quality"><h3>Borrow a quality</h3><div className="ai-facet-rail">{FACET_KEYS.map(channel => <FacetTab key={channel} channel={channel} facet={recommendation.facets![channel]} source={{title:recommendation.title,year:recommendation.year}} selected={selectedFacets[channel]} disabled={facetDisabled} onSelect={onSelectFacet} />)}</div></section> : null}
+        {recommendation.facets && onSelectFacet ? <details className="quality-notes"><summary>About these qualities +</summary>{FACET_KEYS.map(channel => <p key={channel}><strong>{recommendation.facets![channel].label}</strong>{recommendation.facets![channel].explanation}</p>)}</details> : null}
         <div className="dossier-actions">
           {verifiedImdb ? (
             <a className="imdb-link" href={verifiedImdb} target="_blank" rel="noreferrer noopener">View verified IMDb page ↗</a>
@@ -122,7 +147,20 @@ export function FilmDossier({
             {notInterested ? 'Not interested · saved' : 'Not interested'}
           </button>
         </div>
-        </div></div>
+        </div></div></div></div>
+        {onSelectFilm && recommendations.length > 1 ? <nav className="dossier-reel" aria-label="The rest of your reel">
+          <h3>The rest of your reel</h3>
+          <div className="dossier-reel__films">{recommendations.map((film, filmIndex) => {
+            if (filmIndex === index) return null;
+            const record = metadataByKey[movieKey(film.title, film.year)];
+            const thumbnail = record?.status === 'matched' ? [record.backdropUrl, record.posterUrl].find(url => url && !failedArtwork.has(url)) : null;
+            return <button type="button" key={`${film.title}|${film.year}`} onClick={() => onSelectFilm(filmIndex)} aria-label={`View ${film.title} in dossier`}>
+              {thumbnail ? <img src={thumbnail} alt="" onError={() => setFailedArtwork(previous => new Set([...previous, thumbnail]))} /> : null}
+              <span>{film.title}<small>{film.year}</small></span>
+            </button>;
+          })}</div>
+        </nav> : null}
+        <div className="dossier-table">{lightTable}</div>
       </div>
     </dialog>
   );

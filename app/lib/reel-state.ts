@@ -10,6 +10,7 @@ export type DevelopInput = {
   excludedFilms?: ExcludedFilm[];
   experience?: typeof LIGHT_TABLE_EXPERIENCE;
   selectedFacets?: SelectedFacets;
+  likedFilms?: ExcludedFilm[];
 };
 
 export type RecommendationV2 = {

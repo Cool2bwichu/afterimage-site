@@ -1,0 +1,166 @@
+/* The Projection Room composition: wide film rows and a contextual reading space.
+   Scoped here so the input, generation and legacy component contracts stay intact. */
+.projection-room { --void: #090f0e; --white: #efe8d9; --muted: #aeb0a7; --gold: #e7ae48; background: #090f0e; }
+.projection-room .masthead { min-height: 84px; }
+.projection-room .title { font-size: 25px; }
+.projection-room .request-summary { display: grid; grid-template-columns: 1.1fr 1fr; gap: 40px; padding: 18px 0; }
+.projection-room .request-copy p { font-size: 25px; line-height: 1.25; margin: 6px 0 4px; max-width: 36ch; }
+.projection-room .request-copy button { min-height: 44px; padding: 8px 0; }
+.projection-room .request-references { border-left: 1px solid var(--line); padding-left: 36px; align-self: stretch; }
+.projection-room .request-references p { font-size: 20px; line-height: 1.5; margin: 12px 0 0; }
+.projection-room .results { margin-top: 0; }
+.projection-room .ai-print { margin-bottom: 24px; padding: 12px 0 18px; }
+.projection-room .ai-print__header { padding: 8px 0; margin-bottom: 12px; }
+.projection-room .ai-print__grid { padding-bottom: 0; }
+.projection-room .ai-print { border-top: 0; }
+.projection-room .ai-print-channel summary { padding-top: 4px; padding-bottom: 4px; }
+.projection-room .ai-print-channel summary strong { font-size: 20px; line-height: 1.25; }
+.projection-room .recommendation-grid { grid-template-columns: minmax(0, 1fr); gap: 0; }
+.projection-room .recommendation-card { padding: 0; margin: 0; background: transparent; border: 0; border-bottom: 1px solid var(--line); }
+.projection-room .recommendation-card.has-backdrop .recommendation-card__button { display: grid; grid-template-columns: 48% minmax(0, 1fr); align-items: stretch; gap: 0; padding: 0; }
+.projection-room .recommendation-card.has-backdrop .poster-frame { aspect-ratio: auto; height: 100%; min-height: 300px; align-self: stretch; }
+.projection-room .recommendation-card.has-backdrop .poster-frame img { object-fit: cover; }
+.projection-room .recommendation-card .recommendation-copy { padding: 34px 40px; align-self: center; }
+.projection-room .recommendation-card .recommendation-copy h3 { font-size: clamp(32px, 3.2vw, 48px); }
+.projection-room .recommendation-card .recommendation-copy > p { font-size: 17px; line-height: 1.6; max-width: 48ch; }
+.projection-room .recommendation-card.is-primary .recommendation-card__button { position: relative; min-height: 480px; }
+.projection-room .recommendation-card.is-primary.has-backdrop .recommendation-card__button { display: grid; grid-template-columns: 40% minmax(0, 1fr); overflow: hidden; }
+.projection-room .recommendation-card.is-primary.has-backdrop .poster-frame { position: absolute; inset: 0 0 0 34%; width: 66%; min-height: 0; max-width: none; }
+.projection-room .recommendation-card.is-primary.has-backdrop .poster-frame::after { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, #090f0e, rgb(9 15 14 / 45%) 16%, transparent 40%); pointer-events: none; }
+.projection-room .recommendation-card.is-primary.has-backdrop .recommendation-copy { grid-column: 1; grid-row: 1; position: relative; z-index: 1; padding: 42px 24px 42px 32px; }
+.projection-room .recommendation-card.is-primary .recommendation-copy h3 { font-size: clamp(50px, 5.8vw, 84px); line-height: 1.02; }
+.projection-room .recommendation-card.is-primary .watch-for { display: none; }
+.projection-room .recommendation-card.is-primary .open-dossier { margin-top: 4px; }
+.projection-room .facet-disclosure { padding: 0 32px; border-top: 0; }
+.projection-room .facet-disclosure > summary { min-height: 44px; padding: 12px 0; color: var(--muted); }
+.projection-room .facet-disclosure[open] { padding-bottom: 20px; }
+.projection-room .recommendation-card:not(.has-backdrop).has-poster .recommendation-card__button { grid-template-columns: 180px minmax(0, 1fr); padding: 28px 32px; gap: 32px; }
+.projection-room .recommendation-card:not(.has-backdrop).has-poster .recommendation-copy { padding: 0; }
+.projection-room .recommendation-card.is-primary:not(.has-backdrop).has-poster .recommendation-card__button { grid-template-columns: minmax(180px, 28%) minmax(0, 1fr); }
+.projection-room .recommendation-card:not(.has-poster) .recommendation-card__button { min-height: 0; padding: 0; }
+.projection-room .ai-selected-summary { display: flex; flex-wrap: wrap; gap: 8px; flex: 1; }
+.projection-room .ai-selected-summary > span { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 8px 12px; border: 1px solid var(--line); font-size: 14px; }
+.projection-room .ai-selected-summary small { color: var(--muted); }
+.projection-room .ai-selected-summary i { width: 7px; height: 7px; border-radius: 50%; background: var(--facet-accent, var(--gold)); }
+.projection-room .ai-light-table__header { gap: 20px; }
+
+.projection-dossier { --void: #090f0e; --white: #efe8d9; --muted: #aeb0a7; --gold: #e7ae48; width: 100vw; max-width: 1680px; height: 100dvh; max-height: 100dvh; margin: auto; padding: 0; border: 0; background: #090f0e; }
+.projection-dossier .dossier-scroll { height: 100%; max-height: none; overflow: auto; padding: 0 clamp(20px, 3vw, 48px); }
+.projection-dossier .dossier-header { background: #090f0e; padding: 16px 0; position: relative; }
+.projection-dossier .dossier-header button { padding-left: 0; }
+.projection-dossier .dossier-layout,
+.projection-dossier .dossier-layout.has-backdrop { display: grid; grid-template-columns: minmax(0, 40%) minmax(0, 1fr); gap: 36px; padding: 28px 0 36px; align-items: start; }
+.projection-dossier .dossier-layout:not(:has(.dossier-poster)) { grid-template-columns: minmax(0, 1fr); }
+.projection-dossier .dossier-poster { position: sticky; top: 24px; margin: 0; aspect-ratio: 2 / 3; max-height: 700px; background: #101715; }
+.projection-dossier .dossier-poster.has-backdrop { aspect-ratio: 4 / 5; }
+.projection-dossier .dossier-copy { display: block; }
+.projection-dossier .dossier-introduction { padding-bottom: 24px; border-bottom: 1px solid var(--line); margin-bottom: 24px; }
+.projection-dossier .dossier-title-row h2 { font-size: clamp(42px, 4.5vw, 72px); overflow-wrap: anywhere; }
+.projection-dossier .dossier-rating { font-size: 13px; font-weight: 400; margin-top: 18px; }
+.projection-dossier .dossier-facts { font-size: 14px; margin: 12px 0 0; }
+.projection-dossier .dossier-columns { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 32px; }
+.projection-dossier .dossier-columns:not(:has(.dossier-borrow)) { grid-template-columns: minmax(0, 1fr); }
+.projection-dossier .dossier-reading, .projection-dossier .dossier-qualities { min-width: 0; }
+.projection-dossier .dossier-note { margin: 0 0 28px; }
+.projection-dossier .dossier-note p { font-size: 16px; line-height: 1.65; margin-top: 10px; }
+.projection-dossier .program-notes { display: block; }
+.projection-dossier .dossier-borrow { margin: 0; }
+.projection-dossier .dossier-borrow h3 { font-size: 25px; }
+.projection-dossier .ai-facet-rail { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.projection-dossier .ai-facet-tab { min-width: 0; }
+.projection-dossier .dossier-story { margin: 0 0 20px; }
+.projection-dossier .dossier-story summary { padding-top: 0; }
+.projection-dossier .dossier-actions { flex-wrap: wrap; margin-top: 24px; gap: 12px; }
+.projection-dossier .dossier-reel { padding: 24px 0 32px; border-top: 1px solid var(--line); }
+.projection-dossier .dossier-reel h3 { font-size: 13px; color: var(--muted); font-weight: 400; letter-spacing: 0.08em; margin: 0 0 16px; }
+.projection-dossier .dossier-reel__films { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.projection-dossier .dossier-reel__films button { display: flex; align-items: center; gap: 14px; border: 1px solid var(--line); padding: 0 12px 0 0; background: transparent; color: var(--white); text-align: left; min-height: 100px; min-width: 0; cursor: pointer; }
+.projection-dossier .dossier-reel__films button:hover { border-color: var(--gold); }
+.projection-dossier .dossier-reel__films img { width: 40%; aspect-ratio: 1.15; object-fit: cover; align-self: stretch; }
+.projection-dossier .dossier-reel__films span { font: 22px/1.15 var(--font-display), Georgia, serif; padding: 10px; overflow-wrap: anywhere; }
+.projection-dossier .dossier-reel__films small { display: block; font: 12px/1.5 var(--font-sans), sans-serif; color: var(--muted); margin-top: 6px; }
+.projection-dossier .dossier-table { position: sticky; bottom: 0; z-index: 4; background: #090f0e; padding: 12px 0 max(12px, env(safe-area-inset-bottom)); }
+.projection-dossier .dossier-table .ai-light-table { position: relative; inset: auto; transform: none; width: 100%; max-width: none; margin: 0; }
+
+@media (max-width: 1100px) {
+  .projection-dossier .dossier-layout, .projection-dossier .dossier-layout.has-backdrop { grid-template-columns: minmax(0, 36%) minmax(0, 1fr); gap: 24px; }
+  .projection-dossier .dossier-columns { grid-template-columns: minmax(0, 1fr); }
+  .projection-room .ai-selected-summary { display: none; }
+}
+@media (max-width: 760px) {
+  .projection-room .masthead { min-height: 80px; }
+  .projection-room .title { font-size: 22px; }
+  .projection-room .request-summary { grid-template-columns: minmax(0, 1fr); gap: 10px; padding: 20px 0 16px; }
+  .projection-room .request-copy p { font-size: 23px; line-height: 1.25; margin: 6px 0 0; }
+  .projection-room .request-copy button span { display: inline; }
+  .projection-room .request-references { border: 0; padding: 0; }
+  .projection-room .request-references .panel-label { display: none; }
+  .projection-room .request-references p { font: 14px/1.5 var(--font-sans), sans-serif; color: var(--muted); margin: 0; }
+  .projection-room .results { margin-top: 0; }
+  .projection-room .ai-print { padding: 12px 0; margin: 0 0 16px; }
+  .projection-room .ai-print-mobile > summary { padding: 0; }
+  .projection-room .ai-print-mobile > summary strong { font-size: 21px; }
+  .projection-room .recommendation-card.has-backdrop .recommendation-card__button,
+  .projection-room .recommendation-card.is-primary.has-backdrop .recommendation-card__button { display: block; min-height: 0; }
+  .projection-room .recommendation-card.has-backdrop .poster-frame,
+  .projection-room .recommendation-card.is-primary.has-backdrop .poster-frame { position: relative; inset: auto; width: 100%; height: auto; aspect-ratio: 16 / 9; min-height: 0; }
+  .projection-room .recommendation-card.is-primary.has-backdrop .poster-frame::after { display: none; }
+  .projection-room .recommendation-card .recommendation-copy,
+  .projection-room .recommendation-card.is-primary.has-backdrop .recommendation-copy { padding: 22px 0 16px; }
+  .projection-room .recommendation-card .recommendation-copy h3,
+  .projection-room .recommendation-card.is-primary .recommendation-copy h3 { font-size: 38px; }
+  .projection-room .recommendation-card .recommendation-copy > p { font-size: 16px; margin-bottom: 12px; }
+  .projection-room .year { margin-bottom: 14px; }
+  .projection-room .recommendation-card.is-primary .open-dossier { width: 100%; text-align: center; min-height: 44px; }
+  .projection-room .recommendation-card:not(.has-backdrop).has-poster .recommendation-card__button,
+  .projection-room .recommendation-card.is-primary:not(.has-backdrop).has-poster .recommendation-card__button { display: grid; grid-template-columns: 30% minmax(0, 1fr); gap: 18px; padding: 22px 0; min-height: 0; align-items: start; }
+  .projection-room .recommendation-card:not(.has-backdrop).has-poster .recommendation-copy { display: block; }
+  .projection-room .recommendation-card:not(.has-backdrop) .poster-frame { grid-column: auto; grid-row: auto; }
+  .projection-room .recommendation-card:not(.has-backdrop) .recommendation-copy h3 { font-size: 30px; }
+  .projection-room .facet-disclosure { padding: 0; margin-bottom: 20px; }
+  .projection-dossier .dossier-scroll { padding: 0 20px; }
+  .projection-dossier .dossier-layout, .projection-dossier .dossier-layout.has-backdrop { display: block; padding: 20px 0; }
+  .projection-dossier .dossier-poster, .projection-dossier .dossier-poster.has-backdrop { position: static; aspect-ratio: 16 / 10; height: auto; max-height: none; margin-bottom: 24px; }
+  .projection-dossier .dossier-poster:not(.has-backdrop) { width: 110px; aspect-ratio: 2 / 3; float: left; margin: 0 20px 18px 0; }
+  .projection-dossier .dossier-introduction { min-height: 165px; margin-bottom: 20px; padding-bottom: 16px; }
+  .projection-dossier .dossier-title-row h2 { font-size: 38px; }
+  .projection-dossier .dossier-facts { font-size: 13px; }
+  .projection-dossier .dossier-columns { clear: both; display: block; }
+  .projection-dossier .dossier-reel__films { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .projection-dossier .dossier-reel__films button { gap: 4px; min-height: 84px; padding-right: 4px; }
+  .projection-dossier .dossier-reel__films span { font-size: 19px; padding: 8px 4px; }
+  .projection-dossier .dossier-table { margin: 0 -10px; }
+}
+
+/* Quiet, reversible taste controls, outside the film's dossier-opening button. */
+.like-film { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 8px 12px; background: transparent; border: 1px solid var(--line); border-radius: 2px; color: var(--muted); font: 14px var(--font-sans), sans-serif; cursor: pointer; }
+.like-film > span { font-size: 21px; line-height: 1; }
+.like-film:hover, .like-film[aria-pressed="true"] { color: var(--gold); border-color: var(--gold); }
+.reel-like { float: right; position: relative; z-index: 1; margin: 2px 32px 8px 20px; }
+.recommendation-card::after { content: ''; display: block; clear: both; }
+.taste-history { border-top: 1px solid var(--line); margin: 32px 0 0; padding: 22px 0; color: var(--muted); }
+.taste-history > summary { cursor: pointer; min-height: 44px; color: var(--white); font: 25px var(--font-display), Georgia, serif; }
+.taste-history > summary span { margin-left: 16px; font: 13px var(--font-sans), sans-serif; color: var(--muted); }
+.taste-history p { max-width: 70ch; font-size: 15px; line-height: 1.7; }
+.taste-history ul { padding: 0; list-style: none; max-height: 320px; overflow: auto; max-width: 740px; }
+.taste-history li { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 5px 0; border-bottom: 1px solid var(--line); }
+.taste-history li small { margin-left: 8px; }
+.taste-history button { min-height: 44px; padding: 8px 12px; background: transparent; color: var(--gold); border: 1px solid var(--line); cursor: pointer; }
+@media (max-width:760px) { .reel-like { margin-right: 0; } }
+.projection-dossier .ai-facet-tab { min-height: 138px; background: transparent; }
+.projection-dossier .ai-facet-tab strong { font: 21px/1.15 var(--font-display), Georgia, serif; }
+.projection-dossier .ai-facet-tab__explanation { display: none; }
+.projection-dossier .quality-notes { margin-top: 16px; }
+.projection-dossier .quality-notes summary { min-height: 44px; cursor: pointer; color: var(--muted); font-size: 13px; }
+.projection-dossier .quality-notes p { color: var(--muted); font-size: 14px; line-height: 1.6; }
+.projection-dossier .quality-notes strong { display: block; color: var(--white); margin-bottom: 4px; font-weight: 500; }
+
+.projection-room .request-copy button { display: inline-flex; align-items: center; gap: 10px; }
+.projection-room .request-copy button span { margin: 0; }
+.projection-dossier .dossier-title-row .like-film { margin-left: auto; align-self: center; flex-shrink: 0; }
+@media (max-width:760px) {
+  .projection-dossier .dossier-title-row { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
+  .projection-dossier .dossier-title-row h2 { width: 100%; }
+  .projection-dossier .dossier-title-row > span { display: block; margin: 0; }
+  .projection-dossier .dossier-title-row .like-film { margin-left: 0; }
+}

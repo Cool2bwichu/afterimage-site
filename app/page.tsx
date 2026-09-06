@@ -10,6 +10,7 @@ import { animateFacetToLane } from './lib/light-table-motion';
 import { fetchFilmEnrichment, persistableEnrichment } from './lib/enrichment-client';
 import type { FilmEnrichment } from './lib/movie-metadata';
 import { movieKey } from './lib/movie-metadata';
+import { MAX_LIKED_FILMS, TASTE_STORAGE_KEY, parseLikedFilms, toggleLikedFilm, type LikedFilm } from './lib/taste-profile';
 import type { AfterimageResultV2, ExcludedFilm, DevelopInput, Experience } from './lib/reel-state';
 import { GenerationPollError, pollGeneration } from './lib/generation-poller';
 import {
@@ -67,6 +68,8 @@ export default function Home() {
   const [selectedRecommendation, setSelectedRecommendation] = useState<number | null>(null);
   const [dossierOpener, setDossierOpener] = useState<HTMLElement | null>(null);
   const [excludedFilms, setExcludedFilms] = useState<ExcludedFilm[]>([]);
+  const [likedFilms, setLikedFilms] = useState<LikedFilm[]>([]);
+  const likedKeys = useMemo(() => new Set(likedFilms.map(film => movieKey(film.title, film.year))), [likedFilms]);
   const [hydrated, setHydrated] = useState(false);
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
@@ -111,6 +114,7 @@ export default function Home() {
     const hydration = window.setTimeout(() => {
       try {
         const saved = parseStoredState(localStorage.getItem(STORAGE_KEY));
+        setLikedFilms(parseLikedFilms(localStorage.getItem(TASTE_STORAGE_KEY)));
         const requested = new URLSearchParams(window.location.search).get('experience');
         const mode = requested === null ? saved.experience : requested === LIGHT_TABLE_EXPERIENCE ? LIGHT_TABLE_EXPERIENCE : undefined;
         setExperience(mode);
@@ -133,6 +137,35 @@ export default function Home() {
       }
     }, 0);
     return () => window.clearTimeout(hydration);
+  }, []);
+
+  function saveLikes(next: LikedFilm[]) {
+    try {
+      localStorage.setItem(TASTE_STORAGE_KEY, JSON.stringify(next));
+      setLikedFilms(next);
+      return true;
+    } catch {
+      setNotice('This browser could not save your Likes. Please free some browser storage and try again.');
+      return false;
+    }
+  }
+
+  function toggleLike(film: LikedFilm) {
+    const wasLiked = likedKeys.has(movieKey(film.title, film.year));
+    try {
+      if (saveLikes(toggleLikedFilm(likedFilms, film))) {
+        if (!wasLiked) setExcludedFilms(current => current.filter(item => movieKey(item.title, item.year) !== movieKey(film.title, film.year)));
+        setNotice(wasLiked ? `${film.title} removed from your taste history.` : `${film.title} liked. Future reels will gently reflect your taste.${reelLocked ? ' The reel already developing will keep its original request.' : ''}`);
+      }
+    } catch (error) { setNotice(error instanceof Error ? error.message : 'The Like could not be saved.'); }
+  }
+
+  useEffect(() => {
+    const syncLikes = (event: StorageEvent) => {
+      if (event.storageArea === localStorage && (event.key === TASTE_STORAGE_KEY || event.key === null)) setLikedFilms(parseLikedFilms(event.newValue));
+    };
+    window.addEventListener('storage', syncLikes);
+    return () => window.removeEventListener('storage', syncLikes);
   }, []);
 
   useEffect(() => {
@@ -374,6 +407,8 @@ export default function Home() {
     };
     try { input = withCurrentExclusions(input, excludedFilms); }
     catch (inputError) { setError(inputError instanceof Error ? inputError.message : 'The blend could not be submitted.'); return; }
+    // Taste is a separate background signal; never fold it into the explicit brief or selected qualities.
+    input = { ...input, likedFilms: likedFilms.map(({title, year}) => ({title, year})) };
     if (
       (!canDevelop(input.films, input.creativeBrief) && !selectionCount(input.selectedFacets ?? {})) ||
       connection !== 'connected' ||
@@ -472,6 +507,7 @@ export default function Home() {
   }
 
   function markNotInterested(recommendation: ExcludedFilm) {
+    if (likedKeys.has(movieKey(recommendation.title, recommendation.year)) && !saveLikes(toggleLikedFilm(likedFilms, recommendation))) return;
     setExcludedFilms((current) => normalizeExcludedFilms([...current, recommendation]));
     setNotice(`${recommendation.title} will stay out of future reels.`);
     setSelectedRecommendation(null);
@@ -539,8 +575,18 @@ export default function Home() {
       ? 'Reconnecting to your reel'
       : jobStatus === 'queued' ? 'Your reel is queued' : 'Your reel is developing';
 
+  const lightTable = lightTableEnabled && (result?.fingerprint || selectionCount(selectedFacets) > 0) ? <LightTable
+    embedded={selectedRecommendation !== null}
+    selectedFacets={selectedFacets} locked={reelLocked} canSubmit={connection === 'connected'}
+    onRemove={channel => {
+      const next = removeFacet(selectedFacets,channel);
+      setSelectedFacets(next);
+      if (!selectionCount(next)) setSelectedReelIdentity('');
+    }}
+    onClear={clearFacetSelections} onDevelop={developBlend} /> : null;
+
   return (
-    <main data-ready={hydrated} className={`site-shell${lightTableEnabled ? ' has-light-table' : ''}${result ? ' has-reel' : ''}`}
+    <main data-ready={hydrated} className={`site-shell projection-room${lightTableEnabled ? ' has-light-table' : ''}${result ? ' has-reel' : ''}`}
       style={{ '--reel-color': result?.palette[2] || '#254438' } as CSSProperties}>
       <div className="wrap">
         <header className="masthead">
@@ -565,8 +611,10 @@ export default function Home() {
           <p className="subtitle">Add films you love, describe what you are searching for,
             or combine both.</p>
         </div> : <section className="request-summary" aria-label="Current reel references">
-          <div><span className="panel-label">Your starting point</span><p>{result.sourceFilms.length ? result.sourceFilms.join(' · ') : 'A blend of selected qualities'}</p></div>
+          <div className="request-copy"><span className="panel-label">Your request</span><p>{displayedInput?.creativeBrief || (result.sourceFilms.length ? 'A reel from the films you love.' : 'A blend of selected qualities')}</p>
           <button type="button" onClick={() => setComposerOpen(!composerOpen)} disabled={reelLocked}>{composerOpen ? 'Close inputs' : 'Refine request'} <span aria-hidden="true">{composerOpen ? '−' : '+'}</span></button>
+          </div>
+          {result.sourceFilms.length ? <div className="request-references"><span className="panel-label">Reference films</span><p>{result.sourceFilms.join(' · ')}</p></div> : null}
         </section>}
 
         {connection !== 'connected' && connection !== 'checking' ? (
@@ -731,6 +779,8 @@ export default function Home() {
                   index={index}
                   metadata={metadataByKey[movieKey(recommendation.title, recommendation.year)]}
                   enrichmentPending={enrichmentPending}
+                  liked={likedKeys.has(movieKey(recommendation.title, recommendation.year))}
+                  onToggleLike={() => toggleLike(recommendation)}
                   selectedFacets={selectedFacets}
                   onSelectFacet={lightTableEnabled ? handleSelectFacet : undefined}
                   facetDisabled={reelLocked}
@@ -770,6 +820,12 @@ export default function Home() {
             </div>
 
             <FilmDossier
+              liked={selectedRecommendation !== null && likedKeys.has(movieKey(result.recommendations[selectedRecommendation].title, result.recommendations[selectedRecommendation].year))}
+              onToggleLike={() => { if (selectedRecommendation !== null) toggleLike(result.recommendations[selectedRecommendation]); }}
+              recommendations={result.recommendations}
+              metadataByKey={metadataByKey}
+              onSelectFilm={setSelectedRecommendation}
+              lightTable={lightTable}
               selection={selectedRecommendation === null ? null : {
                 recommendation: result.recommendations[selectedRecommendation],
                 index: selectedRecommendation,
@@ -794,6 +850,13 @@ export default function Home() {
           </section>
         ) : null}
 
+        {hydrated ? <details className="taste-history"><summary>Your taste <span>{likedFilms.length ? `${likedFilms.length} liked ${likedFilms.length === 1 ? 'film' : 'films'}` : 'No Likes yet'}</span></summary>
+          <p>Like films you have seen and loved. Shared patterns gently guide future discoveries; your current request and Light Table qualities come first. Saved in this browser, even when you start over.</p>
+          {likedFilms.length ? <><ul>{likedFilms.map(film => <li key={movieKey(film.title, film.year)}><span>{film.title} <small>{film.year}</small></span><button type="button" onClick={() => toggleLike(film)} aria-label={`Remove like for ${film.title}`}>Remove</button></li>)}</ul>
+          <button type="button" className="clear-taste" onClick={() => { if (window.confirm('Clear all liked films from your taste history? Your current reel will stay.')) { if (saveLikes([])) setNotice('Your taste history has been cleared.'); } }}>Clear taste history</button>
+          {likedFilms.length === MAX_LIKED_FILMS ? <p>Your history is full. Remove a Like to make room.</p> : null}</> : <p>Look for ♡ Like beside a recommendation or inside its dossier.</p>}
+        </details> : null}
+
         <section className="film-data-credits" aria-label="Film data credits">
           <details>
             <summary>Film Data Credits</summary>
@@ -809,14 +872,7 @@ export default function Home() {
           </details>
         </section>
         <footer>AFTERIMAGE · reasoned live, frame by frame</footer>
-        {lightTableEnabled && (result?.fingerprint || selectionCount(selectedFacets) > 0) ? <LightTable
-          selectedFacets={selectedFacets} locked={reelLocked} canSubmit={connection === 'connected'}
-          onRemove={channel => {
-            const next = removeFacet(selectedFacets,channel);
-            setSelectedFacets(next);
-            if (!selectionCount(next)) setSelectedReelIdentity('');
-          }}
-          onClear={clearFacetSelections} onDevelop={developBlend} /> : null}
+        {selectedRecommendation === null ? lightTable : null}
       </div>
     </main>
   );

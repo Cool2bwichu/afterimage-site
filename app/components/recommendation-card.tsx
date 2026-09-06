@@ -6,6 +6,7 @@ import type { FilmEnrichment } from '../lib/movie-metadata';
 import type { RecommendationV2 } from '../lib/reel-state';
 import { FACET_KEYS, type CinematicFacet, type FacetKey, type FacetSource, type SelectedFacets } from '../lib/light-table';
 import { FacetTab } from './facet-tab';
+import { LikeButton } from './like-button';
 
 export function RecommendationCard({
   recommendation,
@@ -16,6 +17,8 @@ export function RecommendationCard({
   selectedFacets,
   onSelectFacet,
   facetDisabled = false,
+  liked = false,
+  onToggleLike,
 }: {
   recommendation: RecommendationV2;
   index: number;
@@ -24,12 +27,14 @@ export function RecommendationCard({
   onOpen: (event: MouseEvent<HTMLButtonElement>) => void;
   selectedFacets?: SelectedFacets;
   facetDisabled?: boolean;
+  liked?: boolean;
+  onToggleLike?: () => void;
   onSelectFacet?: (channel: FacetKey, facet: CinematicFacet, source: FacetSource, trigger: HTMLButtonElement) => void;
 }) {
   const matched = metadata?.status === 'matched' ? metadata : null;
   const [loadedPosterUrl, setLoadedPosterUrl] = useState<string | null>(null);
   const [failedArtwork, setFailedArtwork] = useState<Set<string>>(() => new Set());
-  const backdropUrl = index === 0 && matched?.backdropUrl && !failedArtwork.has(matched.backdropUrl) ? matched.backdropUrl : null;
+  const backdropUrl = matched?.backdropUrl && !failedArtwork.has(matched.backdropUrl) ? matched.backdropUrl : null;
   const posterUrl = backdropUrl || (matched?.posterUrl && !failedArtwork.has(matched.posterUrl) ? matched.posterUrl : null);
   const showPoster = Boolean(posterUrl);
   const showPlaceholder = !showPoster && enrichmentPending && !metadata;
@@ -63,7 +68,8 @@ export function RecommendationCard({
           <span className="open-dossier">Open film dossier <b aria-hidden="true">↗</b></span>
         </div>
       </button>
-      {recommendation.facets && onSelectFacet ? <details className="facet-disclosure" open={index === 0 ? true : undefined}>
+      {onToggleLike ? <div className="reel-like"><LikeButton film={recommendation} liked={liked} onToggle={onToggleLike} /></div> : null}
+      {recommendation.facets && onSelectFacet ? <details className="facet-disclosure">
         <summary>Borrow a quality <span aria-hidden="true">+</span></summary>
         <div className="ai-facet-rail" role="group" aria-label={`Borrow qualities from ${recommendation.title}`}>
         {FACET_KEYS.map(channel => <FacetTab key={channel} channel={channel} facet={recommendation.facets![channel]}

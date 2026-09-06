@@ -7,21 +7,22 @@ export function BlendSummary({ selectedFacets }: { selectedFacets: SelectedFacet
   const count = selectionCount(selectedFacets);
   return <div className="ai-blend-summary" aria-live="polite" aria-atomic="true">
     <span className="ai-blend-count">{count}/4</span>
-    <span><strong>{searchBreadth(selectedFacets)}</strong><small>{count ? 'Only your chosen qualities guide the next reel.' : 'Borrow a quality from any recommendation.'}</small></span>
+    <span><strong>{searchBreadth(selectedFacets)}</strong><small>{count ? 'Your chosen qualities lead the next reel.' : 'Borrow a quality from any recommendation.'}</small></span>
   </div>;
 }
 
-export function LightTable({ selectedFacets, locked, canSubmit, onRemove, onClear, onDevelop }: {
+export function LightTable({ selectedFacets, locked, canSubmit, onRemove, onClear, onDevelop, embedded = false }: {
   selectedFacets: SelectedFacets;
   locked: boolean;
   canSubmit: boolean;
   onRemove: (channel: FacetKey) => void;
   onClear: () => void;
   onDevelop: () => void;
+  embedded?: boolean;
 }) {
   const count = selectionCount(selectedFacets);
   const [expansionOverride, setExpansionOverride] = useState<boolean | null>(null);
-  const expanded = expansionOverride ?? count > 0;
+  const expanded = expansionOverride ?? (!embedded && count > 0);
   const [height, setHeight] = useState(80);
   const tableRef = useRef<HTMLElement>(null);
   const toggleRef = useRef<HTMLButtonElement>(null);
@@ -45,11 +46,12 @@ export function LightTable({ selectedFacets, locked, canSubmit, onRemove, onClea
   }
 
   return <>
-    <div aria-hidden="true" style={{ height: height + 28 }} />
+    {!embedded ? <div aria-hidden="true" style={{ height: height + 28 }} /> : null}
     <aside ref={tableRef} className={`ai-light-table ${count ? 'has-selections' : 'is-empty'} ${expanded ? 'is-expanded' : ''}`} aria-label="The Light Table">
       <header className="ai-light-table__header">
         <div><span className="ai-kicker">Remix the reel</span><h2 ref={titleRef} tabIndex={-1}>The Light Table</h2></div>
         <BlendSummary selectedFacets={selectedFacets} />
+        {!expanded && count > 0 ? <div className="ai-selected-summary">{FACET_KEYS.filter(channel => selectedFacets[channel]).map(channel => <span key={channel} className={FACET_META[channel].className}><i aria-hidden="true" />{selectedFacets[channel]!.label}<small>{selectedFacets[channel]!.source.title}</small></span>)}</div> : null}
         <button type="button" className="ai-light-table__desktop-toggle" aria-expanded={expanded} aria-controls="ai-light-table-body" onClick={() => setExpansionOverride(!expanded)}>{expanded ? 'Collapse −' : 'Expand +'}</button>
       </header>
       <button ref={toggleRef} className="ai-light-table__mobile-toggle" type="button" aria-expanded={expanded} aria-controls="ai-light-table-body" onClick={() => setExpansionOverride(!expanded)}>
