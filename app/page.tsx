@@ -4,6 +4,7 @@ import { FormEvent, type CSSProperties, useCallback, useEffect, useMemo, useRef,
 import { FilmDossier } from './components/film-dossier';
 import { AtlasWorkspace } from './components/atlas';
 import { ATLAS_STORAGE_KEY, buildAtlasInput, type AtlasInput } from './lib/atlas';
+import { ATLAS_TRAIL_STORAGE_KEY } from './lib/atlas-trail';
 import { RecommendationCard } from './components/recommendation-card';
 import { SearchFingerprint } from './components/search-fingerprint';
 import { LightTable } from './components/light-table';
@@ -555,7 +556,7 @@ export default function Home() {
   function startOver() {
     if (resetLocked || startLockRef.current) return;
     setAtlasTarget(null);
-    try { localStorage.removeItem(ATLAS_STORAGE_KEY); } catch { /* The current view still resets. */ }
+    try { localStorage.removeItem(ATLAS_STORAGE_KEY); localStorage.removeItem(ATLAS_TRAIL_STORAGE_KEY); } catch { /* The current view still resets. */ }
     setAtlasResetRevision(current => current + 1);
     setFilms([]);
     setDraft('');

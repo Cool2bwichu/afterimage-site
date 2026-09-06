@@ -1,15 +1,14 @@
 'use client';
 
 import { memo, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
-import { ATLAS_STORAGE_KEY, atlasInputKey, parseAtlas, type Atlas, type AtlasInput } from '../lib/atlas';
+import { ATLAS_STORAGE_KEY, atlasInputKey, parseAtlas, type AtlasInput } from '../lib/atlas';
+import { ATLAS_TRAIL_STORAGE_KEY, MAX_ATLAS_MAPS, activeAtlasStop, emptyAtlasTrail, finishAtlasMap, moveAtlasTrail, parseAtlasTrail, updateAtlasView, visitAtlasMap } from '../lib/atlas-trail';
 import { FACET_KEYS, FACET_META, type CinematicFacet, type FacetKey, type FacetSource, type SelectedFacets } from '../lib/light-table';
 import { parseEnrichmentResponse, movieKey, imdbUrl, type FilmEnrichment } from '../lib/movie-metadata';
-import { isGenerationJobId, parseJobStart } from '../lib/generation-state';
+import { parseJobStart } from '../lib/generation-state';
 import { LikeButton } from './like-button';
 import { FacetTab } from './facet-tab';
 
-type Pending = { jobId: string; inputKey: string; anchor: FacetSource };
-type Saved = { atlas: Atlas | null; inputKey: string; pending: Pending | null };
 type Props = {
   target: AtlasInput | null; opener: HTMLElement | null; connected: boolean; preferSaved: boolean;
   onClose: () => void; onBusy: (busy: boolean) => void;
@@ -28,6 +27,10 @@ const LENS_LABELS: Record<FacetKey, string> = {
   howItSpeaks: 'Storytelling & dialogue',
 };
 const AFFINITY_DESCRIPTIONS = { close: 'Strongly shared', echo: 'A related quality', contrast: 'A different approach' };
+function requestCaption(inputKey: string) {
+  try { const request = JSON.parse(inputKey)[1]; return request.creativeBrief || request.films.join(' + ') || 'Selected qualities'; }
+  catch { return 'Selected qualities'; }
+}
 
 function Artwork({ film, metadata, portrait = false }: { film: FacetSource; metadata?: FilmEnrichment; portrait?: boolean }) {
   const [failed, setFailed] = useState<string[]>([]);
@@ -60,41 +63,37 @@ const StarField = memo(function StarField() {
 
 export function AtlasWorkspace(props: Props) {
   const { target, opener, onClose, onBusy, connected, preferSaved, metadataByKey, likedKeys, onLike, onExplore, selectedFacets, onBorrow, lightTable } = props;
-  const [saved, setSaved] = useState<Saved>({ atlas: null, inputKey: '', pending: null });
+  const [saved, setSaved] = useState(emptyAtlasTrail);
   const [ready, setReady] = useState(false);
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState('');
-  const [selected, setSelected] = useState(-1);
-  const [lens, setLens] = useState<FacetKey | 'all'>('all');
   const [metadata, setMetadata] = useState<Record<string, FilmEnrichment>>({});
   const [expanded, setExpanded] = useState(false);
   const [pollRevision, setPollRevision] = useState(0);
   const dialog = useRef<HTMLDialogElement>(null);
+  const trailNavigation = useRef<HTMLElement>(null);
   const back = useRef<HTMLButtonElement>(null);
   const lock = useRef(false);
+  const navigationRevision = useRef(0);
   const processedTarget = useRef<AtlasInput | null>(null);
   const inputRef = useRef(target);
   useEffect(() => { inputRef.current = target; }, [target]);
   const busy = starting || Boolean(saved.pending);
-  const atlas = saved.atlas;
+  const stop = activeAtlasStop(saved);
+  const atlas = stop?.atlas ?? null;
+  const selected = stop?.view.selected ?? -1;
+  const lens = stop?.view.lens ?? 'all';
   const active = atlas ? selected < 0 ? atlas.anchor : atlas.neighbors[selected] : null;
   const neighbor = atlas ? atlas.neighbors[selected < 0 ? 0 : selected] : null;
   const allMetadata = { ...metadataByKey, ...metadata };
   const getMetadata = (film: FacetSource) => allMetadata[movieKey(film.title, film.year)];
-  let requestLabel = 'the selected qualities';
-  try {
-    const request = JSON.parse(saved.inputKey)[1];
-    requestLabel = request.creativeBrief || request.films.join(' + ') || requestLabel;
-  } catch { /* No complete map yet. */ }
+  const requestLabel = requestCaption(stop?.inputKey || '');
 
   useEffect(() => {
     const timer = setTimeout(() => {
       try {
-        const raw = JSON.parse(localStorage.getItem(ATLAS_STORAGE_KEY) || 'null');
-        if (raw) {
-          const pending = raw.pending;
-          setSaved({ atlas: parseAtlas(raw.atlas), inputKey: typeof raw.inputKey === 'string' ? raw.inputKey : '', pending: pending && isGenerationJobId(pending.jobId) && typeof pending.inputKey === 'string' && typeof pending.anchor?.title === 'string' && /^\d{4}$/.test(pending.anchor?.year) ? pending : null });
-        }
+        const read = (key: string) => { try { return JSON.parse(localStorage.getItem(key) || 'null'); } catch { return null; } };
+        setSaved(parseAtlasTrail(read(ATLAS_TRAIL_STORAGE_KEY), read(ATLAS_STORAGE_KEY)));
       } catch { /* A damaged cache cannot change the reel. */ }
       setReady(true);
     }, 0);
@@ -102,7 +101,7 @@ export function AtlasWorkspace(props: Props) {
   }, []);
   useEffect(() => {
     if (!ready) return;
-    try { localStorage.setItem(ATLAS_STORAGE_KEY, JSON.stringify(saved)); }
+    try { localStorage.setItem(ATLAS_TRAIL_STORAGE_KEY, JSON.stringify(saved)); }
     catch { /* Browsing still works when storage is unavailable. */ }
   }, [ready, saved]);
   useEffect(() => { onBusy(busy); }, [busy, onBusy]);
@@ -110,13 +109,14 @@ export function AtlasWorkspace(props: Props) {
   async function develop(input: AtlasInput) {
     if (lock.current || saved.pending) return;
     lock.current = true; setStarting(true); setError('');
+    const startedAtNavigation = navigationRevision.current;
     try {
       const response = await fetch('/api/atlas/generations', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input), signal: AbortSignal.timeout(15000) });
       const raw = await response.json();
       if (!response.ok) throw new Error(response.status === 409 ? 'Another reel or Atlas is developing. Return to it, then try again.' : 'The Atlas could not start. Your reel is still here.');
       const job = parseJobStart(raw);
       if (!job) throw new Error('The Atlas service returned an incomplete response.');
-      setSaved(current => ({ ...current, pending: { jobId: job.jobId, inputKey: atlasInputKey(input), anchor: input.anchor } }));
+      setSaved(current => ({ ...current, pending: { jobId: job.jobId, inputKey: atlasInputKey(input), anchor: input.anchor, followOnComplete: startedAtNavigation === navigationRevision.current } }));
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'The Atlas could not start.'); }
     finally { lock.current = false; setStarting(false); }
   }
@@ -125,8 +125,11 @@ export function AtlasWorkspace(props: Props) {
     if (!target || !ready || processedTarget.current === target) return;
     const timer = setTimeout(() => {
       processedTarget.current = target;
-      setSelected(-1); setLens('all'); setError('');
-      if (saved.pending || (preferSaved && saved.atlas) || saved.inputKey === atlasInputKey(target)) return;
+      setError('');
+      if (preferSaved && atlas) return;
+      const cached = saved.maps.find(map => map.inputKey === atlasInputKey(target));
+      if (cached) { setSaved(current => visitAtlasMap(current, cached.id)); return; }
+      if (saved.pending) return;
       if (!connected) { setError('Connect the film service from your reel to develop an Atlas.'); return; }
       void develop(target);
     }, 0);
@@ -153,7 +156,7 @@ export function AtlasWorkspace(props: Props) {
         if (job.status === 'complete') {
           const result = parseAtlas(job.reel);
           if (!result || movieKey(result.anchor.title, result.anchor.year) !== movieKey(pending.anchor.title, pending.anchor.year)) throw Object.assign(new Error('The Atlas returned incomplete connections. Please try again.'), { terminal: true, expired: true });
-          if (!controller.signal.aborted) { setSaved({ atlas: result, inputKey: pending.inputKey, pending: null }); setSelected(-1); setError(''); }
+          if (!controller.signal.aborted) { setSaved(current => finishAtlasMap(current, pending.jobId, result)); setError(''); }
           return;
         }
         if (job.status === 'failed') throw Object.assign(new Error('We could not finish and verify this map. Your previous Atlas and reel are preserved.'), { terminal: true, expired: true });
@@ -209,7 +212,29 @@ export function AtlasWorkspace(props: Props) {
     };
   }, [isOpen, opener, onClose]);
 
-  function select(index: number) { setSelected(index); }
+  function select(index: number) { setSaved(current => updateAtlasView(current, { selected: index })); }
+  function setLens(value: FacetKey | 'all') { setSaved(current => updateAtlasView(current, { lens: value })); }
+  function travel(cursor: number) {
+    navigationRevision.current += 1;
+    setSaved(current => moveAtlasTrail(current, cursor));
+    if (!saved.pending) setError('');
+    dialog.current?.scrollTo({ top: 0, behavior: 'instant' });
+  }
+  function revisit(id: string) {
+    navigationRevision.current += 1;
+    setSaved(current => visitAtlasMap(current, id));
+    if (!saved.pending) setError('');
+    dialog.current?.scrollTo({ top: 0, behavior: 'instant' });
+  }
+  useEffect(() => {
+    const navigation = trailNavigation.current;
+    if (!navigation) return;
+    const revealCurrent = () => navigation.querySelector('[aria-current=step]')?.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'instant' });
+    revealCurrent();
+    const observer = new ResizeObserver(revealCurrent);
+    observer.observe(navigation);
+    return () => observer.disconnect();
+  }, [saved.cursor, saved.route, isOpen]);
   const activeMetadata = active ? getMetadata(active) : undefined;
   const verified = activeMetadata?.status === 'matched' ? activeMetadata : null;
   const link = imdbUrl(verified?.imdbId);
@@ -225,6 +250,21 @@ export function AtlasWorkspace(props: Props) {
       <header className="atlas-masthead"><div className="atlas-brand">AFTERIMAGE<small>Better films find you</small></div>
         <nav aria-label="Atlas navigation"><button className="is-active" aria-current="page" onClick={() => { setExpanded(false); dialog.current?.scrollTo({ top: 0, behavior: 'instant' }); }}>Atlas</button><button ref={back} onClick={onClose}>Your reel <span aria-hidden="true">↗</span></button></nav><em>Different stories.<br />The same human longing.</em>
       </header>
+      {saved.maps.length > 1 ? <nav className="atlas-trail" aria-label="Atlas exploration trail" ref={trailNavigation}>
+        <span className="atlas-trail-label">Your trail</span>
+        <button className="atlas-trail-arrow" disabled={saved.cursor <= 0} onClick={() => travel(saved.cursor - 1)} aria-label="Previous map in your trail">←</button>
+        <ol>{saved.route.map((id, index) => {
+          const map = saved.maps.find(item => item.id === id)!;
+          return <li key={`${id}-${index}`}><button onClick={() => travel(index)} aria-current={index === saved.cursor ? 'step' : undefined} title={`${map.atlas.anchor.title} (${map.atlas.anchor.year})`}><small>{String(index + 1).padStart(2, '0')}</small><span>{map.atlas.anchor.title}</span></button></li>;
+        })}</ol>
+        <button className="atlas-trail-arrow" disabled={saved.cursor >= saved.route.length - 1} onClick={() => travel(saved.cursor + 1)} aria-label="Next map in your trail">→</button>
+        <details className="atlas-visited"><summary>Visited <span>{saved.maps.length}</span><i aria-hidden="true">⌄</i></summary><div>
+          <p>Visited maps<small>Return without developing again.</small></p>
+          {[...saved.maps].reverse().map(map => <button key={map.id} aria-current={map.id === stop?.id ? 'page' : undefined} onClick={event => { revisit(map.id); const menu = event.currentTarget.closest('details'); if (menu) { menu.open = false; menu.querySelector('summary')?.focus(); } }}><strong>{map.atlas.anchor.title} <small>{map.atlas.anchor.year}</small></strong><span>{requestCaption(map.inputKey)}</span>{map.id === stop?.id ? <i>Here</i> : null}</button>)}
+          <small>Your {MAX_ATLAS_MAPS} most recently visited maps stay in this browser.</small>
+        </div></details>
+      </nav> : null}
+      {saved.readyId ? <div className="atlas-trail-ready" role="status">A new map is ready.<button onClick={() => revisit(saved.readyId!)}>Open {saved.maps.find(map => map.id === saved.readyId)?.atlas.anchor.title} ↗</button></div> : null}
       <div className="atlas-body">
         <section className="atlas-film-panel">
           <button className="atlas-back" onClick={onClose}>← <span>Back to your reel</span></button>

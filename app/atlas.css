@@ -86,6 +86,185 @@
 .atlas-shell>* {
   position: relative;
 }
+.atlas-shell>.atlas-trail {
+  position: sticky;
+  top: 0;
+  z-index: 12;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 24px;
+  border-block: 1px solid var(--atlas-line);
+  background: #0a100deF;
+}
+.atlas-trail-label {
+  flex-shrink: 0;
+  margin-right: 12px;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: .2em;
+  color: var(--atlas-muted);
+}
+.atlas-trail button {
+  min-height: 44px;
+  border: 0;
+  background: none;
+}
+.atlas-trail .atlas-trail-arrow {
+  width: 36px;
+  flex-shrink: 0;
+  font-size: 19px;
+  color: var(--atlas-gold);
+}
+.atlas-trail button:disabled {
+  opacity: .25;
+  cursor: default;
+}
+.atlas-trail ol {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  margin: 0;
+  padding: 3px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #6b6343 transparent;
+  list-style: none;
+}
+.atlas-trail li {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+.atlas-trail li+li::before {
+  content: '/';
+  margin-right: 8px;
+  color: #647268;
+  font-size: 12px;
+}
+.atlas-trail li button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 6px;
+  color: #a4ada1;
+  font: 18px/1.15 var(--font-display),Georgia,serif;
+  border-bottom: 1px solid transparent;
+}
+.atlas-trail li button span {
+  max-width: 210px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.atlas-trail li small {
+  font: 9px/1.2 var(--font-sans),sans-serif;
+  color: #8c967f;
+}
+.atlas-trail button[aria-current=step] {
+  color: #e4cf92;
+  border-bottom-color: var(--atlas-gold);
+}
+.atlas-visited {
+  flex-shrink: 0;
+  margin-left: 10px;
+}
+.atlas-visited summary {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  gap: 9px;
+  cursor: pointer;
+  font-size: 11px;
+  list-style: none;
+}
+.atlas-visited summary::-webkit-details-marker {
+  display: none;
+}
+.atlas-visited summary span {
+  color: var(--atlas-gold);
+}
+.atlas-visited summary i {
+  color: var(--atlas-muted);
+  font-style: normal;
+}
+.atlas-visited>div {
+  position: absolute;
+  right: 24px;
+  top: calc(100% + 1px);
+  width: min(370px,calc(100vw - 32px));
+  max-height: min(65dvh,520px);
+  overflow-y: auto;
+  padding: 16px;
+  border: 1px solid #a6996755;
+  background: #0c130f;
+  box-shadow: 0 16px 35px #0009;
+}
+.atlas-visited>div>p {
+  font: 24px/1.1 var(--font-display),Georgia,serif;
+  padding-bottom: 12px;
+}
+.atlas-visited small {
+  font: 10px/1.4 var(--font-sans),sans-serif;
+  color: var(--atlas-muted);
+}
+.atlas-visited>div>p small {
+  display: block;
+  margin-top: 7px;
+}
+.atlas-visited>div>button {
+  position: relative;
+  display: block;
+  width: 100%;
+  border-top: 1px solid var(--atlas-line);
+  padding: 12px 30px 12px 0;
+  text-align: left;
+}
+.atlas-visited strong {
+  font: 21px/1.15 var(--font-display),Georgia,serif;
+}
+.atlas-visited strong small {
+  margin-left: 4px;
+}
+.atlas-visited>div>button>span {
+  display: block;
+  margin-top: 5px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--atlas-muted);
+  font-size: 10px;
+}
+.atlas-visited button i {
+  position: absolute;
+  right: 0;
+  top: 16px;
+  color: var(--atlas-gold);
+  font: 9px/1.2 var(--font-sans),sans-serif;
+}
+.atlas-visited>div>small {
+  display: block;
+  padding-top: 12px;
+  border-top: 1px solid var(--atlas-line);
+}
+.atlas-trail-ready {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 6px 16px;
+  background: #202417;
+  font-size: 12px;
+}
+.atlas-trail-ready button {
+  min-height: 44px;
+  color: var(--atlas-gold);
+  background: none;
+  border: 0;
+}
 .atlas-eyebrow,.atlas-section-title {
   font-size: 10px;
   line-height: 1.5;
@@ -1304,6 +1483,33 @@
   }
 }
 @media(max-width:760px) {
+  .atlas-trail .atlas-trail-arrow {
+    width: 44px;
+    min-width: 44px;
+  }
+  .atlas-shell>.atlas-trail {
+    padding: 3px 8px;
+    gap: 2px;
+  }
+  .atlas-trail-label {
+    display: none;
+  }
+  .atlas-trail li button {
+    font-size: 17px;
+  }
+  .atlas-trail li button span {
+    max-width: 160px;
+  }
+  .atlas-visited {
+    margin-left: 4px;
+  }
+  .atlas-visited summary {
+    padding: 0 8px;
+    gap: 6px;
+  }
+  .atlas-visited>div {
+    right: 8px;
+  }
   .atlas-shell {
     padding-left: 0;
   }
