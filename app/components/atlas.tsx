@@ -1,7 +1,7 @@
 'use client';
 
 import { memo, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
-import { ATLAS_STORAGE_KEY, atlasInputKey, parseAtlas, type Atlas, type AtlasInput, type AtlasNeighbor } from '../lib/atlas';
+import { ATLAS_STORAGE_KEY, atlasInputKey, parseAtlas, type Atlas, type AtlasInput } from '../lib/atlas';
 import { FACET_KEYS, FACET_META, type CinematicFacet, type FacetKey, type FacetSource, type SelectedFacets } from '../lib/light-table';
 import { parseEnrichmentResponse, movieKey, imdbUrl, type FilmEnrichment } from '../lib/movie-metadata';
 import { isGenerationJobId, parseJobStart } from '../lib/generation-state';
@@ -21,6 +21,13 @@ type Props = {
 const POSITIONS = [[29, 20], [75, 20], [14, 47], [88, 47], [30, 76], [74, 76]];
 const LABELS = [[39, 36], [63, 36], [29, 43], [73, 43], [32, 64], [70, 64]];
 const AFFINITY = { close: 'Close', echo: 'Echo', contrast: 'Contrast' };
+const LENS_LABELS: Record<FacetKey, string> = {
+  whereItLives: 'World & setting',
+  howItFeels: 'Mood & emotion',
+  howItLooks: 'Visual language',
+  howItSpeaks: 'Storytelling & dialogue',
+};
+const AFFINITY_DESCRIPTIONS = { close: 'Strongly shared', echo: 'A related quality', contrast: 'A different approach' };
 
 function Artwork({ film, metadata, portrait = false }: { film: FacetSource; metadata?: FilmEnrichment; portrait?: boolean }) {
   const [failed, setFailed] = useState<string[]>([]);
@@ -206,7 +213,6 @@ export function AtlasWorkspace(props: Props) {
   const activeMetadata = active ? getMetadata(active) : undefined;
   const verified = activeMetadata?.status === 'matched' ? activeMetadata : null;
   const link = imdbUrl(verified?.imdbId);
-  const compareFilms = atlas ? [atlas.anchor, ...(selected < 0 ? atlas.neighbors.slice(0, 3) : [atlas.neighbors[selected], ...atlas.neighbors.filter((_, i) => i !== selected).slice(0, 2)])] : [];
 
   if (!isOpen) return null;
 
@@ -241,29 +247,48 @@ export function AtlasWorkspace(props: Props) {
             <svg className="atlas-links" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><defs><filter id="atlas-glow"><feGaussianBlur stdDeviation=".3" /></filter></defs>
               {atlas?.neighbors.map((film, i) => {
                 const [x, y] = POSITIONS[i]; const path = `M 50 47 Q ${50 + (x - 50) * .22} ${y} ${x} ${y}`;
-                return <g key={i} className={`atlas-connection ${selected === i ? 'is-selected' : ''} ${lens === 'all' ? '' : film.lenses[lens].affinity}`}>
-                  <path className="atlas-link-halo" d={path} /><path d={path} /><path className="atlas-link-pulse" d={path} pathLength="100" />
+                return <g key={i} className={`atlas-connection${selected === i ? ' is-selected' : ''}`} data-affinity={lens === 'all' ? undefined : film.lenses[lens].affinity}>
+                  <path className="atlas-link-halo" d={path} /><path className="atlas-link-line" d={path} /><path className="atlas-link-pulse" d={path} pathLength="100" />
                 </g>;
               })}
             </svg>
             {atlas ? <>
               <button className={`atlas-node is-anchor${selected === -1 ? ' is-selected' : ''}`} style={{ '--x': '50%', '--y': '47%' } as CSSProperties} aria-label={`Select anchor film ${atlas.anchor.title}`} aria-pressed={selected === -1} onClick={() => select(-1)}><span className="atlas-node-image"><Artwork film={atlas.anchor} metadata={getMetadata(atlas.anchor)} /></span><span className="atlas-node-title">{atlas.anchor.title}<small>{atlas.anchor.year}</small></span></button>
-              {atlas.neighbors.map((film, i) => <button key={movieKey(film.title, film.year)} className={`atlas-node${selected === i ? ' is-selected' : ''}${lens === 'all' ? '' : ` affinity-${film.lenses[lens].affinity}`}`} style={{ '--x': `${POSITIONS[i][0]}%`, '--y': `${POSITIONS[i][1]}%`, '--arrival': `${i * 65 + 100}ms` } as CSSProperties} aria-label={`Explore ${film.title}: ${film.label}`} aria-pressed={selected === i} onClick={() => select(i)} onKeyDown={event => { if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') { event.preventDefault(); const index = (i + (event.key === 'ArrowRight' ? 1 : 5)) % 6; select(index); dialog.current?.querySelectorAll<HTMLButtonElement>('.atlas-node:not(.is-anchor)')[index]?.focus(); } }}><span className="atlas-node-image"><Artwork film={film} metadata={getMetadata(film)} /></span><span className="atlas-node-title">{film.title}<small>{film.year}</small></span></button>)}
-              {atlas.neighbors.map((film, i) => <span key={i} className={`atlas-edge-label${selected === i ? ' is-selected' : ''}`} style={{ left: `${LABELS[i][0]}%`, top: `${LABELS[i][1]}%` }}>{lens === 'all' ? film.label : AFFINITY[film.lenses[lens].affinity]}</span>)}
+              {atlas.neighbors.map((film, i) => <button key={movieKey(film.title, film.year)} className={`atlas-node${selected === i ? ' is-selected' : ''}`} data-affinity={lens === 'all' ? undefined : film.lenses[lens].affinity} style={{ '--x': `${POSITIONS[i][0]}%`, '--y': `${POSITIONS[i][1]}%`, '--arrival': `${i * 65 + 100}ms` } as CSSProperties} aria-label={`Explore ${film.title}: ${film.label}${lens === 'all' ? '' : `. ${FACET_META[lens].label}: ${AFFINITY[film.lenses[lens].affinity]}`}`} aria-pressed={selected === i} onClick={() => select(i)} onKeyDown={event => { if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') { event.preventDefault(); const index = (i + (event.key === 'ArrowRight' ? 1 : 5)) % 6; select(index); dialog.current?.querySelectorAll<HTMLButtonElement>('.atlas-node:not(.is-anchor)')[index]?.focus(); } }}><span className="atlas-node-image"><Artwork film={film} metadata={getMetadata(film)} /></span><span className="atlas-node-title">{film.title}<small>{film.year}</small></span></button>)}
+              {atlas.neighbors.map((film, i) => <span key={i} className={`atlas-edge-label${selected === i ? ' is-selected' : ''}`} data-affinity={lens === 'all' ? undefined : film.lenses[lens].affinity} style={{ left: `${LABELS[i][0]}%`, top: `${LABELS[i][1]}%` }}>{lens === 'all' ? film.label : AFFINITY[film.lenses[lens].affinity]}</span>)}
             </> : <div className="atlas-empty-orbit"><span />{saved.pending?.anchor.title || target?.anchor.title}<small>{saved.pending?.anchor.year || target?.anchor.year}</small></div>}
           </div>
-          <p className="atlas-mobile-caption" aria-live="polite">{selected >= 0 && neighbor ? <button onClick={() => dialog.current?.querySelector('.atlas-relationship')?.scrollIntoView({ block: 'start', behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' })}>{neighbor.label} · Read connection ↓</button> : "Choose a film to explore its connection."}</p>
-          <div className="atlas-lens-controls" aria-label="Connection lens"><span>Look through</span>{(['all', ...FACET_KEYS] as const).map(channel => <button key={channel} aria-pressed={lens === channel} onClick={() => setLens(channel)}>{channel === 'all' ? 'Whole film' : FACET_META[channel].compactLabel}</button>)}</div>
+          <p className="atlas-mobile-caption" data-affinity={selected >= 0 && neighbor && lens !== 'all' ? neighbor.lenses[lens].affinity : undefined} aria-live="polite">{selected >= 0 && neighbor ? <button onClick={() => dialog.current?.querySelector('.atlas-relationship')?.scrollIntoView({ block: 'start', behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' })}>{lens === 'all' ? neighbor.label : `${FACET_META[lens].compactLabel}: ${AFFINITY[neighbor.lenses[lens].affinity]}`} · Read connection ↓</button> : "Choose a film to explore its connection."}</p>
+          <div className="atlas-lens-controls" aria-label="Connection lens" aria-describedby={atlas ? 'atlas-line-key-note' : undefined}><span>Look through</span>{(['all', ...FACET_KEYS] as const).map(channel => <button key={channel} aria-pressed={lens === channel} onClick={() => setLens(channel)}>{channel === 'all' ? 'Whole film' : FACET_META[channel].compactLabel}</button>)}</div>
+          {atlas ? <div className="atlas-line-key" aria-label="Connection line key">
+            <div>{(Object.keys(AFFINITY) as Array<keyof typeof AFFINITY>).map(affinity => <span key={affinity} data-affinity={affinity}><i aria-hidden="true" /><span>{AFFINITY[affinity]}<small>{AFFINITY_DESCRIPTIONS[affinity]}</small></span></span>)}</div>
+            <p id="atlas-line-key-note" aria-live="polite">{lens === 'all' ? 'Choose a lens to color the connections.' : `${FACET_META[lens].label} · Select a film to read why.`}</p>
+          </div> : null}
           {atlas ? <><p className="atlas-thesis">{atlas.anchor.facets.howItFeels.label} · {atlas.anchor.facets.howItLooks.label}</p><div className="atlas-map-footer"><span>Shared qualities · Unexpected echoes</span><button onClick={() => setExpanded(!expanded)} aria-pressed={expanded}>{expanded ? 'Return to full Atlas' : 'Expand map'} <span aria-hidden="true">{expanded ? '−' : '↗'}</span></button></div></> : null}
         </section>
 
         {atlas && neighbor ? <aside className="atlas-insights" aria-label="Connection insights">
           <section className="atlas-why" aria-live="polite"><span className="atlas-section-title">{selected < 0 ? 'The thread through this Atlas' : `Why ${active?.title} belongs`} <i>↗</i></span><p>{selected < 0 ? atlas.thesis : neighbor.whyHere}</p><small>Drawn from this request: {requestLabel}</small></section>
-          <section className="atlas-comparison"><span className="atlas-section-title">Aesthetic DNA <span title="An editorial comparison, not a measured similarity score">ⓘ</span></span>
-            <div className="atlas-comparison-scroll"><table><caption className="sr-only">How these films connect to {atlas.anchor.title}. Select a comparison to inspect its explanation.</caption><thead><tr><th scope="col"><span className="sr-only">Quality</span></th>{compareFilms.map(film => <th scope="col" key={film.title}><button onClick={() => select(atlas.neighbors.indexOf(film as AtlasNeighbor))}><Artwork film={film} metadata={getMetadata(film)} /><span>{film.title}</span></button></th>)}</tr></thead><tbody>{FACET_KEYS.map(channel => <tr key={channel}><th scope="row">{FACET_META[channel].compactLabel}</th>{compareFilms.map((film, i) => <td key={film.title}>{i === 0 ? <span className="atlas-dna-anchor">Anchor</span> : <button className={`atlas-affinity ${(film as AtlasNeighbor).lenses[channel].affinity}`} onClick={() => { select(atlas.neighbors.indexOf(film as AtlasNeighbor)); setLens(channel); }} aria-label={`${film.title}, ${FACET_META[channel].label}: ${AFFINITY[(film as AtlasNeighbor).lenses[channel].affinity]}`}><i aria-hidden="true" /><span>{AFFINITY[(film as AtlasNeighbor).lenses[channel].affinity]}</span></button>}</td>)}</tr>)}</tbody></table></div>
-            <p className="atlas-comparison-note">Close / Echo / Contrast · Interpretive, not a score</p>
+          <section className="atlas-comparison atlas-relationship" aria-labelledby="atlas-comparison-title">
+            <h2 id="atlas-comparison-title" className="atlas-section-title">How they connect</h2>
+            {selected >= 0 ? <>
+              <div className="atlas-comparison-pair" aria-live="polite">
+                {[atlas.anchor, neighbor].map((film, index) => <div key={movieKey(film.title, film.year)}><Artwork film={film} metadata={getMetadata(film)} /><span><small>{index === 0 ? 'Center film' : 'Selected film'}</small><strong>{film.title}</strong></span></div>)}
+              </div>
+              <h3>{neighbor.label}</h3><p className="atlas-shared-quality">{neighbor.shared}</p>
+              <p className="atlas-comparison-hint">Explore a quality to see why.</p>
+              <div className="atlas-quality-list">{FACET_KEYS.map(channel => {
+                const { affinity, evidence } = neighbor.lenses[channel];
+                return <div className="atlas-quality" key={channel} data-affinity={affinity}>
+                  <button aria-expanded={lens === channel} aria-controls={`atlas-quality-${channel}`} onClick={() => setLens(lens === channel ? 'all' : channel)}>
+                    <span>{LENS_LABELS[channel]}</span><span className="atlas-affinity"><i aria-hidden="true" />{AFFINITY[affinity]}</span><span className="atlas-quality-toggle" aria-hidden="true">{lens === channel ? '−' : '+'}</span>
+                  </button>
+                  <div id={`atlas-quality-${channel}`} hidden={lens !== channel}><p><strong>{AFFINITY_DESCRIPTIONS[affinity]}.</strong> {evidence}</p></div>
+                </div>;
+              })}</div>
+              <details key={movieKey(neighbor.title, neighbor.year)}><summary>Where they differ <span>+</span></summary><p>{neighbor.difference}</p></details>
+            </> : <p className="atlas-comparison-empty">Choose a film on the map to see what it shares with <em>{atlas.anchor.title}</em> — and where it differs.</p>}
           </section>
-          {selected >= 0 || lens !== 'all' ? <section className="atlas-relationship" aria-live="polite"><span className="atlas-section-title">{neighbor.title} <i>↔</i> {atlas.anchor.title}</span><h3>{lens === 'all' ? neighbor.label : FACET_META[lens].label}</h3><p>{lens === 'all' ? neighbor.shared : neighbor.lenses[lens].evidence}</p><details><summary>Where they diverge <span>+</span></summary><p>{neighbor.difference}</p></details></section> : null}
           <section className="atlas-neighbors"><span className="atlas-section-title">Closest connections <span>01 — 03</span></span>{atlas.neighbors.slice(0, 3).map((film, i) => <button key={film.title} aria-pressed={selected === i} onClick={() => select(i)}><Artwork film={film} metadata={getMetadata(film)} /><span><strong>{film.title} <small>{film.year}</small></strong><em>{film.label}</em></span><i>↗</i></button>)}</section>
           <div className="atlas-small-panels"><section><span className="atlas-section-title">Further echoes</span>{atlas.neighbors.slice(3).map((film, i) => <button key={film.title} onClick={() => select(i + 3)}><Artwork film={film} metadata={getMetadata(film)} /><span>{film.title}<small>{film.label}</small></span></button>)}</section><section><span className="atlas-section-title">Follow this film</span><p>{selected < 0 ? "Choose a neighboring film to follow its connections." : "A new constellation, with your request still in view."}</p>{selected >= 0 ? <button className="atlas-new-map" disabled={busy || !connected} onClick={event => { if (active) onExplore(active, event.currentTarget); }}>Explore from<br /><strong>{active?.title}</strong> ↗</button> : null}</section></div>
         </aside> : null}
