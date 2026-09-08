@@ -6,6 +6,8 @@ The browser never receives a model credential. Its three server routes forward p
 
 ## Local development
 
+For working between this Mac and Codex Cloud, see [Local and cloud development](docs/local-and-cloud.md).
+
 1. Start `afterimage-subscription-bridge` on port 8788.
 2. Copy `.env.example` to `.env.local` and set the matching bridge URL and secret.
 3. Run `npm run dev` and open `http://localhost:3000`.
