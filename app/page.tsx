@@ -3,6 +3,7 @@
 import { FormEvent, type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FilmDossier } from './components/film-dossier';
 import { AtlasWorkspace } from './components/atlas';
+import { parseFilmSearchResults, type FilmSearchResult } from './lib/film-search';
 import { Landing, nextWelcomeFilm, type WelcomeFilm } from './components/landing';
 import { ATLAS_STORAGE_KEY, buildAtlasInput, type AtlasInput } from './lib/atlas';
 import { ATLAS_TRAIL_STORAGE_KEY } from './lib/atlas-trail';
@@ -65,6 +66,10 @@ export default function Home() {
   const lastAttemptRef = useRef<DevelopInput | undefined>(undefined);
   const lightTableEnabled = experience === LIGHT_TABLE_EXPERIENCE;
   const [draft, setDraft] = useState('');
+  const [atlasLookupBusy, setAtlasLookupBusy] = useState(false);
+  const [atlasChoices, setAtlasChoices] = useState<FilmSearchResult[]>([]);
+  const atlasLookupLock = useRef(false);
+  const createAtlasButton = useRef<HTMLButtonElement>(null);
   const [creativeBrief, setCreativeBrief] = useState('');
   const [result, setResult] = useState<AfterimageResultV2 | null>(null);
   const [metadataByKey, setMetadataByKey] = useState<Record<string, FilmEnrichment>>({});
@@ -103,8 +108,8 @@ export default function Home() {
   const filmInputRef = useRef<HTMLInputElement>(null);
   const startLockRef = useRef(false);
   const developing = starting || jobStatus === 'queued' || jobStatus === 'running' || jobStatus === 'reconnecting';
-  const reelLocked = developing || Boolean(activeJobId) || atlasBusy;
-  const resetLocked = starting || Boolean(activeJobId && jobStatus !== 'failed') || atlasBusy;
+  const reelLocked = developing || Boolean(activeJobId) || atlasBusy || atlasLookupBusy;
+  const resetLocked = starting || Boolean(activeJobId && jobStatus !== 'failed') || atlasBusy || atlasLookupBusy;
   const hasSession = Boolean(result || films.length || draft || creativeBrief || activeJobId || excludedFilms.length || selectionCount(selectedFacets));
   const showLanding = hydrated && !activeJobId && (welcomeRequested || (landingOpen && !result));
   const acceptedRetryInput = lightTableEnabled && activeJobId
@@ -398,7 +403,35 @@ export default function Home() {
     }
     setFilms((current) => [...current, film]);
     setDraft('');
+    setAtlasChoices([]);
     setNotice('');
+  }
+
+  async function createAtlasFromDraft(opener: HTMLElement) {
+    const query = draft.trim();
+    if (query.length < 2 || reelLocked || atlasLookupLock.current || connection !== 'connected') return;
+    atlasLookupLock.current = true;
+    setAtlasLookupBusy(true);
+    setAtlasChoices([]);
+    setNotice('');
+    try {
+      const response = await fetch(`/api/films/search?q=${encodeURIComponent(query)}`, { signal: AbortSignal.timeout(10000) });
+      if (!response.ok) throw new Error('Film search could not connect. Try again.');
+      const payload = await response.json();
+      if (!isRecord(payload) || !Array.isArray(payload.films)) throw new Error('Film search could not connect. Try again.');
+      const matches = parseFilmSearchResults(payload.films);
+      const exact = matches.filter(film => [film.title, `${film.title} (${film.year})`, `${film.title} ${film.year}`]
+        .some(title => title.toLocaleLowerCase() === query.toLocaleLowerCase()));
+      const film = exact.length === 1 ? exact[0] : matches.length === 1 ? matches[0] : null;
+      if (film) openAtlas(film, opener, false, true);
+      else if (matches.length) setAtlasChoices(matches);
+      else setNotice('No films found. Try another title or spelling.');
+    } catch {
+      setNotice('Film search could not connect. Try again.');
+    } finally {
+      atlasLookupLock.current = false;
+      setAtlasLookupBusy(false);
+    }
   }
 
   function removeFilm(index: number) {
@@ -625,12 +658,11 @@ export default function Home() {
     onClear={clearFacetSelections} onDevelop={developBlend} /> : null;
 
   function openAtlas(film: FacetSource, opener: HTMLElement, resume = false, fromSearch = false, mapRequest?: DevelopInput) {
-    if (!result) return;
     const request: DevelopInput = fromSearch ? {
       films: [`${film.title} (${film.year})`], creativeBrief: '',
       ...(lightTableEnabled ? { experience: LIGHT_TABLE_EXPERIENCE } : {}),
     } : mapRequest ? { ...mapRequest } : {
-      ...(displayedInput || { films: result.sourceFilms, creativeBrief }),
+      ...(displayedInput || { films: result?.sourceFilms || films, creativeBrief }),
       ...(lightTableEnabled ? { experience: LIGHT_TABLE_EXPERIENCE } : {}),
       ...(selectionCount(selectedFacets) ? { experience: LIGHT_TABLE_EXPERIENCE, selectedFacets } : {}),
     };
@@ -734,7 +766,7 @@ export default function Home() {
               id="film-input"
               ref={filmInputRef}
               value={draft}
-              onChange={(event) => setDraft(event.target.value)}
+              onChange={(event) => { setDraft(event.target.value); setAtlasChoices([]); }}
               placeholder="e.g. In the Mood for Love"
               maxLength={160}
               autoComplete="off"
@@ -748,6 +780,18 @@ export default function Home() {
             >
               + Add
             </button>
+            <button ref={createAtlasButton} className="add-button create-atlas-button" type="button"
+              disabled={reelLocked || draft.trim().length < 2 || connection !== 'connected'}
+              onClick={event => void createAtlasFromDraft(event.currentTarget)}>
+              {atlasLookupBusy ? 'Finding film…' : 'Create atlas'} <span aria-hidden="true">↗</span>
+            </button>
+            {atlasChoices.length ? <div className="composer-atlas-choices" aria-label="Choose a film for your atlas">
+              <p role="status">Which film? Choose a release to create its atlas.</p>
+              {atlasChoices.map(film => <button key={film.id} type="button" disabled={reelLocked || connection !== 'connected'}
+                onClick={event => { openAtlas(film, createAtlasButton.current || event.currentTarget, false, true); setAtlasChoices([]); }}>
+                <span>{film.title} <small>({film.year})</small></span><span aria-hidden="true">↗</span>
+              </button>)}
+            </div> : null}
           </form>
 
           <div className="chips" aria-live="polite">
