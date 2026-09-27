@@ -284,8 +284,8 @@ export function AtlasWorkspace(props: Props) {
       <div className="atlas-body">
         <section className="atlas-film-panel">
           <button className="atlas-back" onClick={onClose}>← <span>Back to your reel</span></button>
-          <span className="atlas-eyebrow">A film in connection</span><h1 id="atlas-title">Atlas</h1><i className="atlas-rule" />
-          <p className="atlas-introduction">Films are never alone.{' '}<br />They echo, respond,{' '}<br />and illuminate each other.</p>
+          <h1 id="atlas-title">Atlas</h1><i className="atlas-rule" />
+          <p className="atlas-introduction">Find the films that revolve around yours</p>
           {active ? <div className="atlas-film-detail" key={movieKey(active.title, active.year)}>
             <div className="atlas-portrait"><Artwork film={active} metadata={activeMetadata} portrait /><div><h2>{active.title}</h2><span>{active.year}</span>{verified?.directors.length ? <small>A film by<br />{verified.directors.join(' · ')}</small> : null}</div></div>
             <div className="atlas-film-actions"><LikeButton film={active} liked={likedKeys.has(movieKey(active.title, active.year))} onToggle={() => onLike(active)} />{link ? <a href={link} target="_blank" rel="noreferrer noopener">Film details ↗</a> : null}</div>
@@ -296,7 +296,6 @@ export function AtlasWorkspace(props: Props) {
         </section>
 
         <section className="atlas-center" aria-label="Film connection map">
-          <div className="atlas-map-heading"><span className="atlas-eyebrow">Its place in your Atlas</span><p>{atlas ? `Six connections to ${atlas.anchor.title}` : 'Finding the films that speak to each other'}</p></div>
           {busy || error ? <div className="atlas-progress" role={error ? 'alert' : 'status'}><span>{error || `Developing an Atlas around ${saved.pending?.anchor.title || target?.anchor.title}…`}</span>{!error ? <small>{atlas ? 'Your previous map stays here while this one develops.' : 'Considering connections and verifying film identities. This can take a few minutes.'}</small> : <button disabled={starting} onClick={() => { setError(''); if (saved.pending) setPollRevision(current => current + 1); else if (inputRef.current) void develop(inputRef.current); }}>{saved.pending ? 'Resume Atlas' : 'Try again'} ↗</button>}</div> : null}
           <div className={`atlas-map${atlas ? ' is-developed' : ' is-developing'}`}>
             <StarField />

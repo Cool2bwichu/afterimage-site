@@ -305,10 +305,23 @@ summary {
 }
 .chip-input-row {
   grid-area: input;
-  display: flex;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
   gap: 10px;
   align-self: start;
 }
+.chip-input-row input { grid-column: 1 / -1; }
+.chip-input-row .create-atlas-button { color: var(--gold); border-color: var(--gold-dim); }
+.composer-atlas-choices { grid-column: 1 / -1; padding-top: 4px; }
+.composer-atlas-choices p { margin: 0 0 8px; color: var(--muted); font-size: 14px; }
+.composer-atlas-choices button {
+  display: flex; justify-content: space-between; align-items: center; gap: 12px;
+  width: 100%; min-height: 48px; padding: 10px 12px; text-align: left;
+  border: 1px solid var(--line); background: var(--booth-2); color: var(--white);
+}
+.composer-atlas-choices button + button { margin-top: 6px; }
+.composer-atlas-choices button:hover:not(:disabled) { border-color: var(--gold); }
+.composer-atlas-choices small { color: var(--muted); }
 .chip-input-row input,
 .brief-field textarea {
   width: 100%;
