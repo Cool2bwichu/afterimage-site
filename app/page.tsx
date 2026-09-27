@@ -839,7 +839,7 @@ export default function Home() {
           <h1 className="title"><button type="button" aria-label="Afterimage home" onClick={goHome}>AFTERIMAGE<span className="brand-print" aria-hidden="true"><i /><i /><i /><i /></span></button></h1>
           {showLanding ? <nav className="welcome-home-nav" aria-label="Welcome navigation"><a href="#discover-afterimage">How it works</a><button onClick={() => enterReel()}>{hasSession ? 'Continue' : 'Begin'} <span aria-hidden="true">↗</span></button></nav> : <div className="masthead-actions">
             <button type="button" className="library-open-button" onClick={event => { setLibraryOpener(event.currentTarget); const url = new URL(location.href); url.hash = 'library'; history.pushState({ afterimageOverlay: true }, '', url); setLibraryOpen(true); }}>Library{watchlist.length ? ` (${watchlist.length})` : ''}</button>
-            {result ? <button type="button" className="atlas-open-button" disabled={developing} onClick={event => openAtlas(result.recommendations[0], event.currentTarget, true)}>Atlas</button> : null}
+            {result ? <button type="button" className="atlas-open-button" disabled={developing} onClick={event => openAtlas(result.recommendations[screeningIndex] || result.recommendations[0], event.currentTarget, true)}>Atlas</button> : null}
             <span className={`privacy-mark ${connection === 'connected' ? 'is-connected' : ''}`}>
               <i aria-hidden="true" />{connection === 'connected' ? 'Connected' : connection === 'checking' ? 'Connecting…' : 'Not connected'}
             </span>
@@ -1037,7 +1037,7 @@ export default function Home() {
               onExplore={(index, event) => openAtlas(result.recommendations[index], event.currentTarget)} />
             {lightTableEnabled && result.fingerprint ? <details className="reel-fingerprint"><summary>The qualities behind this reel <span>+</span></summary><SearchFingerprint fingerprint={result.fingerprint} insight={result.insight} /></details> : null}
 
-            <section className="atlas-entry"><div><h3>Atlas</h3><p>Films are never alone. Explore the connections around a film, and find what carries through.</p></div><button type="button" disabled={developing} onClick={event => openAtlas(result.recommendations[0], event.currentTarget)}>Explore connections ↗</button></section>
+            <section className="atlas-entry"><div><h3>Atlas</h3><p>Films are never alone. Explore the connections around a film, and find what carries through.</p></div><button type="button" disabled={developing} onClick={event => openAtlas(result.recommendations[screeningIndex] || result.recommendations[0], event.currentTarget)}>Explore connections ↗</button></section>
 
             <details className="persona-panel"><summary><span>About this reel</span><strong>{result.persona}</strong><span aria-hidden="true">+</span></summary><div className="persona-details">
               <div className="palette" aria-label="Your cinematic palette">
