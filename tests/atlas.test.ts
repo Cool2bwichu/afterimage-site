@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { buildAtlasInput, parseAtlas, atlasInputKey } from '../app/lib/atlas.ts';
+import { buildAtlasInput, parseAtlas, atlasInputKey, parseAtlasInputRequest } from '../app/lib/atlas.ts';
 import { FACET_KEYS } from '../app/lib/light-table.ts';
 
 const reel = JSON.parse(readFileSync(new URL('./fixtures/light-table.json', import.meta.url), 'utf8'));
@@ -44,4 +44,24 @@ test('Atlas preserves verified catalog IDs without treating a different release 
   assert.equal(parseAtlas(atlas), null);
   atlas.neighbors[0].tmdbId = -1;
   assert.equal(parseAtlas(atlas), null);
+});
+
+test('Atlas recovers the accepted request from legacy and catalog-aware keys', () => {
+  const request = { films: ['After Yang (2021)'], creativeBrief: 'Quiet science fiction' };
+  const legacy = { anchor: { title: 'After Yang', year: '2021' }, request };
+  const identified = { anchor: { ...legacy.anchor, tmdbId: 1201 }, request };
+  assert.deepEqual(parseAtlasInputRequest(atlasInputKey(legacy), legacy.anchor), request);
+  assert.deepEqual(parseAtlasInputRequest(atlasInputKey(identified), identified.anchor), request);
+  assert.deepEqual(parseAtlasInputRequest(atlasInputKey(legacy), identified.anchor), request, 'older keys remain readable after enrichment');
+});
+
+test('Atlas rejects malformed or mismatched accepted request keys', () => {
+  const anchor = { title: 'After Yang', year: '2021', tmdbId: 1201 };
+  const key = atlasInputKey({ anchor, request: { films: ['After Yang'], creativeBrief: '' } });
+  assert.equal(parseAtlasInputRequest('{', anchor), null);
+  assert.equal(parseAtlasInputRequest(JSON.stringify(['wrong|2021', 1201, { films: ['After Yang'], creativeBrief: '' }]), anchor), null);
+  assert.equal(parseAtlasInputRequest(JSON.stringify(['after yang|2021', 1202, { films: ['After Yang'], creativeBrief: '' }]), anchor), null);
+  assert.equal(parseAtlasInputRequest(JSON.stringify(['after yang|2021', 1201, { films: 'After Yang', creativeBrief: '' }]), anchor), null);
+  assert.equal(parseAtlasInputRequest(JSON.stringify(['after yang|2021', 1201, { films: ['After Yang'] }]), anchor), null);
+  assert.equal(parseAtlasInputRequest(key, { ...anchor, title: 'Another Film' }), null);
 });

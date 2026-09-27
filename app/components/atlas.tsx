@@ -1,7 +1,9 @@
 'use client';
 
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
-import { ATLAS_STORAGE_KEY, atlasInputKey, parseAtlas, type AtlasInput } from '../lib/atlas';
+import { ATLAS_STORAGE_KEY, atlasInputKey, parseAtlas, parseAtlasInputRequest, type AtlasInput, type AtlasIdentity } from '../lib/atlas';
+import { atlasLayout, atlasDirectionalNeighbor } from '../lib/atlas-layout';
+import { ATLAS_ARTWORK_KEY, readAtlasArtwork, serializeAtlasArtwork } from '../lib/atlas-artwork';
 import { ATLAS_TRAIL_STORAGE_KEY, MAX_ATLAS_MAPS, activeAtlasStop, emptyAtlasTrail, finishAtlasMap, moveAtlasTrail, parseAtlasTrail, updateAtlasView, visitAtlasMap } from '../lib/atlas-trail';
 import { FACET_KEYS, FACET_META, type CinematicFacet, type FacetKey, type FacetSource, type SelectedFacets } from '../lib/light-table';
 import { parseEnrichmentResponse, movieKey, imdbUrl, type FilmEnrichment } from '../lib/movie-metadata';
@@ -14,23 +16,17 @@ type Props = {
   target: AtlasInput | null; opener: HTMLElement | null; connected: boolean; preferSaved: boolean;
   onClose: () => void; onBusy: (busy: boolean) => void;
   metadataByKey: Record<string, FilmEnrichment>; likedKeys: Set<string>;
+  savedKeys: Set<string>; onSave: (film: AtlasIdentity) => void;
   onLike: (film: FacetSource) => void; onExplore: (film: FacetSource, opener: HTMLElement, request: AtlasInput['request']) => void;
   onSearchExplore: (film: FacetSource, opener: HTMLElement) => void;
   selectedFacets: SelectedFacets; onBorrow?: (channel: FacetKey, facet: CinematicFacet, source: FacetSource, trigger: HTMLButtonElement) => void;
   lightTable: ReactNode;
 };
-const POSITIONS = [[29, 20], [75, 20], [14, 47], [88, 47], [30, 76], [74, 76]];
 const AFFINITY = { close: 'Close', echo: 'Echo', contrast: 'Contrast' };
-const LENS_LABELS: Record<FacetKey, string> = {
-  whereItLives: 'World & setting',
-  howItFeels: 'Mood & emotion',
-  howItLooks: 'Visual language',
-  howItSpeaks: 'Storytelling & dialogue',
-};
 const AFFINITY_DESCRIPTIONS = { close: 'Strongly shared', echo: 'A related quality', contrast: 'A different approach' };
-function requestCaption(inputKey: string) {
-  try { const request = JSON.parse(inputKey)[1]; return request.creativeBrief || request.films.join(' + ') || 'Selected qualities'; }
-  catch { return 'Selected qualities'; }
+function requestCaption(inputKey: string, anchor: AtlasIdentity) {
+  const request = parseAtlasInputRequest(inputKey, anchor);
+  return request?.creativeBrief || request?.films.join(' + ') || 'Selected qualities';
 }
 
 function Artwork({ film, metadata, portrait = false }: { film: FacetSource; metadata?: FilmEnrichment; portrait?: boolean }) {
@@ -48,11 +44,12 @@ export function AtlasWorkspace(props: Props) {
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState('');
   const [metadata, setMetadata] = useState<Record<string, FilmEnrichment>>({});
-  const [expanded, setExpanded] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [reading, setReading] = useState<'connection' | 'difference' | 'notes'>('connection');
   const [mapView, setMapView] = useState<'map' | 'list'>('map');
-  useEffect(() => { const timer = setTimeout(() => { if (window.matchMedia('(max-width: 760px)').matches) setMapView('list'); }, 0); return () => clearTimeout(timer); }, []);
   const [pollRevision, setPollRevision] = useState(0);
   const dialog = useRef<HTMLDialogElement>(null);
+  const readingPanel = useRef<HTMLElement>(null);
   const trailNavigation = useRef<HTMLElement>(null);
   const back = useRef<HTMLButtonElement>(null);
   const lock = useRef(false);
@@ -68,7 +65,10 @@ export function AtlasWorkspace(props: Props) {
   const active = atlas ? selected < 0 ? atlas.anchor : atlas.neighbors[selected] : null;
   const neighbor = atlas ? atlas.neighbors[selected < 0 ? 0 : selected] : null;
   const allMetadata = { ...metadataByKey, ...metadata };
-  const getMetadata = (film: FacetSource) => allMetadata[movieKey(film.title, film.year)];
+  const getMetadata = (film: AtlasIdentity) => {
+    const record = allMetadata[movieKey(film.title, film.year)];
+    return film.tmdbId && record?.status === 'matched' && record.tmdbId !== film.tmdbId ? undefined : record;
+  };
   const historyFilms = JSON.stringify(saved.maps.map(map => ({ title: map.atlas.anchor.title, year: map.atlas.anchor.year, ...(map.atlas.anchor.tmdbId ? { tmdbId: map.atlas.anchor.tmdbId } : {}) })).sort((a, b) => movieKey(a.title, a.year).localeCompare(movieKey(b.title, b.year))));
 
   useEffect(() => {
@@ -76,6 +76,7 @@ export function AtlasWorkspace(props: Props) {
       try {
         const read = (key: string) => { try { return JSON.parse(localStorage.getItem(key) || 'null'); } catch { return null; } };
         setSaved(parseAtlasTrail(read(ATLAS_TRAIL_STORAGE_KEY), read(ATLAS_STORAGE_KEY)));
+        setMetadata(readAtlasArtwork(localStorage.getItem(ATLAS_ARTWORK_KEY)));
       } catch { /* A damaged cache cannot change the reel. */ }
       setReady(true);
     }, 0);
@@ -87,6 +88,15 @@ export function AtlasWorkspace(props: Props) {
     catch { /* Browsing still works when storage is unavailable. */ }
   }, [ready, saved]);
   useEffect(() => { onBusy(busy); }, [busy, onBusy]);
+
+  function rememberArtwork(records: FilmEnrichment[]) {
+    setMetadata(current => {
+      const next = { ...current, ...Object.fromEntries(records.map(item => [item.key, item])) };
+      try { localStorage.setItem(ATLAS_ARTWORK_KEY, serializeAtlasArtwork(next)); }
+      catch { /* Artwork still works when storage is full or unavailable. */ }
+      return next;
+    });
+  }
 
   async function develop(input: AtlasInput) {
     if (lock.current || saved.pending) return;
@@ -162,27 +172,31 @@ export function AtlasWorkspace(props: Props) {
   useEffect(() => {
     if (!atlas) return;
     const controller = new AbortController();
-    const films = [atlas.anchor, ...atlas.neighbors];
-    void Promise.all([films.slice(0, 5), films.slice(5)].map(async batch => {
+    const films = [atlas.anchor, ...atlas.neighbors].filter(film => getMetadata(film)?.status !== 'matched');
+    void Promise.all([films.slice(0, 5), films.slice(5)].filter(batch => batch.length).map(async batch => {
       const response = await fetch('/api/films/enrich', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ films: batch.map(film => ({ title: film.title, year: film.year, ...(film.tmdbId ? { tmdbId: film.tmdbId } : {}) })) }), signal: controller.signal });
       if (!response.ok) return;
       const records = parseEnrichmentResponse(await response.json());
-      if (!controller.signal.aborted) setMetadata(current => ({ ...current, ...Object.fromEntries(records.map(item => [item.key, item])) }));
+      if (!controller.signal.aborted) rememberArtwork(records);
     })).catch(() => {});
     return () => controller.abort();
+    // Fetch once when the accepted map changes; cached artwork has its own expiry.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [atlas]);
 
   useEffect(() => {
-    const anchors: FacetSource[] = JSON.parse(historyFilms);
+    const anchors: FacetSource[] = (JSON.parse(historyFilms) as FacetSource[]).filter(film => getMetadata(film)?.status !== 'matched');
     if (!anchors.length) return;
     const controller = new AbortController();
     void Promise.all(Array.from({ length: Math.ceil(anchors.length / 5) }, async (_, index) => {
       const response = await fetch('/api/films/enrich', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ films: anchors.slice(index * 5, index * 5 + 5) }), signal: controller.signal });
       if (!response.ok) return;
       const records = parseEnrichmentResponse(await response.json());
-      if (!controller.signal.aborted) setMetadata(current => ({ ...current, ...Object.fromEntries(records.map(item => [item.key, item])) }));
+      if (!controller.signal.aborted) rememberArtwork(records);
     })).catch(() => {});
     return () => controller.abort();
+    // History changes are the fetch trigger; artwork state must not trigger retries.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [historyFilms]);
 
   const isOpen = Boolean(target);
@@ -201,16 +215,24 @@ export function AtlasWorkspace(props: Props) {
     };
   }, [isOpen, opener, onClose]);
 
-  function select(index: number) { setSaved(current => updateAtlasView(current, { selected: index })); }
-  function setLens(value: FacetKey | 'all') { setSaved(current => updateAtlasView(current, { lens: value })); }
+  function select(index: number, reveal = false) {
+    setSaved(current => updateAtlasView(current, { selected: index })); setReading('connection');
+    if (reveal && window.matchMedia('(max-width: 850px)').matches) requestAnimationFrame(() => {
+      readingPanel.current?.scrollIntoView({ block: 'start', behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' });
+      readingPanel.current?.focus({ preventScroll: true });
+    });
+  }
+  function setLens(value: FacetKey | 'all') { setSaved(current => updateAtlasView(current, { lens: value })); setReading('connection'); }
   function travel(cursor: number) {
     navigationRevision.current += 1;
+    setReading('connection');
     setSaved(current => moveAtlasTrail(current, cursor));
     if (!saved.pending) setError('');
     dialog.current?.scrollTo({ top: 0, behavior: 'instant' });
   }
   function revisit(id: string) {
     navigationRevision.current += 1;
+    setReading('connection');
     setSaved(current => visitAtlasMap(current, id));
     if (!saved.pending) setError('');
     dialog.current?.scrollTo({ top: 0, behavior: 'instant' });
@@ -227,110 +249,91 @@ export function AtlasWorkspace(props: Props) {
   const activeMetadata = active ? getMetadata(active) : undefined;
   const verified = activeMetadata?.status === 'matched' ? activeMetadata : null;
   const link = imdbUrl(verified?.imdbId);
+  const layout = atlasLayout(atlas?.neighbors ?? [], lens);
+  const anchor = atlas?.anchor ?? target?.anchor;
+  const anchorMetadata = anchor ? getMetadata(anchor) : undefined;
+  const acceptedRequest = stop ? parseAtlasInputRequest(stop.inputKey, stop.atlas.anchor) : null;
+  const activeAffinity = selected >= 0 && neighbor && lens !== 'all' ? neighbor.lenses[lens].affinity : undefined;
 
   if (!isOpen) return null;
 
-  return <dialog ref={dialog} className={`atlas-dialog${expanded ? ' atlas-map-expanded' : ''}`} aria-labelledby="atlas-title" onCancel={event => { event.preventDefault(); onClose(); }}>
-    <div className="atlas-shell">
-      <aside className="atlas-filmrail" aria-label="Your explored Atlases">
-        <span className="atlas-rail-motto">Your<br />Atlases</span>
-        <nav aria-label="Revisit an Atlas">{[...saved.maps].reverse().map(map => <button key={map.id} aria-label={`Return to ${map.atlas.anchor.title} Atlas (${map.atlas.anchor.year})`} aria-current={map.id === stop?.id ? 'page' : undefined} title={requestCaption(map.inputKey)} onClick={() => revisit(map.id)}><span className="atlas-history-image"><Artwork film={map.atlas.anchor} metadata={getMetadata(map.atlas.anchor)} /></span><strong>{map.atlas.anchor.title}</strong><small>{map.atlas.anchor.year}{map.id === stop?.id ? ' · Here' : ''}</small></button>)}</nav>
-        <p>{saved.maps.length ? 'Pick up a thread.' : 'Your explored maps will live here.'}</p>
-      </aside>
-      <header className="atlas-masthead"><button className="atlas-brand" aria-label="Afterimage home" onClick={onClose}>AFTERIMAGE<small>Better films find you</small></button>
-        <nav aria-label="Atlas navigation"><button className="is-active" aria-current="page" onClick={() => { setExpanded(false); dialog.current?.scrollTo({ top: 0, behavior: 'instant' }); }}>Atlas</button><button ref={back} onClick={onClose}>Your reel <span aria-hidden="true">↗</span></button></nav><em>Different stories.<br />The same human longing.</em>
+  return <dialog ref={dialog} className="atlas-dialog atlas-observatory" aria-labelledby="atlas-title" onCancel={event => { event.preventDefault(); onClose(); }}>
+    <div className="observatory-shell">
+      <header className="observatory-masthead">
+        <button ref={back} type="button" className="observatory-back" onClick={onClose}><span aria-hidden="true">←</span> Your reel</button>
+        <h1 id="atlas-title"><svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="11" /><path d="M16 1v8m0 14v8M1 16h8m14 0h8M9 23 23 9" /><circle cx="16" cy="16" r="2" /></svg>Atlas</h1>
+        <div className="observatory-tools">
+          <button type="button" aria-expanded={searchOpen} aria-controls="observatory-search" onClick={() => setSearchOpen(value => !value)}>{searchOpen ? 'Close search' : 'Find a film'}<span aria-hidden="true">⌕</span></button>
+          <details className="observatory-visited"><summary>Visited <span>{saved.maps.length}</span></summary><div>
+            <h2>Your explored films</h2>
+            {saved.maps.length ? [...saved.maps].reverse().map(map => <button type="button" key={map.id} aria-current={map.id === stop?.id ? 'page' : undefined} onClick={event => { revisit(map.id); const menu = event.currentTarget.closest('details'); if (menu) { menu.open = false; menu.querySelector('summary')?.focus(); } }}>
+              <span className="observatory-history-image"><Artwork film={map.atlas.anchor} metadata={getMetadata(map.atlas.anchor)} /></span><span><strong>{map.atlas.anchor.title}</strong><small>{map.atlas.anchor.year} · {requestCaption(map.inputKey, map.atlas.anchor)}</small></span>{map.id === stop?.id ? <span className="observatory-here">Here</span> : null}
+            </button>) : <p>The films you explore will appear here.</p>}
+            <p className="observatory-storage-note">Your {MAX_ATLAS_MAPS} most recent maps stay in this browser.</p>
+          </div></details>
+        </div>
       </header>
-      <AtlasFilmSearch busy={busy} connected={connected} onDevelop={props.onSearchExplore} />
-      {saved.maps.length > 1 ? <nav className="atlas-trail" aria-label="Atlas exploration trail" ref={trailNavigation}>
-        <span className="atlas-trail-label">Your trail</span>
-        <button className="atlas-trail-arrow" disabled={saved.cursor <= 0} onClick={() => travel(saved.cursor - 1)} aria-label="Previous map in your trail">←</button>
-        <ol>{saved.route.map((id, index) => {
-          const map = saved.maps.find(item => item.id === id)!;
-          return <li key={`${id}-${index}`}><button onClick={() => travel(index)} aria-current={index === saved.cursor ? 'step' : undefined} title={`${map.atlas.anchor.title} (${map.atlas.anchor.year})`}><small>{String(index + 1).padStart(2, '0')}</small><span>{map.atlas.anchor.title}</span></button></li>;
-        })}</ol>
-        <button className="atlas-trail-arrow" disabled={saved.cursor >= saved.route.length - 1} onClick={() => travel(saved.cursor + 1)} aria-label="Next map in your trail">→</button>
-        <details className="atlas-visited"><summary>Visited <span>{saved.maps.length}</span><i aria-hidden="true">⌄</i></summary><div>
-          <p>Visited maps<small>Return without developing again.</small></p>
-          {[...saved.maps].reverse().map(map => <button key={map.id} aria-current={map.id === stop?.id ? 'page' : undefined} onClick={event => { revisit(map.id); const menu = event.currentTarget.closest('details'); if (menu) { menu.open = false; menu.querySelector('summary')?.focus(); } }}><strong>{map.atlas.anchor.title} <small>{map.atlas.anchor.year}</small></strong><span>{requestCaption(map.inputKey)}</span>{map.id === stop?.id ? <i>Here</i> : null}</button>)}
-          <small>Your {MAX_ATLAS_MAPS} most recently visited maps stay in this browser.</small>
-        </div></details>
+
+      <div id="observatory-search" hidden={!searchOpen}><AtlasFilmSearch busy={busy} connected={connected} onDevelop={(film, trigger) => { setSearchOpen(false); props.onSearchExplore(film, trigger); }} /></div>
+
+      {saved.route.length > 1 ? <nav className="observatory-trail" aria-label="Atlas exploration trail" ref={trailNavigation}>
+        <button type="button" disabled={saved.cursor <= 0} onClick={() => travel(saved.cursor - 1)} aria-label="Previous map in your trail">←</button>
+        <ol>{saved.route.map((id, index) => { const map = saved.maps.find(item => item.id === id)!; return <li key={`${id}-${index}`}><button type="button" onClick={() => travel(index)} aria-current={index === saved.cursor ? 'step' : undefined}>{map.atlas.anchor.title}</button></li>; })}</ol>
+        <button type="button" disabled={saved.cursor >= saved.route.length - 1} onClick={() => travel(saved.cursor + 1)} aria-label="Next map in your trail">→</button>
       </nav> : null}
-      {saved.readyId ? <div className="atlas-trail-ready" role="status">A new map is ready.<button onClick={() => revisit(saved.readyId!)}>Open {saved.maps.find(map => map.id === saved.readyId)?.atlas.anchor.title} ↗</button></div> : null}
-      <div className="atlas-body">
-        <section className="atlas-film-panel">
-          <button className="atlas-back" onClick={onClose}>← <span>Back to your reel</span></button>
-          <h1 id="atlas-title">Atlas</h1><i className="atlas-rule" />
-          <p className="atlas-introduction">Find the films that revolve around yours</p>
-          {active ? <div className="atlas-film-detail" key={movieKey(active.title, active.year)}>
-            <div className="atlas-portrait"><Artwork film={active} metadata={activeMetadata} portrait /><div><h2>{active.title}</h2><span>{active.year}</span>{verified?.directors.length ? <small>A film by<br />{verified.directors.join(' · ')}</small> : null}</div></div>
-            <div className="atlas-film-actions"><LikeButton film={active} liked={likedKeys.has(movieKey(active.title, active.year))} onToggle={() => onLike(active)} />{link ? <a href={link} target="_blank" rel="noreferrer noopener">Film details ↗</a> : null}</div>
-            <p className="atlas-film-summary">{active.summary}</p>
-            {verified ? <div className="atlas-facts">{[...verified.countries.slice(0, 1), active.year, verified.runtime ? `${Math.floor(verified.runtime / 60)}h ${verified.runtime % 60}m` : null].filter(Boolean).join('  /  ')}<br />{verified.genres.slice(0, 3).join(' · ')}</div> : null}
-            <details className="atlas-watch"><summary>What to watch for <span>+</span></summary><p>{active.watchFor}</p></details>
-          </div> : null}
+
+      {saved.readyId ? <div className="observatory-notice" role="status">A new constellation is ready.<button type="button" onClick={() => revisit(saved.readyId!)}>Open {saved.maps.find(map => map.id === saved.readyId)?.atlas.anchor.title}</button></div> : null}
+      {busy || error ? <div className="observatory-progress" role={error ? 'alert' : 'status'}><span className={error ? '' : 'observatory-progress-mark'} aria-hidden="true" /><div><strong>{error || `Finding the connections around ${saved.pending?.anchor.title || target?.anchor.title}…`}</strong>{!error ? <p>{atlas ? 'Keep exploring this map while the next one develops.' : 'Considering six films and checking their identities. This can take a few minutes.'}</p> : null}</div>{error ? <button type="button" disabled={starting} onClick={() => { setError(''); if (saved.pending) setPollRevision(current => current + 1); else if (inputRef.current) void develop(inputRef.current); }}>{saved.pending ? 'Resume' : 'Try again'}</button> : null}</div> : null}
+
+      {atlas ? <>
+        <section className="observatory-heading" aria-label="Current Atlas">
+          <div><p>In the orbit of</p><h2>{atlas.anchor.title} <span>{atlas.anchor.year}</span></h2></div>
+          <p className="observatory-thesis">{atlas.thesis}</p>
         </section>
 
-        <section className="atlas-center" aria-label="Film connection map">
-          {busy || error ? <div className="atlas-progress" role={error ? 'alert' : 'status'}><span>{error || `Developing an Atlas around ${saved.pending?.anchor.title || target?.anchor.title}…`}</span>{!error ? <small>{atlas ? 'Your previous map stays here while this one develops.' : 'Considering connections and verifying film identities. This can take a few minutes.'}</small> : <button disabled={starting} onClick={() => { setError(''); if (saved.pending) setPollRevision(current => current + 1); else if (inputRef.current) void develop(inputRef.current); }}>{saved.pending ? 'Resume Atlas' : 'Try again'} ↗</button>}</div> : null}
-          {atlas ? <div className="atlas-view-switch" aria-label="Connection presentation"><button type="button" aria-pressed={mapView === 'map'} onClick={() => setMapView('map')}>Map</button><button type="button" aria-pressed={mapView === 'list'} onClick={() => setMapView('list')}>Film list</button><span>Six ways to go further.</span></div> : null}
-          {atlas && mapView === 'list' ? <div className="atlas-connection-list"><button type="button" className="atlas-list-anchor" aria-pressed={selected === -1} onClick={() => select(-1)}><small>Your starting point</small><strong>{atlas.anchor.title}</strong><span>{atlas.anchor.year}</span></button>{atlas.neighbors.map((film, index) => <button type="button" className="atlas-list-film" key={movieKey(film.title, film.year)} aria-pressed={selected === index} onClick={() => { select(index); if (window.matchMedia('(max-width: 760px)').matches) requestAnimationFrame(() => dialog.current?.querySelector('.atlas-relationship')?.scrollIntoView({ block: 'start', behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' })); }}><div><Artwork film={film} metadata={getMetadata(film)} /></div><span><small>{String(index + 1).padStart(2, '0')} / {film.year}</small><strong>{film.title}</strong><em>{film.label}</em></span><span aria-hidden="true">↗</span></button>)}</div> : null}
-          <div hidden={Boolean(atlas && mapView === 'list')} className={`atlas-map${atlas ? ' is-developed' : ' is-developing'}`}>
-            {!atlas && !busy && !error ? <div className="atlas-empty"><h2>Follow a film further.</h2><p>Explore six considered connections around {target?.anchor.title}. Your reel stays right here.</p><button type="button" disabled={!connected || starting} onClick={() => { if (target) void develop(target); }}>Develop this Atlas</button></div> : null}
-            <svg className="atlas-links" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><defs><filter id="atlas-glow"><feGaussianBlur stdDeviation=".3" /></filter></defs>
-              {atlas?.neighbors.map((film, i) => {
-                const [x, y] = POSITIONS[i]; const path = `M 50 47 Q ${50 + (x - 50) * .22} ${y} ${x} ${y}`;
-                return <g key={i} className={`atlas-connection${selected === i ? ' is-selected' : ''}`} data-affinity={lens === 'all' ? undefined : film.lenses[lens].affinity}>
-                  <path className="atlas-link-halo" d={path} /><path className="atlas-link-line" d={path} /><path className="atlas-link-pulse" d={path} pathLength="100" />
-                </g>;
-              })}
-            </svg>
-            {atlas ? <>
-              <button className={`atlas-node is-anchor${selected === -1 ? ' is-selected' : ''}`} style={{ '--x': '50%', '--y': '47%' } as CSSProperties} aria-label={`Select anchor film ${atlas.anchor.title}`} aria-pressed={selected === -1} onClick={() => select(-1)}><span className="atlas-node-image"><Artwork film={atlas.anchor} metadata={getMetadata(atlas.anchor)} /></span><span className="atlas-node-title">{atlas.anchor.title}<small>{atlas.anchor.year}</small></span></button>
-              {atlas.neighbors.map((film, i) => <button key={movieKey(film.title, film.year)} className={`atlas-node${selected === i ? ' is-selected' : ''}`} data-affinity={lens === 'all' ? undefined : film.lenses[lens].affinity} style={{ '--x': `${POSITIONS[i][0]}%`, '--y': `${POSITIONS[i][1]}%`, '--arrival': `${i * 65 + 100}ms` } as CSSProperties} aria-label={`Explore ${film.title}: ${film.label}${lens === 'all' ? '' : `. ${FACET_META[lens].label}: ${AFFINITY[film.lenses[lens].affinity]}`}`} aria-pressed={selected === i} onClick={() => select(i)} onKeyDown={event => { if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') { event.preventDefault(); const index = (i + (event.key === 'ArrowRight' ? 1 : 5)) % 6; select(index); dialog.current?.querySelectorAll<HTMLButtonElement>('.atlas-node:not(.is-anchor)')[index]?.focus(); } }}><span className="atlas-node-image"><Artwork film={film} metadata={getMetadata(film)} /></span><span className="atlas-node-title">{film.title}<small>{film.year}</small></span></button>)}
-            </> : busy ? <div className="atlas-empty-orbit"><span />{saved.pending?.anchor.title || target?.anchor.title}<small>{saved.pending?.anchor.year || target?.anchor.year}</small></div> : null}
-          </div>
-          <p hidden={!atlas} className="atlas-mobile-caption" data-affinity={selected >= 0 && neighbor && lens !== 'all' ? neighbor.lenses[lens].affinity : undefined} aria-live="polite">{selected >= 0 && neighbor ? <button onClick={() => dialog.current?.querySelector('.atlas-relationship')?.scrollIntoView({ block: 'start', behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' })}>{lens === 'all' ? neighbor.label : `${FACET_META[lens].compactLabel}: ${AFFINITY[neighbor.lenses[lens].affinity]}`} · Read connection ↓</button> : "Choose a film to explore its connection."}</p>
-          <div hidden={!atlas} className="atlas-lens-controls" aria-label="Connection lens" aria-describedby={atlas ? 'atlas-line-key-note' : undefined}><span>Look through</span>{(['all', ...FACET_KEYS] as const).map(channel => <button key={channel} aria-pressed={lens === channel} onClick={() => setLens(channel)}>{channel === 'all' ? 'Whole film' : FACET_META[channel].compactLabel}</button>)}</div>
-          {atlas ? <div className="atlas-line-key" aria-label="Connection line key">
-            <div>{(Object.keys(AFFINITY) as Array<keyof typeof AFFINITY>).map(affinity => <span key={affinity} data-affinity={affinity}><i aria-hidden="true" /><span>{AFFINITY[affinity]}<small>{AFFINITY_DESCRIPTIONS[affinity]}</small></span></span>)}</div>
-            <p id="atlas-line-key-note" aria-live="polite">{lens === 'all' ? 'Choose a lens to color the connections.' : `${FACET_META[lens].label} · Select a film to read why.`}</p>
-          </div> : null}
-          {atlas && mapView === 'map' ? <><p className="atlas-thesis">{atlas.anchor.facets.howItFeels.label} · {atlas.anchor.facets.howItLooks.label}</p><div className="atlas-map-footer"><span>Shared qualities · Unexpected echoes</span><button onClick={() => setExpanded(!expanded)} aria-pressed={expanded}>{expanded ? 'Return to full Atlas' : 'Expand map'} <span aria-hidden="true">{expanded ? '−' : '↗'}</span></button></div></> : null}
-        </section>
+        <div className="observatory-workspace">
+          <section className="observatory-navigation" aria-label="Film connections">
+            <div className="observatory-chart-controls">
+              <div className="observatory-lenses" aria-label="Connection lens">{(['all', ...FACET_KEYS] as const).map(channel => <button type="button" key={channel} aria-pressed={lens === channel} onClick={() => setLens(channel)}>{channel === 'all' ? 'Whole film' : FACET_META[channel].compactLabel}</button>)}</div>
+              <div className="observatory-view" aria-label="Connection presentation"><button type="button" aria-pressed={mapView === 'map'} onClick={() => setMapView('map')}>Map</button><button type="button" aria-pressed={mapView === 'list'} onClick={() => setMapView('list')}>List</button></div>
+            </div>
 
-        {atlas && neighbor ? <aside className="atlas-insights" aria-label="Connection insights">
-          <section className="atlas-why"><h2 className="atlas-why-title" aria-live="polite">{selected < 0 ? 'The thread through this Atlas' : `Why ${active?.title} belongs`}</h2><p aria-live="polite">{selected < 0 ? atlas.thesis : neighbor.whyHere}</p>{selected >= 0 ? <button className="atlas-explore-film" disabled={busy || !connected} onClick={event => { if (active && stop) onExplore(active, event.currentTarget, JSON.parse(stop.inputKey)[1]); }}>Explore this film’s Atlas <span aria-hidden="true">↗</span></button> : <p className="atlas-why-hint">Select a connected film to explore its own Atlas.</p>}</section>
-          <section className="atlas-comparison atlas-relationship" aria-labelledby="atlas-comparison-title">
-            <h2 id="atlas-comparison-title" className="atlas-section-title">How they connect</h2>
-            {selected >= 0 ? <>
-              <div className="atlas-comparison-pair" aria-live="polite">
-                {[atlas.anchor, neighbor].map((film, index) => <div key={movieKey(film.title, film.year)}><Artwork film={film} metadata={getMetadata(film)} /><span><small>{index === 0 ? 'Center film' : 'Selected film'}</small><strong>{film.title}</strong></span></div>)}
-              </div>
-              <h3>{neighbor.label}</h3><p className="atlas-shared-quality">{neighbor.shared}</p>
-              <p className="atlas-comparison-hint">Explore a quality to see why.</p>
-              <div className="atlas-quality-list">{FACET_KEYS.map(channel => {
-                const { affinity, evidence } = neighbor.lenses[channel];
-                return <div className="atlas-quality" key={channel} data-affinity={affinity}>
-                  <button aria-expanded={lens === channel} aria-controls={`atlas-quality-${channel}`} onClick={() => setLens(lens === channel ? 'all' : channel)}>
-                    <span>{LENS_LABELS[channel]}</span><span className="atlas-affinity"><i aria-hidden="true" />{AFFINITY[affinity]}</span><span className="atlas-quality-toggle" aria-hidden="true">{lens === channel ? '−' : '+'}</span>
-                  </button>
-                  <div id={`atlas-quality-${channel}`} hidden={lens !== channel}><p><strong>{AFFINITY_DESCRIPTIONS[affinity]}.</strong> {evidence}</p></div>
-                </div>;
-              })}</div>
-              <details key={movieKey(neighbor.title, neighbor.year)}><summary>Where they differ <span>+</span></summary><p>{neighbor.difference}</p></details>
-            </> : <p className="atlas-comparison-empty">Choose a film on the map to see what it shares with <em>{atlas.anchor.title}</em> — and where it differs.</p>}
+            <div className={`observatory-chart${lens !== 'all' ? ' is-grouped' : ''}`} hidden={mapView !== 'map'} data-group-count={layout.groups.length} aria-label={lens === 'all' ? 'Six connections around your film' : `Films grouped by ${FACET_META[lens].compactLabel.toLowerCase()}`}>
+              <div className="observatory-sky" aria-hidden="true"><span /><span /></div>
+              {layout.groups.map(group => <div className="observatory-territory" data-affinity={group.affinity} key={group.affinity} style={{ '--x': `${group.x}%`, '--width': `${group.width}%` } as CSSProperties}><strong>{group.label}</strong><span>{AFFINITY_DESCRIPTIONS[group.affinity]}</span>{group.count === 0 ? <small>No films in this group</small> : null}</div>)}
+              <svg className="observatory-paths" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">{layout.nodes.map((point, index) => <path key={movieKey(atlas.neighbors[index].title, atlas.neighbors[index].year)} d={`M ${layout.anchor.x} ${layout.anchor.y} L ${point.x} ${point.y}`} style={{ d: `path("M ${layout.anchor.x} ${layout.anchor.y} L ${point.x} ${point.y}")` } as CSSProperties} className={selected === index ? 'is-selected' : ''} data-affinity={point.affinity} />)}</svg>
+              <button type="button" className="observatory-origin" aria-label={`Select anchor film ${atlas.anchor.title}`} aria-pressed={selected === -1} style={{ '--x': `${layout.anchor.x}%`, '--y': `${layout.anchor.y}%` } as CSSProperties} onClick={() => select(-1)}><span className="observatory-origin-reticle" aria-hidden="true" /><span className="observatory-origin-image"><Artwork film={atlas.anchor} metadata={anchorMetadata} /></span><strong>{atlas.anchor.title}</strong><small>Your starting film</small></button>
+              {atlas.neighbors.map((film, index) => <button type="button" key={movieKey(film.title, film.year)} className="observatory-star" data-film-index={index} data-dense={layout.groups.length === 3 && (layout.groups.find(group => group.affinity === layout.nodes[index]?.affinity)?.count ?? 0) > 3} data-affinity={layout.nodes[index]?.affinity} style={{ '--x': `${layout.nodes[index]?.x}%`, '--y': `${layout.nodes[index]?.y}%` } as CSSProperties} aria-label={`Explore ${film.title}: ${film.label}${lens === 'all' ? '' : `. ${FACET_META[lens].label}: ${AFFINITY[film.lenses[lens].affinity]}`}`} aria-pressed={selected === index} onClick={() => select(index, true)} onKeyDown={event => { if (['ArrowRight', 'ArrowLeft', 'ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) { event.preventDefault(); const next = event.key === 'Home' ? 0 : event.key === 'End' ? 5 : atlasDirectionalNeighbor(layout.nodes, index, event.key as 'ArrowRight' | 'ArrowLeft' | 'ArrowUp' | 'ArrowDown'); select(next); dialog.current?.querySelectorAll<HTMLButtonElement>('.observatory-star')[next]?.focus(); } }}><span className="observatory-star-image"><Artwork film={film} metadata={getMetadata(film)} /><i aria-hidden="true" /></span><strong>{film.title}</strong><small>{film.year}</small></button>)}
+            </div>
+
+            <div className="observatory-film-list" hidden={mapView !== 'list'}>{(lens === 'all' ? [{ affinity: 'all' as const, label: 'Six connections' }] : layout.groups).map(group => <section key={group.affinity} data-affinity={group.affinity === 'all' ? undefined : group.affinity}><h3>{group.label}</h3>{atlas.neighbors.map((film, index) => lens !== 'all' && film.lenses[lens].affinity !== group.affinity ? null : <button type="button" key={movieKey(film.title, film.year)} data-film-index={index} aria-pressed={selected === index} onClick={() => select(index, true)}><span className="observatory-list-image"><Artwork film={film} metadata={getMetadata(film)} /></span><span><strong>{film.title}</strong><small>{film.year} · {film.label}</small></span><i aria-hidden="true">{selected === index ? '−' : '+'}</i></button>)}{group.affinity !== 'all' && !atlas.neighbors.some(film => lens !== 'all' && film.lenses[lens].affinity === group.affinity) ? <p>No films in this group.</p> : null}</section>)}</div>
+
+            <div className="observatory-chart-caption"><span>{lens === 'all' ? 'Six films. Different ways of seeing.' : (['close', 'echo', 'contrast'] as const).map(affinity => `${atlas.neighbors.filter(film => film.lenses[lens].affinity === affinity).length} ${AFFINITY[affinity]}`).join(' · ')}</span><span>{selected >= 0 ? 'Selected' : 'Start anywhere'} <i aria-hidden="true">✦</i> {selected >= 0 ? neighbor?.title : 'Follow your curiosity'}</span></div>
+            <p className="sr-only" role="status">{selected >= 0 ? `${neighbor?.title} selected. ${lens === 'all' ? neighbor?.label : `${AFFINITY[neighbor!.lenses[lens].affinity]}: ${neighbor!.lenses[lens].evidence}`}` : `${atlas.anchor.title} is your starting film. Choose one of six connections.`}</p>
           </section>
-          <details className="atlas-other-connections"><summary>More connections <span aria-hidden="true">+</span></summary><div className="atlas-neighbors">{atlas.neighbors.map((film, i) => <button key={movieKey(film.title, film.year)} aria-pressed={selected === i} onClick={() => select(i)}><Artwork film={film} metadata={getMetadata(film)} /><span><strong>{film.title} <small>{film.year}</small></strong><em>{film.label}</em></span></button>)}</div></details>
-        </aside> : null}
-      </div>
 
-      {atlas ? <section className="atlas-workbench" aria-labelledby="atlas-workbench-title">
-        <header className="atlas-workbench-heading"><div><span className="atlas-eyebrow">Make your next reel</span><h2 id="atlas-workbench-title">The Light Table</h2></div><p>{onBorrow ? 'Choose a film. Reveal its fingerprint. Borrow the qualities you want to carry into your next reel.' : 'Choose a film to explore its fingerprint.'}</p></header>
-        <div className="atlas-programme" aria-label="Choose a film to reveal its fingerprint"><div>{[atlas.anchor, ...atlas.neighbors].map((film, i) => <button key={movieKey(film.title, film.year)} aria-label={`Show ${film.title} fingerprint`} aria-pressed={selected === i - 1} aria-controls="atlas-film-fingerprint" onClick={() => select(i - 1)}><div className="atlas-programme-image"><Artwork film={film} metadata={getMetadata(film)} /><span aria-hidden="true">{selected === i - 1 ? '−' : '+'}</span></div><strong>{film.title}</strong><small>{film.year}</small><p>{selected === i - 1 ? 'Fingerprint open' : 'Reveal fingerprint'}</p></button>)}</div></div>
-        {active ? <section className="atlas-borrow" id="atlas-film-fingerprint" aria-labelledby="atlas-fingerprint-title"><div><span className="atlas-eyebrow">{onBorrow ? 'Borrow a quality' : 'Cinematic fingerprint'}</span><h3 id="atlas-fingerprint-title" aria-live="polite">{active.title} <small>{active.year}</small></h3></div><div className="atlas-borrow-grid">{FACET_KEYS.map(channel => onBorrow ? <FacetTab key={channel} channel={channel} facet={active.facets[channel]} source={active} selected={selectedFacets[channel]} disabled={busy} onSelect={onBorrow} /> : <div key={channel} className="atlas-fingerprint-reading"><small>{FACET_META[channel].label}</small><strong>{active.facets[channel].label}</strong><p>{active.facets[channel].explanation}</p></div>)}</div></section> : null}
-        {lightTable}
-      </section> : null}
-      <footer className="atlas-footer"><span>AFTERIMAGE</span><span>Films connect us to a larger you</span><small>Film identities & imagery: TMDB · Connections: AFTERIMAGE editorial interpretation</small></footer>
+          {active ? <section ref={readingPanel} tabIndex={-1} className="observatory-reading" aria-label={`Reading ${active.title}`}><button type="button" className="observatory-return-map" onClick={() => { const node = dialog.current?.querySelector<HTMLButtonElement>(`${mapView === 'map' ? '.observatory-star' : '.observatory-film-list button'}[data-film-index="${Math.max(0, selected)}"]`); node?.focus({ preventScroll: true }); node?.closest('.observatory-navigation')?.scrollIntoView({ block: 'start', behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' }); }}>↑ Back to the {mapView}</button>
+            <div className="observatory-reading-image" key={movieKey(active.title, active.year)}><Artwork film={active} metadata={activeMetadata} portrait />{selected >= 0 ? <div className="observatory-from"><span><Artwork film={atlas.anchor} metadata={anchorMetadata} /></span><small>From {atlas.anchor.title}</small><i aria-hidden="true">↗</i></div> : <span className="observatory-start-label">Your starting film</span>}</div>
+            <div className="observatory-reading-body">
+              <div className="observatory-film-heading"><h2>{active.title}</h2><span>{active.year}{verified?.runtime ? ` · ${verified.runtime} min` : ''}</span>{verified?.directors.length ? <p>{verified.directors.join(', ')}</p> : null}</div>
+              <div className="observatory-film-actions"><button type="button" aria-pressed={props.savedKeys.has(movieKey(active.title, active.year))} onClick={() => props.onSave({ title: active.title, year: active.year, ...((active.tmdbId || verified?.tmdbId) ? { tmdbId: active.tmdbId || verified?.tmdbId } : {}) })}>{props.savedKeys.has(movieKey(active.title, active.year)) ? 'Saved ✓' : 'Save for later +'}</button><LikeButton film={active} liked={likedKeys.has(movieKey(active.title, active.year))} onToggle={() => onLike(active)} />{link ? <a href={link} target="_blank" rel="noreferrer noopener" aria-label={`Verified details for ${active.title}`}>Details ↗</a> : null}</div>
+              {selected >= 0 && neighbor ? <>
+                <div className="observatory-reading-tabs" aria-label="Connection reading">{(['connection', 'difference', 'notes'] as const).map(tab => <button type="button" key={tab} aria-pressed={reading === tab} onClick={() => setReading(tab)}>{tab === 'connection' ? 'The connection' : tab === 'difference' ? 'The difference' : 'Film notes'}</button>)}</div>
+                <div className="observatory-passage" data-affinity={activeAffinity}>
+                  {reading === 'connection' ? <><span className="observatory-reading-label">{lens === 'all' ? 'What carries through' : `${FACET_META[lens].compactLabel} · ${AFFINITY[neighbor.lenses[lens].affinity]}`}</span><h3>{lens === 'all' ? neighbor.label : active.facets[lens].label}</h3><p>{lens === 'all' ? neighbor.shared : neighbor.lenses[lens].evidence}</p><details><summary>Why this path</summary><p>{neighbor.whyHere}</p></details></> : reading === 'difference' ? <><span className="observatory-reading-label">A different direction</span><h3>What changes</h3><p>{neighbor.difference}</p></> : <><span className="observatory-reading-label">The film itself</span><p>{active.summary}</p><h3>What to watch for</h3><p>{active.watchFor}</p></>}
+                </div>
+                <button type="button" className="observatory-follow" disabled={busy || !connected || !acceptedRequest} onClick={event => { if (acceptedRequest) onExplore(active, event.currentTarget, acceptedRequest); }}><span>Explore from here<small>Make {active.title} your starting film</small></span><i aria-hidden="true">↗</i></button>
+              </> : <div className="observatory-passage"><span className="observatory-reading-label">The film at the center</span><p>{active.summary}</p><details><summary>What to watch for</summary><p>{active.watchFor}</p></details><p className="observatory-invitation">Choose a connected film to discover what carries through—and what changes.</p></div>}
+              <details className="observatory-borrow" key={`borrow-${movieKey(active.title, active.year)}`}><summary>{onBorrow ? 'Carry a quality into your next reel' : 'Read this film’s qualities'}<span aria-hidden="true">+</span></summary><div>{FACET_KEYS.map(channel => onBorrow ? <FacetTab key={channel} channel={channel} facet={active.facets[channel]} source={active} selected={selectedFacets[channel]} disabled={busy} onSelect={onBorrow} /> : <div key={channel}><small>{FACET_META[channel].label}</small><h3>{active.facets[channel].label}</h3><p>{active.facets[channel].explanation}</p></div>)}</div></details>
+            </div>
+          </section> : null}
+        </div>
+        <section className="observatory-light-table" aria-label="Your borrowed qualities">{lightTable}</section>
+      </> : <section className="observatory-welcome" aria-label="Begin an Atlas">
+        <div className="observatory-welcome-chart" aria-hidden="true"><svg viewBox="0 0 600 500"><ellipse cx="300" cy="250" rx="250" ry="160" transform="rotate(-24 300 250)" /><ellipse cx="300" cy="250" rx="245" ry="160" transform="rotate(32 300 250)" /><path d="M65 164 300 250 496 108M110 392 300 250 532 334M220 60 300 250 340 465" /><circle cx="65" cy="164" r="3" /><circle cx="496" cy="108" r="3" /><circle cx="110" cy="392" r="3" /><circle cx="532" cy="334" r="3" /><circle cx="220" cy="60" r="3" /><circle cx="340" cy="465" r="3" /></svg><div className="observatory-welcome-film">{anchor ? <Artwork film={anchor} metadata={anchorMetadata} portrait /> : null}<strong>{anchor?.title}</strong><small>{anchor?.year}</small></div></div>
+        <div className="observatory-welcome-copy"><p>A film is a starting point.</p><h2>See what<br />connects.</h2><p>Follow {anchor?.title || 'a film you love'} into six new directions. Explore a shared feeling, a way of seeing, or an unexpected contrast.</p><button type="button" className="observatory-follow" disabled={!connected || busy} onClick={() => { if (target) void develop(target); }}><span>{busy ? 'Finding your connections…' : 'Explore this film'}</span><i aria-hidden="true">↗</i></button><button type="button" className="observatory-text-button" onClick={() => setSearchOpen(true)}>Or start with another film</button></div>
+      </section>}
+      <footer className="observatory-footer"><span>Afterimage · Atlas</span><small>Film identities & imagery: TMDB. Connections are editorial interpretations.</small></footer>
     </div>
   </dialog>;
 }

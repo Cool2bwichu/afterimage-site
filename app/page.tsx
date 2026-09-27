@@ -5,7 +5,7 @@ import { FilmDossier } from './components/film-dossier';
 import { AtlasWorkspace } from './components/atlas';
 import { parseFilmSearchResults, type FilmSearchResult } from './lib/film-search';
 import { Landing, nextWelcomeFilm, type WelcomeFilm } from './components/landing';
-import { ATLAS_STORAGE_KEY, buildAtlasInput, type AtlasInput } from './lib/atlas';
+import { ATLAS_STORAGE_KEY, buildAtlasInput, parseAtlasInputRequest, type AtlasInput } from './lib/atlas';
 import { ATLAS_TRAIL_STORAGE_KEY, parseAtlasTrail, activeAtlasStop } from './lib/atlas-trail';
 import { ScreeningReel } from './components/screening-reel';
 import { FilmLibrary } from './components/film-library';
@@ -158,8 +158,11 @@ export default function Home() {
         const saved = parseStoredState(localStorage.getItem(STORAGE_KEY), atlasTrail.maps.flatMap(map => [map.atlas.anchor, ...map.atlas.neighbors]));
         const savedAtlas = activeAtlasStop(atlasTrail);
         if (location.hash === '#atlas' && savedAtlas) {
-          const target = buildAtlasInput(savedAtlas.atlas.anchor, JSON.parse(savedAtlas.inputKey)[1], saved.excludedFilms, []);
-          lastAtlasTarget.current = target; setAtlasTarget(target); setAtlasResume(true);
+          const request = parseAtlasInputRequest(savedAtlas.inputKey, savedAtlas.atlas.anchor);
+          if (request) {
+            const target = buildAtlasInput(savedAtlas.atlas.anchor, request, saved.excludedFilms, []);
+            lastAtlasTarget.current = target; setAtlasTarget(target); setAtlasResume(true);
+          }
         }
         setLikedFilms(parseLikedFilms(localStorage.getItem(TASTE_STORAGE_KEY)));
         setWatchlist(parseWatchlist(localStorage.getItem(WATCHLIST_KEY)));
@@ -218,7 +221,8 @@ export default function Home() {
   }
   function toggleSave(film: SavedFilm) {
     const record = metadataByKey[movieKey(film.title, film.year)];
-    const identity = { ...film, ...(record?.status === 'matched' ? { tmdbId: record.tmdbId } : {}) };
+    const tmdbId = film.tmdbId || (record?.status === 'matched' ? record.tmdbId : undefined);
+    const identity = { title: film.title, year: film.year, ...(tmdbId ? { tmdbId } : {}) };
     try {
       const removing = savedKeys.has(movieKey(film.title, film.year));
       if (saveWatchlist(toggleWatchlist(watchlist, identity))) setNotice(removing ? `${film.title} removed from your watchlist.` : `${film.title} saved for another night.`);
@@ -1124,7 +1128,7 @@ export default function Home() {
           onImport={next => { if (!saveWatchlist(next)) throw new Error('The backup could not be saved in this browser.'); }}
           onExplore={(film, opener) => { setLibraryOpen(false); openAtlas(film, libraryOpener || opener, false, true); }} />
         <AtlasWorkspace key={atlasResetRevision} target={atlasTarget} opener={atlasOpener} onClose={closeAtlas} onBusy={setAtlasBusy} preferSaved={atlasResume}
-          connected={connection === 'connected'} metadataByKey={metadataByKey} likedKeys={likedKeys} onLike={toggleLike}
+          connected={connection === 'connected'} metadataByKey={metadataByKey} likedKeys={likedKeys} onLike={toggleLike} savedKeys={savedKeys} onSave={toggleSave}
           onExplore={(film, opener, request) => openAtlas(film, opener, false, false, request)} onSearchExplore={(film, opener) => openAtlas(film, opener, false, true)} selectedFacets={selectedFacets} onBorrow={lightTableEnabled ? handleSelectFacet : undefined} lightTable={atlasTarget ? lightTable : null} />
         </div>
       </div>

@@ -60,6 +60,20 @@ export function atlasInputKey(input: AtlasInput): string {
     : JSON.stringify([key, input.request]);
 }
 
+/** Read the accepted request from either stored key shape, verifying its film identity. */
+export function parseAtlasInputRequest(inputKey: string, anchor: AtlasIdentity): DevelopInput | null {
+  if (inputKey.length > 200_000) return null;
+  try {
+    const value: unknown = JSON.parse(inputKey);
+    if (!Array.isArray(value) || ![2, 3].includes(value.length) || value[0] !== movieKey(anchor.title, anchor.year)) return null;
+    if (value.length === 3 && (!catalogId(value[1]) || (anchor.tmdbId && value[1] !== anchor.tmdbId))) return null;
+    const request: unknown = value[value.length - 1];
+    if (!record(request) || typeof request.creativeBrief !== 'string' || !Array.isArray(request.films)
+      || !request.films.every((film: unknown) => typeof film === 'string')) return null;
+    return request as DevelopInput;
+  } catch { return null; }
+}
+
 /** Only the accepted request travels into the Atlas; draft text cannot silently change its meaning. */
 export function buildAtlasInput(anchor: AtlasIdentity, request: DevelopInput, excludedFilms: ExcludedFilm[], likedFilms: ExcludedFilm[]): AtlasInput {
   return { anchor: { title: anchor.title, year: anchor.year, ...(catalogId(anchor.tmdbId) ? { tmdbId: anchor.tmdbId } : {}) }, request: { ...request, excludedFilms, likedFilms } };

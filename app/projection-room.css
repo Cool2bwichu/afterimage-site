@@ -189,29 +189,6 @@
 .library-import { position: relative; display: inline-flex; align-items: center; min-height: 44px; color: #963b2a; cursor: pointer; }
 .library-import input { position: absolute; inset: 0; opacity: 0; width: 100%; cursor: pointer; }
 .library-import:focus-within { outline: 2px solid #963b2a; outline-offset: 4px; }
-/* Atlas keeps the map while giving each comparison a clear reading surface. */
-.projection-room .atlas-dialog { --atlas-bg: #101211; --atlas-ink: #f3efe6; --atlas-gold: #edc6b5; --atlas-muted: #aaa99f; --atlas-line: #383c36; }
-.projection-room .atlas-shell { background: var(--atlas-bg); }
-.projection-room .atlas-shell::before { display: none; }
-.projection-room .atlas-masthead, .projection-room .atlas-filmrail, .projection-room .atlas-search { background: #101211; }
-.projection-room .atlas-masthead em { display: none; }
-.projection-room .atlas-brand { font-family: var(--font-sans), sans-serif; letter-spacing: -.055em; }
-.projection-room .atlas-brand small { letter-spacing: 0; text-transform: none; font-size: 12px; }
-.projection-room .atlas-introduction { font: 400 22px/1.3 var(--font-display), Georgia, serif; }
-.projection-room .atlas-map { background: #191e19; border: 1px solid var(--atlas-line); box-shadow: none; }
-.projection-room .atlas-link-halo, .projection-room .atlas-link-pulse { display: none; }
-.projection-room .atlas-connection.is-selected .atlas-link-line { stroke-width: .35; }
-.projection-room .atlas-node, .projection-room .atlas-node-image, .projection-room .atlas-star-bright { animation: none; }
-.projection-room .atlas-comparison { background: var(--paper); color: var(--reading-ink); --atlas-ink: #20231f; --atlas-muted: #62645c; --atlas-line: #c6c3b6; --atlas-gold: #963b2a; --atlas-close: #825d20; --atlas-echo: #326354; --atlas-contrast: #a44342; padding: 24px; }
-.projection-room .atlas-comparison p, .projection-room .atlas-comparison h2, .projection-room .atlas-comparison h3 { color: var(--reading-ink); }
-.projection-room .atlas-comparison .atlas-quality p { color: #505249; }
-.projection-room .atlas-comparison button { color: var(--reading-ink); }
-.projection-room .atlas-comparison-empty { color: #62645c; }
-.projection-room .atlas-workbench { background: #171b17; }
-.projection-room .atlas-empty { padding: 60px 30px; text-align: center; }
-.projection-room .atlas-empty h2 { font: 400 40px/1.1 var(--font-display), Georgia, serif; }
-.projection-room .atlas-empty p { font-size: 16px; color: var(--muted); margin: 20px auto; max-width: 42ch; }
-.projection-room .atlas-empty button { padding: 12px 20px; min-height: 48px; border: 1px solid #d5cabb; background: var(--paper); color: var(--reading-ink); }
 /* Recompose the welcome around the existing, real film stills. */
 .projection-room.is-landing { background: #101211; }
 .projection-room .welcome { --welcome-gold: #edc6b5; --welcome-muted: #aaa99f; }
@@ -350,8 +327,6 @@
   .projection-room .welcome-chapter { gap: 26px; }
   .projection-room .welcome-chapters { gap: 15px; }
   .projection-room .welcome-chapters button { font-size: 20px; }
-  .projection-room .atlas-comparison { padding: 22px 18px; }
-  .projection-room .atlas-map { min-height: 400px; }
 }
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
@@ -364,22 +339,6 @@
 .screening-compare-picker label { font-size: 13px; color: var(--muted); }
 .screening-compare-picker select { padding: 12px; min-height: 44px; color: var(--paper); background: #232820; border: 1px solid #53584c; border-radius: 0; max-width: 100%; }
 .screening-compare-picker button { justify-self: start; min-height: 44px; border-bottom: 1px solid #74796b; }
-.projection-room .atlas-map[hidden], .projection-room .atlas-lens-controls[hidden], .projection-room .atlas-mobile-caption[hidden] { display: none; }
-.atlas-view-switch { display: flex; gap: 6px; align-items: center; margin-bottom: 12px; }
-.atlas-view-switch button { padding: 8px 16px; min-height: 44px; border: 1px solid var(--atlas-line); color: inherit; }
-.atlas-view-switch button[aria-pressed=true] { color: #1e241d; background: #e9e5d9; }
-.atlas-view-switch span { font-size: 12px; color: #b9bcae; margin-left: auto; }
-.atlas-connection-list { display: grid; gap: 0; }
-.atlas-list-anchor { display: grid; grid-template-columns: 1fr auto; padding: 18px; border: 1px solid var(--atlas-line); text-align: left; margin-bottom: 8px; }
-.atlas-list-anchor small { grid-column: 1/-1; color: #b9bcae; margin-bottom: 6px; }
-.atlas-list-film { display: grid; grid-template-columns: 100px 1fr 16px; gap: 16px; align-items: center; padding: 14px 0; border-bottom: 1px solid var(--atlas-line); text-align: left; }
-.atlas-list-film > div { aspect-ratio: 16/10; overflow: hidden; background: #2e352a; }
-.atlas-list-film img { width: 100%; height: 100%; object-fit: cover; }
-.atlas-list-film > span { display: grid; gap: 5px; }
-.atlas-list-film strong { font-size: 16px; font-weight: 500; }
-.atlas-list-film small, .atlas-list-film em { color: #b9bcae; font-size: 12px; font-style: normal; }
-.atlas-list-film[aria-pressed=true] strong { color: #f3c7ae; }
-@media (max-width:760px) { .atlas-view-switch span { display: none; } .atlas-list-film { grid-template-columns: 84px 1fr 16px; gap: 12px; } }
 @media (max-width: 760px) {
   .projection-room:not(.is-landing) .masthead { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 0 14px; }
   .projection-room:not(.is-landing) .masthead-actions { display: contents; }
