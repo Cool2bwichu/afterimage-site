@@ -12,6 +12,7 @@ test('TMDB enrichment keeps the token in headers and safely projects one exact m
       return Response.json({ results: [{ id: 843, title: 'In the Mood for Love', original_title: '花樣年華', release_date: '2000-09-29', adult: false }] });
     }
     return Response.json({
+      id: 843, title: 'In the Mood for Love', original_title: '花樣年華', adult: false,
       poster_path: '/poster.jpg', overview: 'Two neighbors discover an intimate absence.', runtime: 98,
       release_date: '2000-09-29', genres: [{ name: 'Drama' }], production_countries: [{ name: 'Hong Kong' }],
       credits: { crew: [{ job: 'Director', name: 'Wong Kar-wai' }, { job: 'Writer', name: 'Someone Else' }] },
@@ -27,6 +28,35 @@ test('TMDB enrichment keeps the token in headers and safely projects one exact m
   assert.deepEqual(result.status === 'matched' ? result.directors : [], ['Wong Kar-wai']);
   assert.equal(result.status === 'matched' ? result.tmdbRating : null, 8.1);
   assert.equal(JSON.stringify(result).includes(token), false);
+});
+
+test('nearby catalog release year needs corroborating release-date evidence', async () => {
+  const calls: string[] = [];
+  const fetchImpl = (async (input: string | URL | Request) => {
+    const url = String(input); calls.push(url);
+    if (url.includes('/search/movie')) return Response.json({ results: url.includes('primary_release_year') ? [] : [
+      { id: 402, title: 'After Yang', original_title: 'After Yang', release_date: '2022-03-04', adult: false },
+    ] });
+    return Response.json({ id: 402, title: 'After Yang', original_title: 'After Yang', adult: false,
+      release_date: '2022-03-04', release_dates: { results: [{ iso_3166_1: 'US', release_dates: [{ release_date: '2021-07-08T00:00:00.000Z' }] }] },
+      poster_path: '/film.jpg', overview: '', runtime: 96, genres: [], production_countries: [], credits: { crew: [] }, external_ids: {} });
+  }) as typeof fetch;
+  const result = await createTmdbClient({ token: 'test', fetchImpl }).enrichOne({ title: 'After Yang', year: '2021', key: 'after yang|2021' });
+  assert.equal(result.status, 'matched');
+  assert.equal(result.status === 'matched' ? result.tmdbId : null, 402);
+  assert.equal(calls.length, 3);
+});
+
+test('a nearby year without release corroboration and ambiguous broad results do not attach imagery', async () => {
+  for (const candidates of [[{ id: 402, title: 'After Yang', release_date: '2022-03-04', adult: false }],
+    [{ id: 402, title: 'After Yang', release_date: '2022-03-04', adult: false }, { id: 403, title: 'After Yang', release_date: '2022-01-01', adult: false }]]) {
+    const fetchImpl = (async (input: string | URL | Request) => String(input).includes('/search/movie')
+      ? Response.json({ results: String(input).includes('primary_release_year') ? [] : candidates })
+      : Response.json({ id: 402, title: 'After Yang', original_title: 'After Yang', adult: false,
+        release_date: '2022-03-04', release_dates: { results: [] }, poster_path: '/wrong.jpg' })) as typeof fetch;
+    const result = await createTmdbClient({ token: 'test', fetchImpl }).enrichOne({ title: 'After Yang', year: '2021', key: 'after yang|2021' });
+    assert.equal(result.status, 'unmatched');
+  }
 });
 
 test('TMDB ambiguity is a text-only unmatched result', async () => {

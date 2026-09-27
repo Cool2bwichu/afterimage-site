@@ -17,7 +17,7 @@ test('malformed optional program notes leave the ordinary recommendation intact'
  assert.equal(parsed?.recommendations.length,5);assert.equal(parsed?.recommendations[0].programNotes,undefined);
 });
 test('backdrops come from verified provider paths and unsafe persisted URLs are rejected',async()=>{
- const client=createTmdbClient({token:'test-token',fetchImpl:(async(url)=>String(url).includes('/search/movie')?Response.json({results:[{id:2,title:'Film',original_title:'Film',release_date:'2001-01-01'}]}):Response.json({backdrop_path:'/scene.jpg',poster_path:'/poster.jpg',overview:'',runtime:95,release_date:'2001-01-01',genres:[],production_countries:[],credits:{crew:[]}})) as typeof fetch});
+ const client=createTmdbClient({token:'test-token',fetchImpl:(async(url)=>String(url).includes('/search/movie')?Response.json({results:[{id:2,title:'Film',original_title:'Film',release_date:'2001-01-01'}]}):Response.json({id:2,title:'Film',original_title:'Film',backdrop_path:'/scene.jpg',poster_path:'/poster.jpg',overview:'',runtime:95,release_date:'2001-01-01',genres:[],production_countries:[],credits:{crew:[]}})) as typeof fetch});
  const record=await client.enrichOne({title:'Film',year:'2001',key:'film|2001'});
  assert.equal(record.status,'matched');assert.equal(record.status==='matched'&&record.backdropUrl,'https://image.tmdb.org/t/p/w1280/scene.jpg');
  assert.ok(parseFilmEnrichment(record));

@@ -1,6 +1,6 @@
 'use client';
 
-import { memo, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { ATLAS_STORAGE_KEY, atlasInputKey, parseAtlas, type AtlasInput } from '../lib/atlas';
 import { ATLAS_TRAIL_STORAGE_KEY, MAX_ATLAS_MAPS, activeAtlasStop, emptyAtlasTrail, finishAtlasMap, moveAtlasTrail, parseAtlasTrail, updateAtlasView, visitAtlasMap } from '../lib/atlas-trail';
 import { FACET_KEYS, FACET_META, type CinematicFacet, type FacetKey, type FacetSource, type SelectedFacets } from '../lib/light-table';
@@ -41,27 +41,6 @@ function Artwork({ film, metadata, portrait = false }: { film: FacetSource; meta
     : <span className="atlas-art-fallback" aria-hidden="true">{film.title.slice(0, 1)}</span>;
 }
 
-function createStarPoints() {
-  // Deterministic decorative light, not additional films or inferred relationships.
-  let seed = 71425;
-  const random = () => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed / 4294967296; };
-  return Array.from({ length: 1100 }, (_, i) => {
-    const angle = random() * Math.PI * 2; const radius = Math.sqrt(random()) * 47;
-    return { x: Number((50 + Math.cos(angle) * radius).toFixed(3)), y: Number((49 + Math.sin(angle) * radius).toFixed(3)), r: i % 49 === 0 ? .18 : Number((.025 + random() * .085).toFixed(3)) };
-  });
-}
-const STAR_POINTS = createStarPoints();
-const StarField = memo(function StarField() {
-  const points = STAR_POINTS;
-  return <svg className="atlas-starfield" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
-    <defs><radialGradient id="atlas-nebula"><stop stopColor="#bc853f" stopOpacity=".22" /><stop offset=".5" stopColor="#658b86" stopOpacity=".08" /><stop offset="1" stopColor="#080d0b" stopOpacity="0" /></radialGradient></defs>
-    <circle cx="50" cy="49" r="49" fill="url(#atlas-nebula)" />
-    {[21, 33, 44, 48].map(r => <circle className="atlas-orbit" key={r} cx="50" cy="49" r={r} />)}
-    {points.map((point, index) => <circle key={index} cx={point.x} cy={point.y} r={point.r} className={index % 31 === 0 ? 'atlas-star-bright' : ''} fill={index % 4 ? '#dbb776' : '#82a5a4'} opacity={.15 + index % 7 / 10} />)}
-    {points.filter((_, i) => i % 49 === 0).map((point, index) => <path key={index} d={`M${point.x - .6} ${point.y}h1.2 M${point.x} ${point.y - .9}v1.8`} stroke="#edcc8b" strokeWidth=".055" opacity=".65" className="atlas-star-bright" />)}
-  </svg>;
-});
-
 export function AtlasWorkspace(props: Props) {
   const { target, opener, onClose, onBusy, connected, preferSaved, metadataByKey, likedKeys, onLike, onExplore, selectedFacets, onBorrow, lightTable } = props;
   const [saved, setSaved] = useState(emptyAtlasTrail);
@@ -70,6 +49,8 @@ export function AtlasWorkspace(props: Props) {
   const [error, setError] = useState('');
   const [metadata, setMetadata] = useState<Record<string, FilmEnrichment>>({});
   const [expanded, setExpanded] = useState(false);
+  const [mapView, setMapView] = useState<'map' | 'list'>('map');
+  useEffect(() => { const timer = setTimeout(() => { if (window.matchMedia('(max-width: 760px)').matches) setMapView('list'); }, 0); return () => clearTimeout(timer); }, []);
   const [pollRevision, setPollRevision] = useState(0);
   const dialog = useRef<HTMLDialogElement>(null);
   const trailNavigation = useRef<HTMLElement>(null);
@@ -88,7 +69,7 @@ export function AtlasWorkspace(props: Props) {
   const neighbor = atlas ? atlas.neighbors[selected < 0 ? 0 : selected] : null;
   const allMetadata = { ...metadataByKey, ...metadata };
   const getMetadata = (film: FacetSource) => allMetadata[movieKey(film.title, film.year)];
-  const historyFilms = JSON.stringify(saved.maps.map(map => ({ title: map.atlas.anchor.title, year: map.atlas.anchor.year })).sort((a, b) => movieKey(a.title, a.year).localeCompare(movieKey(b.title, b.year))));
+  const historyFilms = JSON.stringify(saved.maps.map(map => ({ title: map.atlas.anchor.title, year: map.atlas.anchor.year, ...(map.atlas.anchor.tmdbId ? { tmdbId: map.atlas.anchor.tmdbId } : {}) })).sort((a, b) => movieKey(a.title, a.year).localeCompare(movieKey(b.title, b.year))));
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -127,7 +108,7 @@ export function AtlasWorkspace(props: Props) {
     const timer = setTimeout(() => {
       processedTarget.current = target;
       setError('');
-      if (preferSaved && atlas) return;
+      if (preferSaved) return;
       const cached = saved.maps.find(map => map.inputKey === atlasInputKey(target));
       if (cached) { setSaved(current => visitAtlasMap(current, cached.id)); return; }
       if (saved.pending) return;
@@ -183,7 +164,7 @@ export function AtlasWorkspace(props: Props) {
     const controller = new AbortController();
     const films = [atlas.anchor, ...atlas.neighbors];
     void Promise.all([films.slice(0, 5), films.slice(5)].map(async batch => {
-      const response = await fetch('/api/films/enrich', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ films: batch.map(({ title, year }) => ({ title, year })) }), signal: controller.signal });
+      const response = await fetch('/api/films/enrich', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ films: batch.map(film => ({ title: film.title, year: film.year, ...(film.tmdbId ? { tmdbId: film.tmdbId } : {}) })) }), signal: controller.signal });
       if (!response.ok) return;
       const records = parseEnrichmentResponse(await response.json());
       if (!controller.signal.aborted) setMetadata(current => ({ ...current, ...Object.fromEntries(records.map(item => [item.key, item])) }));
@@ -213,15 +194,9 @@ export function AtlasWorkspace(props: Props) {
     document.body.style.overflow = 'hidden';
     if (!element.open) element.showModal();
     back.current?.focus();
-    const closeOnBack = () => onClose();
-    const url = new URL(location.href); url.hash = 'atlas';
-    if (location.hash !== '#atlas') history.pushState({ afterimageAtlas: true }, '', url);
-    window.addEventListener('popstate', closeOnBack);
     return () => {
-      window.removeEventListener('popstate', closeOnBack);
       document.body.style.overflow = previous;
       element.close();
-      if (location.hash === '#atlas') { const clean = new URL(location.href); clean.hash = ''; history.replaceState(null, '', clean); }
       if (opener?.isConnected) opener.focus();
     };
   }, [isOpen, opener, onClose]);
@@ -297,8 +272,10 @@ export function AtlasWorkspace(props: Props) {
 
         <section className="atlas-center" aria-label="Film connection map">
           {busy || error ? <div className="atlas-progress" role={error ? 'alert' : 'status'}><span>{error || `Developing an Atlas around ${saved.pending?.anchor.title || target?.anchor.title}…`}</span>{!error ? <small>{atlas ? 'Your previous map stays here while this one develops.' : 'Considering connections and verifying film identities. This can take a few minutes.'}</small> : <button disabled={starting} onClick={() => { setError(''); if (saved.pending) setPollRevision(current => current + 1); else if (inputRef.current) void develop(inputRef.current); }}>{saved.pending ? 'Resume Atlas' : 'Try again'} ↗</button>}</div> : null}
-          <div className={`atlas-map${atlas ? ' is-developed' : ' is-developing'}`}>
-            <StarField />
+          {atlas ? <div className="atlas-view-switch" aria-label="Connection presentation"><button type="button" aria-pressed={mapView === 'map'} onClick={() => setMapView('map')}>Map</button><button type="button" aria-pressed={mapView === 'list'} onClick={() => setMapView('list')}>Film list</button><span>Six ways to go further.</span></div> : null}
+          {atlas && mapView === 'list' ? <div className="atlas-connection-list"><button type="button" className="atlas-list-anchor" aria-pressed={selected === -1} onClick={() => select(-1)}><small>Your starting point</small><strong>{atlas.anchor.title}</strong><span>{atlas.anchor.year}</span></button>{atlas.neighbors.map((film, index) => <button type="button" className="atlas-list-film" key={movieKey(film.title, film.year)} aria-pressed={selected === index} onClick={() => { select(index); if (window.matchMedia('(max-width: 760px)').matches) requestAnimationFrame(() => dialog.current?.querySelector('.atlas-relationship')?.scrollIntoView({ block: 'start', behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' })); }}><div><Artwork film={film} metadata={getMetadata(film)} /></div><span><small>{String(index + 1).padStart(2, '0')} / {film.year}</small><strong>{film.title}</strong><em>{film.label}</em></span><span aria-hidden="true">↗</span></button>)}</div> : null}
+          <div hidden={Boolean(atlas && mapView === 'list')} className={`atlas-map${atlas ? ' is-developed' : ' is-developing'}`}>
+            {!atlas && !busy && !error ? <div className="atlas-empty"><h2>Follow a film further.</h2><p>Explore six considered connections around {target?.anchor.title}. Your reel stays right here.</p><button type="button" disabled={!connected || starting} onClick={() => { if (target) void develop(target); }}>Develop this Atlas</button></div> : null}
             <svg className="atlas-links" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><defs><filter id="atlas-glow"><feGaussianBlur stdDeviation=".3" /></filter></defs>
               {atlas?.neighbors.map((film, i) => {
                 const [x, y] = POSITIONS[i]; const path = `M 50 47 Q ${50 + (x - 50) * .22} ${y} ${x} ${y}`;
@@ -310,15 +287,15 @@ export function AtlasWorkspace(props: Props) {
             {atlas ? <>
               <button className={`atlas-node is-anchor${selected === -1 ? ' is-selected' : ''}`} style={{ '--x': '50%', '--y': '47%' } as CSSProperties} aria-label={`Select anchor film ${atlas.anchor.title}`} aria-pressed={selected === -1} onClick={() => select(-1)}><span className="atlas-node-image"><Artwork film={atlas.anchor} metadata={getMetadata(atlas.anchor)} /></span><span className="atlas-node-title">{atlas.anchor.title}<small>{atlas.anchor.year}</small></span></button>
               {atlas.neighbors.map((film, i) => <button key={movieKey(film.title, film.year)} className={`atlas-node${selected === i ? ' is-selected' : ''}`} data-affinity={lens === 'all' ? undefined : film.lenses[lens].affinity} style={{ '--x': `${POSITIONS[i][0]}%`, '--y': `${POSITIONS[i][1]}%`, '--arrival': `${i * 65 + 100}ms` } as CSSProperties} aria-label={`Explore ${film.title}: ${film.label}${lens === 'all' ? '' : `. ${FACET_META[lens].label}: ${AFFINITY[film.lenses[lens].affinity]}`}`} aria-pressed={selected === i} onClick={() => select(i)} onKeyDown={event => { if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') { event.preventDefault(); const index = (i + (event.key === 'ArrowRight' ? 1 : 5)) % 6; select(index); dialog.current?.querySelectorAll<HTMLButtonElement>('.atlas-node:not(.is-anchor)')[index]?.focus(); } }}><span className="atlas-node-image"><Artwork film={film} metadata={getMetadata(film)} /></span><span className="atlas-node-title">{film.title}<small>{film.year}</small></span></button>)}
-            </> : <div className="atlas-empty-orbit"><span />{saved.pending?.anchor.title || target?.anchor.title}<small>{saved.pending?.anchor.year || target?.anchor.year}</small></div>}
+            </> : busy ? <div className="atlas-empty-orbit"><span />{saved.pending?.anchor.title || target?.anchor.title}<small>{saved.pending?.anchor.year || target?.anchor.year}</small></div> : null}
           </div>
-          <p className="atlas-mobile-caption" data-affinity={selected >= 0 && neighbor && lens !== 'all' ? neighbor.lenses[lens].affinity : undefined} aria-live="polite">{selected >= 0 && neighbor ? <button onClick={() => dialog.current?.querySelector('.atlas-relationship')?.scrollIntoView({ block: 'start', behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' })}>{lens === 'all' ? neighbor.label : `${FACET_META[lens].compactLabel}: ${AFFINITY[neighbor.lenses[lens].affinity]}`} · Read connection ↓</button> : "Choose a film to explore its connection."}</p>
-          <div className="atlas-lens-controls" aria-label="Connection lens" aria-describedby={atlas ? 'atlas-line-key-note' : undefined}><span>Look through</span>{(['all', ...FACET_KEYS] as const).map(channel => <button key={channel} aria-pressed={lens === channel} onClick={() => setLens(channel)}>{channel === 'all' ? 'Whole film' : FACET_META[channel].compactLabel}</button>)}</div>
+          <p hidden={!atlas} className="atlas-mobile-caption" data-affinity={selected >= 0 && neighbor && lens !== 'all' ? neighbor.lenses[lens].affinity : undefined} aria-live="polite">{selected >= 0 && neighbor ? <button onClick={() => dialog.current?.querySelector('.atlas-relationship')?.scrollIntoView({ block: 'start', behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' })}>{lens === 'all' ? neighbor.label : `${FACET_META[lens].compactLabel}: ${AFFINITY[neighbor.lenses[lens].affinity]}`} · Read connection ↓</button> : "Choose a film to explore its connection."}</p>
+          <div hidden={!atlas} className="atlas-lens-controls" aria-label="Connection lens" aria-describedby={atlas ? 'atlas-line-key-note' : undefined}><span>Look through</span>{(['all', ...FACET_KEYS] as const).map(channel => <button key={channel} aria-pressed={lens === channel} onClick={() => setLens(channel)}>{channel === 'all' ? 'Whole film' : FACET_META[channel].compactLabel}</button>)}</div>
           {atlas ? <div className="atlas-line-key" aria-label="Connection line key">
             <div>{(Object.keys(AFFINITY) as Array<keyof typeof AFFINITY>).map(affinity => <span key={affinity} data-affinity={affinity}><i aria-hidden="true" /><span>{AFFINITY[affinity]}<small>{AFFINITY_DESCRIPTIONS[affinity]}</small></span></span>)}</div>
             <p id="atlas-line-key-note" aria-live="polite">{lens === 'all' ? 'Choose a lens to color the connections.' : `${FACET_META[lens].label} · Select a film to read why.`}</p>
           </div> : null}
-          {atlas ? <><p className="atlas-thesis">{atlas.anchor.facets.howItFeels.label} · {atlas.anchor.facets.howItLooks.label}</p><div className="atlas-map-footer"><span>Shared qualities · Unexpected echoes</span><button onClick={() => setExpanded(!expanded)} aria-pressed={expanded}>{expanded ? 'Return to full Atlas' : 'Expand map'} <span aria-hidden="true">{expanded ? '−' : '↗'}</span></button></div></> : null}
+          {atlas && mapView === 'map' ? <><p className="atlas-thesis">{atlas.anchor.facets.howItFeels.label} · {atlas.anchor.facets.howItLooks.label}</p><div className="atlas-map-footer"><span>Shared qualities · Unexpected echoes</span><button onClick={() => setExpanded(!expanded)} aria-pressed={expanded}>{expanded ? 'Return to full Atlas' : 'Expand map'} <span aria-hidden="true">{expanded ? '−' : '↗'}</span></button></div></> : null}
         </section>
 
         {atlas && neighbor ? <aside className="atlas-insights" aria-label="Connection insights">

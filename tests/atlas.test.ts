@@ -30,3 +30,18 @@ test('Atlas snapshots preserve the accepted prompt and carry fresh exclusions an
   assert.notEqual(atlasInputKey(input), atlasInputKey({ ...input, request: { ...request, creativeBrief: 'Something else' } }));
   assert.equal(request.creativeBrief, 'Patient longing');
 });
+test('Atlas preserves verified catalog IDs without treating a different release as the same cache entry', () => {
+  const request = { films: ['After Yang'], creativeBrief: 'Quiet science fiction' };
+  const identified = buildAtlasInput({ title: 'After Yang', year: '2021', tmdbId: 1201 }, request, [], []);
+  const otherRelease = buildAtlasInput({ title: 'After Yang', year: '2021', tmdbId: 1202 }, request, [], []);
+  assert.equal(identified.anchor.tmdbId, 1201);
+  assert.notEqual(atlasInputKey(identified), atlasInputKey(otherRelease));
+  const atlas = fixture() as ReturnType<typeof fixture> & { anchor: { tmdbId?: number }; neighbors: Array<{ tmdbId?: number }> };
+  atlas.anchor.tmdbId = 1201;
+  atlas.neighbors[0].tmdbId = 1202;
+  assert.equal(parseAtlas(atlas)?.anchor.tmdbId, 1201);
+  atlas.neighbors[0].tmdbId = 1201;
+  assert.equal(parseAtlas(atlas), null);
+  atlas.neighbors[0].tmdbId = -1;
+  assert.equal(parseAtlas(atlas), null);
+});

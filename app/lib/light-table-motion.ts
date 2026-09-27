@@ -3,8 +3,11 @@ import type { FacetKey } from './light-table.ts';
 /** Decorative only; no focusable clone, duplicated IDs or required motion. */
 export function animateFacetToLane(source: HTMLElement, channel: FacetKey) {
   if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-  let target = document.querySelector<HTMLElement>(`[data-light-table-lane="${channel}"]`);
-  if (!target?.getBoundingClientRect().height) target = document.querySelector('.ai-light-table__mobile-toggle');
+  const candidates = document.querySelectorAll<HTMLElement>(`[data-light-table-lane="${channel}"], [data-light-table-summary="${channel}"], .ai-light-table__mobile-toggle, .ai-light-table__desktop-toggle`);
+  const target = Array.from(candidates).find(element => {
+    const bounds = element.getBoundingClientRect();
+    return bounds.height > 0 && bounds.width > 0 && bounds.bottom > 0 && bounds.top < window.innerHeight;
+  });
   if (!target || !source.isConnected) return;
   const start = source.getBoundingClientRect();
   const end = target.getBoundingClientRect();

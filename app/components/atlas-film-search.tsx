@@ -2,9 +2,9 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { parseFilmSearchResults, type FilmSearchResult } from '../lib/film-search';
-import type { FacetSource } from '../lib/light-table';
+import type { AtlasInput } from '../lib/atlas';
 
-type Props = { busy: boolean; connected: boolean; onDevelop: (film: FacetSource, opener: HTMLElement) => void };
+type Props = { busy: boolean; connected: boolean; onDevelop: (film: AtlasInput['anchor'], opener: HTMLElement) => void };
 type Lookup = { query: string; status: 'loading' | 'ready' | 'error'; films: FilmSearchResult[]; error?: string };
 
 export function AtlasFilmSearch({ busy, connected, onDevelop }: Props) {
@@ -53,7 +53,7 @@ export function AtlasFilmSearch({ busy, connected, onDevelop }: Props) {
             onKeyDown={event => { if (event.key === 'ArrowDown' && showResults) { const first = results.current?.querySelector('button'); if (first) { event.preventDefault(); first.focus(); } } }} />
           <button type="submit" aria-label="Search films" disabled={term.length < 2}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" /><path d="m16 16 5 5" /></svg></button>
         </div>
-        <button type="button" className="atlas-search-develop" disabled={!selected || busy || !connected} onClick={event => { if (selected) { setOpen(false); onDevelop({ title: selected.title, year: selected.year }, event.currentTarget); } }}>Develop Atlas <span aria-hidden="true">↗</span></button>
+        <button type="button" className="atlas-search-develop" disabled={!selected || busy || !connected} onClick={event => { if (selected) { setOpen(false); onDevelop({ title: selected.title, year: selected.year, tmdbId: selected.id }, event.currentTarget); } }}>Develop Atlas <span aria-hidden="true">↗</span></button>
       </div>
       <p id="atlas-search-help" className="atlas-search-help" role="status">{busy ? 'An Atlas is developing. You can keep browsing.' : !connected ? 'Reconnect the film service from your reel to develop an Atlas.' : selected ? <>Ready to explore <strong>{selected.title} <span>({selected.year})</span></strong></> : 'Search for a film and select the right release.'}</p>
       {showResults ? <div className="atlas-search-results" ref={results} aria-label="Matching films">

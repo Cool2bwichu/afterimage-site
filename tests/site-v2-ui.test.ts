@@ -28,7 +28,7 @@ test('the page wires the flexible V2 state contract into readiness, payload, and
     page,
     /buildDevelopPayload\(\s*films,\s*creativeBrief,\s*normalizeExcludedFilms/s,
   );
-  assert.match(page, /parseStoredState\(localStorage\.getItem\(STORAGE_KEY\)\)/);
+  assert.match(page, /parseStoredState\(localStorage\.getItem\(STORAGE_KEY\)(?:,|\))/);
   assert.match(page, /version: 4/);
   assert.match(page, /metadataByKey/);
 });

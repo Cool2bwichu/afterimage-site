@@ -6,8 +6,11 @@ import { AtlasWorkspace } from './components/atlas';
 import { parseFilmSearchResults, type FilmSearchResult } from './lib/film-search';
 import { Landing, nextWelcomeFilm, type WelcomeFilm } from './components/landing';
 import { ATLAS_STORAGE_KEY, buildAtlasInput, type AtlasInput } from './lib/atlas';
-import { ATLAS_TRAIL_STORAGE_KEY } from './lib/atlas-trail';
-import { RecommendationCard } from './components/recommendation-card';
+import { ATLAS_TRAIL_STORAGE_KEY, parseAtlasTrail, activeAtlasStop } from './lib/atlas-trail';
+import { ScreeningReel } from './components/screening-reel';
+import { FilmLibrary } from './components/film-library';
+import { ReelComparison } from './components/reel-comparison';
+import { WATCHLIST_KEY, parseWatchlist, toggleWatchlist, type SavedFilm } from './lib/library';
 import { SearchFingerprint } from './components/search-fingerprint';
 import { LightTable } from './components/light-table';
 import { LIGHT_TABLE_EXPERIENCE, buildBlendPayload, isSameSelectedFacet, removeFacet, selectFacet, selectionCount, type CinematicFacet, type FacetKey, type FacetSource, type SelectedFacets } from './lib/light-table';
@@ -76,20 +79,30 @@ export default function Home() {
   const [enrichmentPending, setEnrichmentPending] = useState(false);
   const [selectedRecommendation, setSelectedRecommendation] = useState<number | null>(null);
   const [dossierOpener, setDossierOpener] = useState<HTMLElement | null>(null);
+  const lastAtlasTarget = useRef<AtlasInput | null>(null);
   const [atlasTarget, setAtlasTarget] = useState<AtlasInput | null>(null);
   const [atlasOpener, setAtlasOpener] = useState<HTMLElement | null>(null);
   const [atlasBusy, setAtlasBusy] = useState(false);
   const [atlasResume, setAtlasResume] = useState(false);
   const [atlasResetRevision, setAtlasResetRevision] = useState(0);
   const closeAtlas = useCallback(() => {
-    if (window.history.state?.afterimageAtlas) window.history.back();
-    else setAtlasTarget(null);
+    if (window.history.state?.afterimageOverlay) window.history.back();
+    else { const url = new URL(location.href); url.hash = ''; history.replaceState(null, '', url); setAtlasTarget(null); }
   }, []);
   const [excludedFilms, setExcludedFilms] = useState<ExcludedFilm[]>([]);
   const [likedFilms, setLikedFilms] = useState<LikedFilm[]>([]);
+  const [watchlist, setWatchlist] = useState<SavedFilm[]>([]);
+  const [libraryOpen, setLibraryOpen] = useState(false);
+  const [libraryOpener, setLibraryOpener] = useState<HTMLElement | null>(null);
+  const [screeningIndex, setScreeningIndex] = useState(0);
+  const [comparison, setComparison] = useState<{ first: number; second: number; opener: HTMLElement | null } | null>(null);
+  const [replacementJob, setReplacementJob] = useState<{ jobId: string; index: number }>();
+  const [replacementUndo, setReplacementUndo] = useState<{ result: AfterimageResultV2; input: DevelopInput; index: number } | null>(null);
+  const savedKeys = useMemo(() => new Set(watchlist.map(film => movieKey(film.title, film.year))), [watchlist]);
   const likedKeys = useMemo(() => new Set(likedFilms.map(film => movieKey(film.title, film.year))), [likedFilms]);
   const [hydrated, setHydrated] = useState(false);
   const [notice, setNotice] = useState('');
+  const [facetUndo, setFacetUndo] = useState<{ facets: SelectedFacets; identity: string } | null>(null);
   const [error, setError] = useState('');
   const [connection, setConnection] = useState<ConnectionState>('checking');
   const [authFlow, setAuthFlow] = useState<AuthFlow>(null);
@@ -112,7 +125,7 @@ export default function Home() {
   const resetLocked = starting || Boolean(activeJobId && jobStatus !== 'failed') || atlasBusy || atlasLookupBusy;
   const hasSession = Boolean(result || films.length || draft || creativeBrief || activeJobId || excludedFilms.length || selectionCount(selectedFacets));
   const showLanding = hydrated && !activeJobId && (welcomeRequested || (landingOpen && !result));
-  const acceptedRetryInput = lightTableEnabled && activeJobId
+  const acceptedRetryInput = activeJobId
     ? acceptedInputForResumedJob(activeJobId, acceptedInputJobId || undefined, acceptedInput)
     : undefined;
 
@@ -140,17 +153,25 @@ export default function Home() {
         // The welcome image remains available when browser storage is blocked.
       }
       try {
-        const saved = parseStoredState(localStorage.getItem(STORAGE_KEY));
+        const readAtlas = (key: string) => { try { return JSON.parse(localStorage.getItem(key) || 'null'); } catch { return null; } };
+        const atlasTrail = parseAtlasTrail(readAtlas(ATLAS_TRAIL_STORAGE_KEY), readAtlas(ATLAS_STORAGE_KEY));
+        const saved = parseStoredState(localStorage.getItem(STORAGE_KEY), atlasTrail.maps.flatMap(map => [map.atlas.anchor, ...map.atlas.neighbors]));
+        const savedAtlas = activeAtlasStop(atlasTrail);
+        if (location.hash === '#atlas' && savedAtlas) {
+          const target = buildAtlasInput(savedAtlas.atlas.anchor, JSON.parse(savedAtlas.inputKey)[1], saved.excludedFilms, []);
+          lastAtlasTarget.current = target; setAtlasTarget(target); setAtlasResume(true);
+        }
         setLikedFilms(parseLikedFilms(localStorage.getItem(TASTE_STORAGE_KEY)));
+        setWatchlist(parseWatchlist(localStorage.getItem(WATCHLIST_KEY)));
         setWelcomeRequested(new URLSearchParams(window.location.search).get('welcome') === '1');
         const requested = new URLSearchParams(window.location.search).get('experience');
         const mode = requested === null ? saved.experience : requested === LIGHT_TABLE_EXPERIENCE ? LIGHT_TABLE_EXPERIENCE : undefined;
         setExperience(mode);
         setSelectedFacets(mode ? saved.selectedFacets ?? {} : {});
         setSelectedReelIdentity(mode ? saved.selectedReelIdentity ?? '' : '');
-        setAcceptedInput(mode ? saved.acceptedInput : undefined);
-        setDisplayedInput(mode ? saved.displayedInput : undefined);
-        setAcceptedInputJobId(mode ? saved.acceptedInputJobId ?? '' : '');
+        setAcceptedInput(saved.acceptedInput);
+        setDisplayedInput(saved.displayedInput);
+        setAcceptedInputJobId(saved.acceptedInputJobId ?? '');
         setLandingOpen(!saved.result && !saved.films.length && !saved.creativeBrief && !saved.activeJobId);
         setFilms(saved.films);
         setCreativeBrief(saved.creativeBrief);
@@ -158,6 +179,8 @@ export default function Home() {
         setMetadataByKey(saved.metadataByKey);
         setExcludedFilms(saved.excludedFilms);
         setActiveJobId(saved.activeJobId);
+        setReplacementJob(saved.replacementJob);
+        setScreeningIndex(saved.screeningIndex ?? 0);
         if (saved.activeJobId) setJobStatus('queued');
       } catch {
         // A damaged local draft should never keep the instrument from opening.
@@ -189,6 +212,72 @@ export default function Home() {
     }
   }
 
+  function saveWatchlist(next: SavedFilm[]) {
+    try { localStorage.setItem(WATCHLIST_KEY, JSON.stringify(next)); setWatchlist(next); return true; }
+    catch { setNotice('This browser could not save your watchlist. Keep this page open and try again.'); return false; }
+  }
+  function toggleSave(film: SavedFilm) {
+    const record = metadataByKey[movieKey(film.title, film.year)];
+    const identity = { ...film, ...(record?.status === 'matched' ? { tmdbId: record.tmdbId } : {}) };
+    try {
+      const removing = savedKeys.has(movieKey(film.title, film.year));
+      if (saveWatchlist(toggleWatchlist(watchlist, identity))) setNotice(removing ? `${film.title} removed from your watchlist.` : `${film.title} saved for another night.`);
+    } catch (reason) { setNotice(reason instanceof Error ? reason.message : 'The film could not be saved.'); }
+  }
+  function resolveFilm(record: FilmEnrichment) {
+    setMetadataByKey(current => ({ ...current, [record.key]: record }));
+  }
+  function filmUrl(index: number) {
+    const url = new URL(location.href);
+    const film = result?.recommendations[index];
+    url.hash = film ? `film=${encodeURIComponent(movieKey(film.title, film.year))}` : '';
+    return url;
+  }
+  function openDossier(index: number, opener: HTMLElement) {
+    history.pushState({ afterimageOverlay: true }, '', filmUrl(index));
+    setDossierOpener(opener); setSelectedRecommendation(index); setScreeningIndex(index);
+  }
+  function closeDossier() {
+    if (history.state?.afterimageOverlay) history.back();
+    else { const url = new URL(location.href); url.hash = ''; history.replaceState(null, '', url); setSelectedRecommendation(null); }
+  }
+  useEffect(() => {
+    const pop = () => {
+      let key = '';
+      try { key = location.hash.startsWith('#film=') ? decodeURIComponent(location.hash.slice(6)) : ''; } catch { /* Ignore damaged links. */ }
+      const index = result?.recommendations.findIndex(film => movieKey(film.title, film.year) === key) ?? -1;
+      setSelectedRecommendation(index < 0 ? null : index);
+      if (index >= 0) setScreeningIndex(index);
+      setLibraryOpen(location.hash === '#library');
+      if (location.hash !== '#atlas') setAtlasTarget(null);
+      else if (lastAtlasTarget.current) { setAtlasResume(true); setAtlasTarget(lastAtlasTarget.current); }
+      if (location.hash.startsWith('#compare=')) {
+        try {
+          const keys: unknown = JSON.parse(decodeURIComponent(location.hash.slice(9)));
+          const positions = Array.isArray(keys) && keys.length === 2 ? keys.map(key => result?.recommendations.findIndex(film => movieKey(film.title, film.year) === key) ?? -1) : [];
+          if (positions.length === 2 && positions.every(position => position >= 0) && positions[0] !== positions[1]) setComparison(current => ({ first: positions[0], second: positions[1], opener: current?.opener ?? null }));
+          else setComparison(null);
+        } catch { setComparison(null); }
+      } else setComparison(null);
+    };
+    const timer = setTimeout(pop, 0);
+    window.addEventListener('popstate', pop);
+    return () => { clearTimeout(timer); window.removeEventListener('popstate', pop); };
+  }, [result]);
+  function closeLibrary() {
+    if (history.state?.afterimageOverlay) history.back();
+    else { const url = new URL(location.href); url.hash = ''; history.replaceState(null, '', url); setLibraryOpen(false); }
+  }
+  function openComparison(first: number, second: number, opener: HTMLElement) {
+    const url = new URL(location.href); url.hash = `compare=${encodeURIComponent(JSON.stringify([first, second].map(index => movieKey(result!.recommendations[index].title, result!.recommendations[index].year))))}`;
+    history.pushState({ afterimageOverlay: true }, '', url);
+    setComparison({ first, second, opener });
+  }
+  function closeComparison() {
+    if (history.state?.afterimageOverlay) history.back();
+    else { const url = new URL(location.href); url.hash = ''; history.replaceState(null, '', url); setComparison(null); }
+  }
+
   function toggleLike(film: LikedFilm) {
     const wasLiked = likedKeys.has(movieKey(film.title, film.year));
     try {
@@ -201,6 +290,7 @@ export default function Home() {
 
   useEffect(() => {
     const syncLikes = (event: StorageEvent) => {
+      if (event.storageArea === localStorage && (event.key === WATCHLIST_KEY || event.key === null)) setWatchlist(parseWatchlist(event.key === null ? null : event.newValue));
       if (event.storageArea === localStorage && (event.key === TASTE_STORAGE_KEY || event.key === null)) setLikedFilms(parseLikedFilms(event.newValue));
     };
     window.addEventListener('storage', syncLikes);
@@ -217,12 +307,14 @@ export default function Home() {
       activeJobId,
       metadataByKey,
       excludedFilms,
-      ...(lightTableEnabled ? { experience, selectedFacets, selectedReelIdentity, acceptedInput, acceptedInputJobId, displayedInput: displayedInput ?? null, displayedReelIdentity: getRecommendationIdentity(result) } : {}),
+      selectedFilmKey: result ? movieKey(result.recommendations[screeningIndex]?.title ?? '', result.recommendations[screeningIndex]?.year ?? '') : undefined,
+      replacementJob, acceptedInput, acceptedInputJobId, displayedInput: displayedInput ?? null, displayedReelIdentity: getRecommendationIdentity(result),
+      ...(lightTableEnabled ? { experience, selectedFacets, selectedReelIdentity, blendDraft: { version: 1, facets: selectedFacets } } : {}),
     })); } catch {
       const timer = window.setTimeout(() => setNotice('This browser could not save the reel. Keep this page open to retain your selections.'), 0);
       return () => window.clearTimeout(timer);
     }
-  }, [films, creativeBrief, result, activeJobId, metadataByKey, excludedFilms, hydrated, experience, lightTableEnabled, selectedFacets, selectedReelIdentity, acceptedInput, acceptedInputJobId, displayedInput]);
+  }, [films, creativeBrief, result, activeJobId, metadataByKey, excludedFilms, hydrated, experience, lightTableEnabled, selectedFacets, selectedReelIdentity, acceptedInput, acceptedInputJobId, displayedInput, replacementJob, screeningIndex]);
 
   useEffect(() => {
     const connectionCheck = window.setTimeout(() => void refreshConnection(), 0);
@@ -277,7 +369,11 @@ export default function Home() {
 
         if (controller.signal.aborted) return;
         if (terminal.status === 'complete') {
-          if (lightTableEnabled) {
+          const replaced = replacementJob?.jobId === terminal.jobId ? replacementJob : null;
+          if (replaced) {
+            if (result && displayedInput) setReplacementUndo({ result, input: displayedInput, index: replaced.index });
+            setSelectedReelIdentity(selectionCount(selectedFacets) ? getRecommendationIdentity(terminal.reel) : '');
+          } else if (lightTableEnabled) {
             const completed = transitionLightTableJob({
               activeJobId,
               selectedFacets,
@@ -293,13 +389,15 @@ export default function Home() {
             setSelectedFacets({});
             setSelectedReelIdentity('');
           }
-          setDisplayedInput(lightTableEnabled ? acceptedInputForResumedJob(activeJobId, acceptedInputJobId || undefined, acceptedInput) : undefined);
+          setDisplayedInput(acceptedInputForResumedJob(activeJobId, acceptedInputJobId || undefined, acceptedInput));
           setResult(terminal.reel);
+          setScreeningIndex(replaced?.index ?? 0);
+          setReplacementJob(undefined);
           setComposerOpen(false);
           setActiveJobId(null);
           setJobStatus(null);
           setError('');
-          setNotice('');
+          setNotice(replaced ? 'One new film. The rest of your reel stays with you.' : '');
           window.setTimeout(() => {
             resultsRef.current?.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth', block: 'start' });
           }, 80);
@@ -330,7 +428,9 @@ export default function Home() {
     })();
 
     return () => controller.abort();
-  }, [activeJobId, connection, hydrated, pollRevision, experience, lightTableEnabled, selectedFacets, selectedReelIdentity, acceptedInput, acceptedInputJobId]);
+  // Result and displayed input remain stable while this accepted job is running.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeJobId, connection, hydrated, pollRevision, experience, lightTableEnabled, selectedFacets, selectedReelIdentity, acceptedInput, acceptedInputJobId, replacementJob]);
 
   useEffect(() => {
     if (!developing || jobStartedAt === null) return;
@@ -349,6 +449,7 @@ export default function Home() {
     const recommendations = result.recommendations;
     const complete = recommendations.every((recommendation) => {
       const metadata = metadataByKey[movieKey(recommendation.title, recommendation.year)];
+      if (metadata?.lookupVersion !== 2) return false;
       if (metadata?.status === 'matched' && metadata.tmdbRating === null) return false;
       if (metadata?.status === 'matched' && metadata.backdropUrl === undefined) return false;
       return metadata?.status === 'matched' || metadata?.status === 'unmatched';
@@ -437,8 +538,6 @@ export default function Home() {
   function removeFilm(index: number) {
     setFilms((current) => current.filter((_, itemIndex) => itemIndex !== index));
     clearFacetSelections();
-    setResult(null);
-    setMetadataByKey({});
     setSelectedRecommendation(null);
   }
 
@@ -535,8 +634,10 @@ export default function Home() {
 
       const started = parseJobStart(payload);
       clearFacetSelections();
-      setAcceptedInput(input.experience === LIGHT_TABLE_EXPERIENCE ? input : undefined);
-      setAcceptedInputJobId(input.experience === LIGHT_TABLE_EXPERIENCE ? started.jobId : '');
+      setAcceptedInput(input);
+      setReplacementJob(undefined); setReplacementUndo(null);
+      setFacetUndo(null);
+      setAcceptedInputJobId(started.jobId);
       // Retain the last complete reel while its replacement develops.
       setSelectedRecommendation(null);
       setActiveJobId(started.jobId);
@@ -551,9 +652,10 @@ export default function Home() {
 
   async function developAgain() {
     if (jobStatus !== 'failed') return;
+    if (replacementJob) { const index = replacementJob.index; setActiveJobId(null); setJobStatus(null); await replaceFilm(index, true); return; }
     const nextInput = lightTableEnabled && !acceptedRetryInput && selectionCount(selectedFacets)
       ? buildBlendPayload({selectedFacets,excludedFilms})
-      : lightTableEnabled ? acceptedRetryInput : lastAttemptRef.current;
+      : acceptedRetryInput ?? lastAttemptRef.current;
     setActiveJobId(null);
     setJobStatus(null);
     setError('');
@@ -561,6 +663,7 @@ export default function Home() {
   }
 
   function dismissFailedJob() {
+    setReplacementJob(undefined);
     setActiveJobId(null);
     setJobStatus(null);
     setError('');
@@ -577,28 +680,49 @@ export default function Home() {
     if (likedKeys.has(movieKey(recommendation.title, recommendation.year)) && !saveLikes(toggleLikedFilm(likedFilms, recommendation))) return;
     setExcludedFilms((current) => normalizeExcludedFilms([...current, recommendation]));
     setNotice(`${recommendation.title} will stay out of future reels.`);
-    setSelectedRecommendation(null);
+    closeDossier();
   }
 
   function handleSelectFacet(channel: FacetKey, facet: CinematicFacet, source: FacetSource, trigger: HTMLButtonElement) {
-    if (reelLocked || !recommendationIdentity) return;
+    if (reelLocked) return;
+    const provenance = recommendationIdentity || `atlas:${movieKey(source.title, source.year)}`;
     const wasSelected = isSameSelectedFacet(channel, selectedFacets[channel], {...facet,source});
+    setFacetUndo({ facets: selectedFacets, identity: selectedReelIdentity });
     const next = selectFacet(selectedFacets, channel, facet, source);
+    setNotice(wasSelected ? `${facet.label} removed from your blend.` : `${facet.label} borrowed from ${source.title}.`);
     setSelectedFacets(next);
-    setSelectedReelIdentity(selectionCount(next) ? recommendationIdentity : '');
+    setSelectedReelIdentity(selectionCount(next) ? provenance : '');
     if (!wasSelected) requestAnimationFrame(() => animateFacetToLane(trigger, channel));
   }
 
   function developBlend() {
-    setAtlasTarget(null);
+    setAtlasTarget(null); setSelectedRecommendation(null);
+    const url = new URL(location.href); url.hash = ''; history.replaceState(null, '', url);
     if (!selectionCount(selectedFacets)) return;
     void developReel(false, [], buildBlendPayload({selectedFacets,excludedFilms}));
+  }
+
+  async function replaceFilm(index: number, retry = false) {
+    if (!result || !displayedInput || (!retry && reelLocked) || startLockRef.current || connection !== 'connected') return;
+    startLockRef.current = true; setStarting(true); setError(''); setNotice(''); setFacetUndo(null);
+    setElapsedSeconds(0); setJobStartedAt(null);
+    try {
+      const request = withCurrentExclusions({ ...displayedInput, likedFilms }, excludedFilms);
+      const response = await fetch('/api/replacements/generations', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request, reel: result, replaceIndex: index }) });
+      const payload: unknown = await response.json();
+      if (response.status !== 202) throw new Error(responseMessage(payload, response.status === 409 ? 'Another discovery is still developing. Your reel is unchanged.' : 'This film could not be replaced. Your reel is unchanged.'));
+      const job = parseJobStart(payload);
+      setReplacementJob({ jobId: job.jobId, index });
+      setAcceptedInput(request); setAcceptedInputJobId(job.jobId);
+      setActiveJobId(job.jobId); setJobStatus('queued'); setReplacementUndo(null);
+    } catch (reason) { setError(reason instanceof Error ? reason.message : 'This film could not be replaced.'); }
+    finally { startLockRef.current = false; setStarting(false); }
   }
 
   function recommendDifferentFilms() {
     if (!result) return;
     const temporary = result.recommendations.map(({title,year}) => ({title,year}));
-    if (lightTableEnabled && displayedInput) {
+    if (displayedInput) {
       const all = [...excludedFilms, ...temporary];
       if (new Set(all.map(film => `${film.title.trim().toLocaleLowerCase()}|${film.year.trim()}`)).size > 100) {
         setError('This reroll exceeds the 100-film exclusion limit. Your saved exclusions have been preserved.');
@@ -626,7 +750,7 @@ export default function Home() {
     clearFacetSelections();
     setDisplayedInput(undefined);
     setAcceptedInput(undefined);
-    setAcceptedInputJobId('');
+    setAcceptedInputJobId(''); setReplacementJob(undefined); setReplacementUndo(null); setFacetUndo(null);
     lastAttemptRef.current = undefined;
     setActiveJobId(null);
     setJobStatus(null);
@@ -648,7 +772,7 @@ export default function Home() {
       : jobStatus === 'queued' ? 'Your reel is queued' : 'Your reel is developing';
 
   const lightTable = lightTableEnabled && (result?.fingerprint || selectionCount(selectedFacets) > 0) ? <LightTable
-    embedded={selectedRecommendation !== null || Boolean(atlasTarget)} workspace={Boolean(atlasTarget)}
+    embedded workspace={Boolean(atlasTarget)}
     selectedFacets={selectedFacets} locked={reelLocked} canSubmit={connection === 'connected'}
     onRemove={channel => {
       const next = removeFacet(selectedFacets,channel);
@@ -668,7 +792,13 @@ export default function Home() {
     };
     setAtlasOpener(atlasTarget ? atlasOpener : selectedRecommendation !== null ? dossierOpener || opener : opener);
     setAtlasResume(resume);
-    setAtlasTarget(buildAtlasInput(film, request, excludedFilms, likedFilms));
+    const details = metadataByKey[movieKey(film.title, film.year)];
+    const catalogFilm = film as FacetSource & { tmdbId?: number; id?: number };
+    const identity = { ...film, tmdbId: catalogFilm.tmdbId ?? catalogFilm.id ?? (details?.status === 'matched' ? details.tmdbId : undefined) };
+    const input = buildAtlasInput(identity, request, excludedFilms, likedFilms);
+    lastAtlasTarget.current = input;
+    if (location.hash !== '#atlas') { const url = new URL(location.href); url.hash = 'atlas'; history.pushState({ afterimageOverlay: true }, '', url); }
+    setAtlasTarget(input);
     setSelectedRecommendation(null);
   }
 
@@ -704,7 +834,8 @@ export default function Home() {
         <header className="masthead">
           <h1 className="title"><button type="button" aria-label="Afterimage home" onClick={goHome}>AFTERIMAGE<span className="brand-print" aria-hidden="true"><i /><i /><i /><i /></span></button></h1>
           {showLanding ? <nav className="welcome-home-nav" aria-label="Welcome navigation"><a href="#discover-afterimage">How it works</a><button onClick={() => enterReel()}>{hasSession ? 'Continue' : 'Begin'} <span aria-hidden="true">↗</span></button></nav> : <div className="masthead-actions">
-            {result ? <button type="button" className="atlas-open-button" disabled={developing} onClick={event => openAtlas(result.recommendations[0], event.currentTarget, true)}>Atlas ↗</button> : null}
+            <button type="button" className="library-open-button" onClick={event => { setLibraryOpener(event.currentTarget); const url = new URL(location.href); url.hash = 'library'; history.pushState({ afterimageOverlay: true }, '', url); setLibraryOpen(true); }}>Library{watchlist.length ? ` (${watchlist.length})` : ''}</button>
+            {result ? <button type="button" className="atlas-open-button" disabled={developing} onClick={event => openAtlas(result.recommendations[0], event.currentTarget, true)}>Atlas</button> : null}
             <span className={`privacy-mark ${connection === 'connected' ? 'is-connected' : ''}`}>
               <i aria-hidden="true" />{connection === 'connected' ? 'Connected' : connection === 'checking' ? 'Connecting…' : 'Not connected'}
             </span>
@@ -725,7 +856,7 @@ export default function Home() {
           <p className="subtitle">Add films you love, describe what you are searching for,
             or combine both.</p>
         </div> : <section className="request-summary" aria-label="Current reel references">
-          <div className="request-copy"><span className="panel-label">Your request</span><p>{displayedInput?.creativeBrief || (result.sourceFilms.length ? 'A reel from the films you love.' : 'A blend of selected qualities')}</p>
+          <div className="request-copy"><span className="panel-label">Your reel</span><p>{displayedInput?.creativeBrief || (result.sourceFilms.length ? result.sourceFilms.join(' + ') : Object.values(displayedInput?.selectedFacets ?? {}).map(facet => facet.label).join(' · ') || 'A blend of selected qualities')}</p>
           <button type="button" onClick={() => setComposerOpen(!composerOpen)} disabled={reelLocked}>{composerOpen ? 'Close inputs' : 'Refine request'} <span aria-hidden="true">{composerOpen ? '−' : '+'}</span></button>
           </div>
           {result.sourceFilms.length ? <div className="request-references"><span className="panel-label">Reference films</span><p>{result.sourceFilms.join(' · ')}</p></div> : null}
@@ -826,8 +957,6 @@ export default function Home() {
               onChange={(event) => {
                 setCreativeBrief(event.target.value);
                 clearFacetSelections();
-                setResult(null);
-                setMetadataByKey({});
                 setSelectedRecommendation(null);
               }}
               placeholder="Moody, brooding, filled with tones of longing…"
@@ -851,7 +980,7 @@ export default function Home() {
           <span>Light Table is on. Develop a new reel to reveal qualities you can borrow.</span>
           <button type="button" onClick={() => setComposerOpen(true)} disabled={reelLocked}>Open inputs</button>
         </div> : null}
-        {notice ? <div className="notice" role="status">{notice}</div> : null}
+        {notice ? <div className="notice" role="status">{notice}{replacementUndo && !reelLocked ? <button type="button" onClick={() => { setResult(replacementUndo.result); setDisplayedInput(replacementUndo.input); setScreeningIndex(replacementUndo.index); setReplacementUndo(null); setNotice('Your previous film is back in the reel.'); }}>Undo replacement</button> : null}{facetUndo && !reelLocked ? <button type="button" onClick={() => { setSelectedFacets(facetUndo.facets); setSelectedReelIdentity(facetUndo.identity); setFacetUndo(null); setNotice('Previous blend restored.'); }}>Undo</button> : null}</div> : null}
         {error ? (
           <div className="error-banner" role="alert">
             <p>{error}</p>
@@ -886,7 +1015,7 @@ export default function Home() {
         {developing ? (
           <section className="leader" role="status" aria-live="polite">
             <span className="status-orbit" aria-hidden="true" />
-            <div><p>{leaderMessage}</p><span>{result ? 'Your previous reel is still here. You can browse it while you wait.' : 'You can refresh this page; your accepted reel will resume.'}</span></div>
+            <div><p>{replacementJob ? 'Finding one new film' : leaderMessage}</p><span>{result ? 'Your previous reel is still here. You can browse it while you wait.' : 'You can refresh this page; your accepted reel will resume.'}</span></div>
             {jobStartedAt !== null ? <time aria-live="off" className="elapsed">{Math.floor(elapsedSeconds / 60)}:{String(elapsedSeconds % 60).padStart(2, '0')} elapsed</time> : null}
           </section>
         ) : null}
@@ -895,28 +1024,14 @@ export default function Home() {
           <section className="results" aria-live="polite" ref={resultsRef}>
             <div className={developing ? "reel-heading" : "sr-only"}><h2>{developing ? 'Your previous reel' : 'Your reel'}</h2><span>Five films, considered together.</span></div>
 
-            {lightTableEnabled && result.fingerprint ? <SearchFingerprint fingerprint={result.fingerprint} insight={result.insight} /> : null}
-
-            <div className="recommendation-grid">
-              {result.recommendations.map((recommendation, index) => (
-                <RecommendationCard
-                  key={`${recommendation.title}-${recommendation.year}`}
-                  recommendation={recommendation}
-                  index={index}
-                  metadata={metadataByKey[movieKey(recommendation.title, recommendation.year)]}
-                  enrichmentPending={enrichmentPending}
-                  liked={likedKeys.has(movieKey(recommendation.title, recommendation.year))}
-                  onToggleLike={() => toggleLike(recommendation)}
-                  selectedFacets={selectedFacets}
-                  onSelectFacet={lightTableEnabled ? handleSelectFacet : undefined}
-                  facetDisabled={reelLocked}
-                  onOpen={(event) => {
-                    setDossierOpener(event.currentTarget);
-                    setSelectedRecommendation(index);
-                  }}
-                />
-              ))}
-            </div>
+            <ScreeningReel key={recommendationIdentity} films={result.recommendations} metadata={metadataByKey}
+              selected={screeningIndex} onSelect={setScreeningIndex} onCompare={openComparison} onReplace={displayedInput && connection === 'connected' ? index => void replaceFilm(index) : undefined} pending={enrichmentPending} locked={reelLocked}
+              likedKeys={likedKeys} savedKeys={savedKeys} onLike={toggleLike} onSave={toggleSave} onResolve={resolveFilm}
+              selectedFacets={selectedFacets} onBorrow={lightTableEnabled ? handleSelectFacet : undefined}
+              lightTable={selectedRecommendation === null && !atlasTarget ? lightTable : null}
+              onOpen={(index, event) => openDossier(index, event.currentTarget)}
+              onExplore={(index, event) => openAtlas(result.recommendations[index], event.currentTarget)} />
+            {lightTableEnabled && result.fingerprint ? <details className="reel-fingerprint"><summary>The qualities behind this reel <span>+</span></summary><SearchFingerprint fingerprint={result.fingerprint} insight={result.insight} /></details> : null}
 
             <section className="atlas-entry"><div><h3>Atlas</h3><p>Films are never alone. Explore the connections around a film, and find what carries through.</p></div><button type="button" disabled={developing} onClick={event => openAtlas(result.recommendations[0], event.currentTarget)}>Explore connections ↗</button></section>
 
@@ -924,7 +1039,7 @@ export default function Home() {
               <div className="palette" aria-label="Your cinematic palette">
                 {result.palette.map((color) => <span key={color} style={{ background: color }} />)}
               </div>
-              <p className="insight">{result.insight}</p>
+              {result.sourceFilms.length ? <p className="reel-sources">Inspired by {result.sourceFilms.join(' · ')}</p> : null}<p className="insight">{result.insight}</p>
               <div className="sensibilities">
                 {result.sensibilities.map((item) => <span key={item}>{item}</span>)}
               </div>
@@ -953,7 +1068,9 @@ export default function Home() {
               onToggleLike={() => { if (selectedRecommendation !== null) toggleLike(result.recommendations[selectedRecommendation]); }}
               recommendations={result.recommendations}
               metadataByKey={metadataByKey}
-              onSelectFilm={setSelectedRecommendation}
+              onSelectFilm={index => { history.replaceState(history.state, '', filmUrl(index)); setSelectedRecommendation(index); setScreeningIndex(index); }}
+              saved={selectedRecommendation !== null && savedKeys.has(movieKey(result.recommendations[selectedRecommendation].title, result.recommendations[selectedRecommendation].year))}
+              onSave={() => { if (selectedRecommendation !== null) toggleSave(result.recommendations[selectedRecommendation]); }}
               lightTable={lightTable}
               selection={selectedRecommendation === null ? null : {
                 recommendation: result.recommendations[selectedRecommendation],
@@ -974,7 +1091,7 @@ export default function Home() {
                 const recommendation = result.recommendations[selectedRecommendation];
                 markNotInterested({ title: recommendation.title, year: recommendation.year });
               }}
-              onClose={() => setSelectedRecommendation(null)}
+              onClose={closeDossier}
             />
           </section>
         ) : null}
@@ -1001,7 +1118,11 @@ export default function Home() {
           </details>
         </section>
         <footer>AFTERIMAGE · reasoned live, frame by frame</footer>
-        {selectedRecommendation === null && !atlasTarget ? lightTable : null}
+        {result ? <ReelComparison first={comparison ? { recommendation: result.recommendations[comparison.first], metadata: metadataByKey[movieKey(result.recommendations[comparison.first].title, result.recommendations[comparison.first].year)], index: comparison.first } : null} second={comparison ? { recommendation: result.recommendations[comparison.second], metadata: metadataByKey[movieKey(result.recommendations[comparison.second].title, result.recommendations[comparison.second].year)], index: comparison.second } : null} opener={comparison?.opener ?? null} onClose={closeComparison} onSelect={index => { setScreeningIndex(index); closeComparison(); }} onBorrow={lightTableEnabled ? handleSelectFacet : undefined} selectedFacets={selectedFacets} facetDisabled={reelLocked} /> : null}
+        <FilmLibrary open={libraryOpen} opener={libraryOpener} onClose={closeLibrary}
+          watchlist={watchlist} likes={likedFilms} onRemove={toggleSave} onUnlike={toggleLike}
+          onImport={next => { if (!saveWatchlist(next)) throw new Error('The backup could not be saved in this browser.'); }}
+          onExplore={(film, opener) => { setLibraryOpen(false); openAtlas(film, libraryOpener || opener, false, true); }} />
         <AtlasWorkspace key={atlasResetRevision} target={atlasTarget} opener={atlasOpener} onClose={closeAtlas} onBusy={setAtlasBusy} preferSaved={atlasResume}
           connected={connection === 'connected'} metadataByKey={metadataByKey} likedKeys={likedKeys} onLike={toggleLike}
           onExplore={(film, opener, request) => openAtlas(film, opener, false, false, request)} onSearchExplore={(film, opener) => openAtlas(film, opener, false, true)} selectedFacets={selectedFacets} onBorrow={lightTableEnabled ? handleSelectFacet : undefined} lightTable={atlasTarget ? lightTable : null} />

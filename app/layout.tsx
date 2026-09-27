@@ -2,9 +2,9 @@ import type { Metadata, Viewport } from 'next';
 import { Cormorant_Garamond, DM_Sans } from 'next/font/google';
 import './globals.css';
 import './light-table.css';
-import './projection-room.css';
 import './atlas.css';
 import './landing.css';
+import './projection-room.css';
 
 const display = Cormorant_Garamond({
   variable: '--font-display',
@@ -51,7 +51,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: '#0b100e',
+  themeColor: '#101211',
   colorScheme: 'dark',
   viewportFit: 'cover',
 };

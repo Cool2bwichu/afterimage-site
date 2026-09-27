@@ -33,7 +33,9 @@ export function FilmDossier({
   liked = false,
   onToggleLike,
   onOpenAtlas,
+  saved = false, onSave,
 }: {
+  saved?: boolean; onSave?: () => void;
   selection: DossierSelection | null;
   metadata?: FilmEnrichment;
   opener: HTMLElement | null;
@@ -99,13 +101,12 @@ export function FilmDossier({
       aria-labelledby="dossier-title"
       onCancel={(event) => {
         event.preventDefault();
-        event.currentTarget.close();
+        onClose();
       }}
-      onClose={onClose}
     >
       <div className="dossier-scroll">
         <header className="dossier-header">
-          <button ref={closeRef} type="button" onClick={() => dialogRef.current?.close()} aria-label="Close film dossier">← Back to your reel</button>
+          <button ref={closeRef} type="button" onClick={onClose} aria-label="Close film dossier">← Back to your reel</button>
           <span>{String(index + 1).padStart(2, '0')} / 05 · Film dossier</span>
         </header>
 
@@ -142,6 +143,7 @@ export function FilmDossier({
         {recommendation.facets && onSelectFacet ? <section className="dossier-borrow" aria-label="Borrow a quality"><h3>Borrow a quality</h3><div className="ai-facet-rail">{FACET_KEYS.map(channel => <FacetTab key={channel} channel={channel} facet={recommendation.facets![channel]} source={{title:recommendation.title,year:recommendation.year}} selected={selectedFacets[channel]} disabled={facetDisabled} onSelect={onSelectFacet} />)}</div></section> : null}
         {recommendation.facets && onSelectFacet ? <details className="quality-notes"><summary>About these qualities +</summary>{FACET_KEYS.map(channel => <p key={channel}><strong>{recommendation.facets![channel].label}</strong>{recommendation.facets![channel].explanation}</p>)}</details> : null}
         <div className="dossier-actions">
+          {onSave ? <button type="button" className="save-film-button" aria-pressed={saved} onClick={onSave}>{saved ? 'Saved to watchlist ✓' : 'Save for later +'}</button> : null}
           {onOpenAtlas ? <button className="atlas-open-button" type="button" disabled={facetDisabled} onClick={event => onOpenAtlas(recommendation, event.currentTarget)}>Explore in Atlas ↗</button> : null}
           {verifiedImdb ? (
             <a className="imdb-link" href={verifiedImdb} target="_blank" rel="noreferrer noopener">View verified IMDb page ↗</a>
