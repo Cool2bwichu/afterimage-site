@@ -86,7 +86,12 @@ export function moveAtlasTrail(trail: AtlasTrail, cursor: number): AtlasTrail {
 /** A new branch replaces the forward path, but the previous maps remain in Visited maps. */
 export function visitAtlasMap(trail: AtlasTrail, id: string): AtlasTrail {
   const map = trail.maps.find(item => item.id === id);
-  if (!map || activeAtlasStop(trail)?.id === id) return trail;
+  if (!map) return trail;
+  // Explicitly reopening the current map is still a navigation choice: a
+  // background discovery must not take it over when the new map completes.
+  if (activeAtlasStop(trail)?.id === id) return trail.pending?.followOnComplete
+    ? { ...trail, pending: { ...trail.pending, followOnComplete: false } }
+    : trail;
   const route = [...trail.route.slice(0, trail.cursor + 1), id].slice(-MAX_ATLAS_STEPS);
   return { ...trail, route, cursor: route.length - 1, maps: [...trail.maps.filter(item => item.id !== id), map], pending: trail.pending ? { ...trail.pending, followOnComplete: false } : null, readyId: trail.readyId === id ? null : trail.readyId };
 }
