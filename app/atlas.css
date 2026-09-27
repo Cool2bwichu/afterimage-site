@@ -28,7 +28,7 @@
 .observatory-masthead h1 svg { width:30px; height:30px; fill:none; stroke:var(--atlas-gold); stroke-width:1; }
 .observatory-tools { justify-self:end; display:flex; align-items:center; gap:24px; }
 .observatory-tools>button { display:flex; align-items:center; gap:12px; min-height:44px; padding:0; }
-.observatory-tools>button>span { font-size:23px; color:var(--atlas-muted); }
+.observatory-tools>button:not(.celestial-motion)>span { font-size:23px; color:var(--atlas-muted); }
 .observatory-visited { position:relative; }
 .observatory-visited>summary { display:flex; align-items:center; gap:9px; }
 .observatory-visited>summary>span { color:var(--atlas-muted); font-size:12px; }
@@ -65,10 +65,6 @@
 .observatory-view button { min-height:44px; padding:4px 9px; font-size:11px; color:var(--atlas-muted); }
 .observatory-view button[aria-pressed=true] { background:#d7e2e615; color:var(--atlas-ink); }
 .observatory-chart { position:relative; isolation:isolate; height:clamp(510px,62vh,650px); min-height:510px; overflow:hidden; }
-.observatory-sky { position:absolute; inset:0; z-index:-1; pointer-events:none; background:radial-gradient(ellipse at 49% 47%,#20354840,transparent 67%); }
-.observatory-sky span { position:absolute; width:94%; height:55%; top:21%; left:3%; border:1px solid #b8c7d216; border-radius:50%; transform:rotate(-28deg); transition:opacity 520ms var(--atlas-ease); }
-.observatory-sky span+span { width:87%; height:80%; top:8%; left:7%; transform:rotate(37deg); border-style:dotted; opacity:.65; }
-.is-grouped .observatory-sky span { opacity:.08; }
 .observatory-paths { position:absolute; inset:0; width:100%; height:100%; overflow:visible; pointer-events:none; }
 .observatory-paths path { fill:none; stroke:#96aec139; stroke-width:.75; vector-effect:non-scaling-stroke; transition:d 520ms var(--atlas-ease),stroke 240ms,opacity 240ms; }
 .observatory-paths path[data-affinity=echo] { stroke-dasharray:5 5; }
@@ -81,7 +77,6 @@
 .observatory-territory>small { display:block; color:#8b9aaa; font-size:11px; margin:70px auto 0; width:15ch; }
 .observatory-star,.observatory-origin { position:absolute; left:var(--x); top:var(--y); z-index:2; display:flex; flex-direction:column; align-items:center; padding:0; text-align:center; transition:left 520ms var(--atlas-ease),top 520ms var(--atlas-ease); }
 .observatory-star { width:clamp(94px,9.1vw,132px); transform:translate(-50%,-30px); min-height:90px; }
-.observatory-star-image { position:relative; width:84px; height:54px; display:block; margin-bottom:9px; background:#192532; border:1px solid #b0c4d344; transition:width 240ms var(--atlas-ease),filter 240ms,outline-color 240ms,transform 240ms var(--atlas-ease); }
 .observatory-star-image img { opacity:.7; transition:opacity 240ms; }
 .observatory-star-image i { position:absolute; left:calc(50% - 3px); bottom:-4px; width:6px; height:6px; background:var(--atlas-connection-color); transform:rotate(45deg); box-shadow:0 0 0 4px var(--atlas-bg); }
 .observatory-star strong { font-size:13px; line-height:1.25; font-weight:500; text-wrap:balance; display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
@@ -91,16 +86,13 @@
 .observatory-star[aria-pressed=true] .observatory-star-image img,.observatory-star:hover img,.observatory-star:focus-visible img { opacity:1; }
 .observatory-star[aria-pressed=true] strong { color:var(--atlas-connection-color); }
 .observatory-origin { width:160px; transform:translate(-50%,-56px); }
-.observatory-origin-image { width:126px; height:84px; overflow:hidden; background:#1c2b3b; border:1px solid #e0c89c88; }
 .observatory-origin strong { margin-top:10px; font:400 23px/1.05 var(--font-display),Georgia,serif; text-wrap:balance; }
 .observatory-origin small { margin-top:5px; color:var(--atlas-muted); font-size:10px; }
 .observatory-origin-reticle { position:absolute; width:152px; height:110px; top:-13px; border:1px solid #e0c89c22; border-radius:50%; transform:rotate(-25deg); pointer-events:none; }
 .is-grouped .observatory-origin { transform:translate(-50%,-15px); width:220px; }
-.is-grouped .observatory-origin-image { display:none; }
 .is-grouped .observatory-origin strong { margin:5px 0 0; font-size:20px; }
 .is-grouped .observatory-origin-reticle { position:relative; width:7px; height:7px; border:0; background:var(--atlas-gold); border-radius:0; transform:rotate(45deg); top:0; box-shadow:0 0 0 5px var(--atlas-bg); }
 .is-grouped .observatory-star { width:clamp(80px,7.8vw,110px); }
-.is-grouped .observatory-star-image { width:66px; height:44px; }
 .is-grouped .observatory-star strong { font-size:12px; }
 .observatory-chart-caption { display:flex; align-items:center; justify-content:space-between; gap:15px; border-top:1px solid var(--atlas-line); min-height:58px; font-size:11px; color:var(--atlas-muted); }
 .observatory-chart-caption>span+span { text-align:right; max-width:48%; }
@@ -171,11 +163,7 @@
 .observatory-progress-mark { width:24px; height:24px; border:1px solid #e0c89c33; border-top-color:var(--atlas-gold); border-radius:50%; flex:none; animation:observatory-pending 1.8s linear infinite; }
 .observatory-welcome { display:grid; grid-template-columns:1.2fr 1fr; gap:clamp(30px,5vw,80px); align-items:center; min-height:calc(100dvh - 160px); padding:40px 0 65px; }
 .observatory-welcome-chart { position:relative; width:100%; aspect-ratio:1.15; max-width:700px; background:radial-gradient(ellipse,#24405155,transparent 68%); }
-.observatory-welcome-chart>svg { position:absolute; inset:0; width:100%; height:100%; fill:none; stroke:#b1c2ce44; stroke-width:1; }
-.observatory-welcome-chart>svg>ellipse { stroke:#a8b5c523; }
-.observatory-welcome-chart>svg>circle { fill:var(--atlas-gold); stroke:none; }
 .observatory-welcome-film { position:absolute; width:40%; left:30%; top:29%; aspect-ratio:1.28; border:1px solid #b8c7d266; background:var(--atlas-bg); }
-.observatory-welcome-film>img,.observatory-welcome-film>.atlas-art-fallback { width:100%; height:100%; }
 .observatory-welcome-film strong { display:block; text-align:center; font:400 clamp(18px,2vw,30px)/1.1 var(--font-display),Georgia,serif; margin-top:15px; }
 .observatory-welcome-film small { display:block; text-align:center; color:var(--atlas-muted); font-size:11px; margin-top:7px; }
 .observatory-welcome-copy { max-width:420px; }
@@ -223,9 +211,9 @@
   .observatory-film-actions { padding:9px 0 12px; }
   .observatory-reading-tabs { margin-bottom:16px; }
 }
-@media(min-width:1450px) { .observatory-workspace { grid-template-columns:minmax(0,1fr) 390px; gap:44px; } .observatory-reading-body { padding:27px 29px 10px; } .observatory-star { width:145px; } .observatory-star-image { width:104px; height:67px; } .observatory-star strong { font-size:14px; } }
-@media(max-width:1050px) { .observatory-workspace { gap:22px; grid-template-columns:minmax(0,1fr) 300px; } .observatory-reading-body { padding:20px 18px 8px; } .observatory-reading-tabs { gap:13px; } .observatory-lenses button { padding:9px 8px; } .observatory-thesis { max-width:36ch; } .observatory-star { width:94px; } .is-grouped .observatory-star { width:76px; } .is-grouped .observatory-star-image { width:52px; height:35px; } }
-@media(max-width:850px) { .observatory-return-map { display:block; grid-column:1/-1; width:100%; min-height:48px; text-align:left; padding:12px 20px!important; font-size:12px!important; color:var(--atlas-gold)!important; border-bottom:1px solid var(--atlas-line)!important; } .observatory-workspace { grid-template-columns:minmax(0,1fr); gap:22px; } .observatory-navigation { position:relative; top:auto; } .observatory-reading { display:grid; grid-template-columns:1fr 1fr; align-items:start; } .observatory-reading-image { position:sticky; top:0; aspect-ratio:1; } .observatory-heading { gap:30px; } .observatory-chart { height:550px; } .observatory-star { width:125px; } .is-grouped .observatory-star { width:95px; } .is-grouped .observatory-star-image { width:70px; height:45px; } .atlas-search { grid-template-columns:1fr; gap:15px; } }
+@media(min-width:1450px) { .observatory-workspace { grid-template-columns:minmax(0,1fr) 390px; gap:44px; } .observatory-reading-body { padding:27px 29px 10px; } .observatory-star { width:145px; } .observatory-star strong { font-size:14px; } }
+@media(max-width:1050px) { .observatory-workspace { gap:22px; grid-template-columns:minmax(0,1fr) 300px; } .observatory-reading-body { padding:20px 18px 8px; } .observatory-reading-tabs { gap:13px; } .observatory-lenses button { padding:9px 8px; } .observatory-thesis { max-width:36ch; } .observatory-star { width:94px; } .is-grouped .observatory-star { width:76px; } }
+@media(max-width:850px) { .observatory-return-map { display:block; grid-column:1/-1; width:100%; min-height:48px; text-align:left; padding:12px 20px!important; font-size:12px!important; color:var(--atlas-gold)!important; border-bottom:1px solid var(--atlas-line)!important; } .observatory-workspace { grid-template-columns:minmax(0,1fr); gap:22px; } .observatory-navigation { position:relative; top:auto; } .observatory-reading { display:grid; grid-template-columns:1fr 1fr; align-items:start; } .observatory-reading-image { position:sticky; top:0; aspect-ratio:1; } .observatory-heading { gap:30px; } .observatory-chart { height:550px; } .observatory-star { width:125px; } .is-grouped .observatory-star { width:95px; } .atlas-search { grid-template-columns:1fr; gap:15px; } }
 @media(max-width:600px) {
   .observatory-shell { padding:0 18px; }
   .observatory-masthead { min-height:72px; grid-template-columns:1fr auto; gap:8px; }
@@ -245,26 +233,19 @@
   .observatory-view button { min-height:44px; min-width:44px; padding:4px 7px; }
   .observatory-chart { height:450px; min-height:450px; margin:0 -10px; }
   .observatory-star { width:89px; transform:translate(-50%,-23px); min-height:90px; }
-  .observatory-star-image { width:66px; height:42px; margin-bottom:9px; }
   .observatory-star strong { font-size:12px; line-height:1.22; -webkit-line-clamp:3; }
   .observatory-star small { font-size:10px; }
   .observatory-origin { width:122px; transform:translate(-50%,-45px); }
-  .observatory-origin-image { width:90px; height:61px; }
   .observatory-origin strong { font-size:20px; }
-  .observatory-origin-reticle { width:119px; height:87px; }
   .observatory-territory { top:18px; }
   .observatory-territory strong { font-size:20px; }
   .observatory-territory>span { display:none; }
   .observatory-territory>small { font-size:10px; width:11ch; margin-top:60px; }
   .is-grouped .observatory-star { width:58px; transform:translate(-50%,-8px); min-height:72px; }
-  .is-grouped .observatory-star-image { width:7px; height:7px; transform:rotate(45deg); background:var(--atlas-connection-color); border:0; margin-bottom:8px; }
-  .is-grouped .observatory-star-image img,.is-grouped .observatory-star-image .atlas-art-fallback,.is-grouped .observatory-star-image i { display:none; }
   .is-grouped .observatory-star strong { font-size:11px; -webkit-line-clamp:4; }
   .is-grouped .observatory-star small { font-size:9px; }
   .is-grouped .observatory-star[aria-pressed=true] .observatory-star-image { outline-offset:4px; }
   .is-grouped .observatory-star:not([data-dense=true]) { width:88px; transform:translate(-50%,-23px); }
-  .is-grouped .observatory-star:not([data-dense=true]) .observatory-star-image { width:60px; height:36px; margin-bottom:6px; transform:none; border:1px solid #b0c4d344; background:#192532; }
-  .is-grouped .observatory-star:not([data-dense=true]) .observatory-star-image img,.is-grouped .observatory-star:not([data-dense=true]) .atlas-art-fallback { display:block; }
   .is-grouped .observatory-star:not([data-dense=true]) strong { font-size:12px; -webkit-line-clamp:3; }
   .is-grouped .observatory-origin { width:180px; }
   .observatory-chart-caption { font-size:10px; min-height:62px; gap:12px; }
@@ -308,3 +289,176 @@
   .atlas-search-develop { width:100%; }
 }
 @media(prefers-reduced-motion:reduce) { .atlas-dialog *,.atlas-dialog *::before,.atlas-dialog *::after { animation:none!important; transition:none!important; scroll-behavior:auto!important; } }
+
+/* The Atlas is a viewing chamber: film light supplies the color; orbital marks supply orientation. */
+.atlas-dialog {
+  --atlas-bg:var(--void,#080d14); --atlas-surface:var(--booth,#101923);
+  --atlas-ink:var(--white,#f4efe5); --atlas-muted:var(--muted,#a7b6c5);
+  --atlas-gold:var(--gold,#dec6a0); --atlas-line:var(--line,#a1b6c42b);
+  --atlas-close:var(--gold,#dec6a0); --atlas-echo:var(--cyan,#9cbbb9);
+  background:radial-gradient(ellipse 95% 74% at 50% -29%,#263849 0%,transparent 74%),var(--atlas-bg);
+}
+.observatory-shell { position:relative; isolation:isolate; }
+.observatory-masthead { min-height:94px; border-bottom-color:#d5c7ac35; }
+.observatory-masthead h1 { gap:14px; min-width:max-content; }
+.observatory-masthead h1>svg { width:40px; height:40px; flex:none; stroke:var(--atlas-gold); }
+.observatory-brand { display:flex; flex-direction:column; gap:3px; }
+.observatory-brand small { font:600 10px/1.1 var(--font-sans),sans-serif; letter-spacing:.27em; color:var(--atlas-gold); }
+.observatory-brand>span { font:400 24px/.95 var(--font-display),Georgia,serif; letter-spacing:.005em; }
+.observatory-tools { gap:22px; }
+.observatory-tools .celestial-motion { flex:none; }
+.observatory-heading { padding:32px 0 27px; }
+.observatory-heading>div>p { color:var(--atlas-gold); letter-spacing:.16em; text-transform:uppercase; font-size:10px; }
+.observatory-heading h2 { font-size:clamp(31px,3.2vw,48px); }
+.observatory-thesis { color:#c5d0d7; line-height:1.58; }
+.observatory-chart-controls { border-bottom-color:#d5c7ac35; }
+.observatory-lenses button[aria-pressed=true] { text-shadow:0 0 18px #dec6a065; }
+.observatory-chart {
+  height:clamp(570px,68vh,720px); min-height:570px; margin-top:12px;
+  border:1px solid #b7c6d01c;
+  background:radial-gradient(circle at 50% 48%,#273e4a57 0%,#14232c33 25%,transparent 53%),
+    radial-gradient(ellipse at 50% 100%,#776d6030,transparent 49%),#080e16;
+  box-shadow:inset 0 0 100px #05090fbd,0 28px 80px #0004;
+}
+.observatory-chart::before,.observatory-welcome-chart::before {
+  content:''; position:absolute; z-index:0; pointer-events:none;
+  inset:7% 10%; border:1px solid #d5d0bd23; border-radius:50%;
+  transform:rotate(-23deg); box-shadow:0 0 0 36px #c1c8bd05,0 0 0 72px #c1c8bd03;
+}
+.observatory-chart::after { content:''; position:absolute; inset:0; pointer-events:none; z-index:0; background:linear-gradient(90deg,#080d14c0,transparent 15%,transparent 85%,#080d14c0); }
+.observatory-chart .celestial-sky--atlas,.observatory-welcome-chart .celestial-sky--atlas { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; z-index:0; opacity:.9; }
+.observatory-chart-glow { position:absolute; inset:0; z-index:0; pointer-events:none; background:radial-gradient(circle at 50% 47%,#dfcfb024,transparent 24%); mix-blend-mode:screen; }
+.observatory-paths { z-index:1; }
+.observatory-paths path { stroke:#b7c7c23e; stroke-width:1; }
+.observatory-paths path.is-selected { stroke:#f0d8af; stroke-width:1.8; filter:drop-shadow(0 0 4px #dfc395); }
+.observatory-paths .observatory-trace {
+  stroke:#fff0ca; stroke-width:2.6; stroke-linecap:round; stroke-dasharray:1; stroke-dashoffset:1;
+  opacity:0; filter:drop-shadow(0 0 6px #ffe5aa);
+  animation:observatory-trace-arrive 650ms var(--atlas-ease) forwards;
+}
+@keyframes observatory-trace-arrive {
+  0% { stroke-dashoffset:1; opacity:0; }
+  18% { opacity:.95; }
+  75% { opacity:.8; }
+  100% { stroke-dashoffset:0; opacity:0; }
+}
+.celestial-world[data-motion=off] .observatory-trace { display:none; }
+.observatory-territory { z-index:1; top:22px; height:76%; border-inline-start-color:#b8c6c51d; }
+.observatory-territory strong { font-size:22px; letter-spacing:.015em; text-shadow:0 1px 10px #000; }
+.observatory-territory>span { color:#bfccd3; letter-spacing:.02em; }
+.observatory-star,.observatory-origin { z-index:3; transition:left 440ms var(--atlas-ease),top 440ms var(--atlas-ease); }
+.observatory-star { width:clamp(105px,10vw,145px); transform:translate(-50%,-45%); min-height:118px; }
+.observatory-star-image,.observatory-origin-image,.observatory-welcome-image {
+  position:relative; display:block; flex:none; overflow:hidden; aspect-ratio:1;
+  width:clamp(80px,7.8vw,112px); height:auto; margin-bottom:10px;
+  border-radius:50%; border:1px solid #d8ddce7d;
+  background:#1c2b35;
+  box-shadow:inset 0 0 0 5px #0b121aaa,0 0 0 5px #aebba821,0 9px 30px #000b;
+  transition:transform 240ms var(--atlas-ease),box-shadow 240ms var(--atlas-ease),filter 240ms;
+}
+.observatory-star-image::after,.observatory-origin-image::after,.observatory-welcome-image::after {
+  content:''; position:absolute; inset:0; pointer-events:none; border-radius:50%;
+  background:radial-gradient(circle at 32% 24%,#fff7dd42,transparent 36%),linear-gradient(130deg,transparent 43%,#050a12a8 100%);
+  box-shadow:inset -12px -18px 23px #0509129c,inset 4px 5px 13px #e9d5ae30;
+}
+.observatory-star-image img { opacity:.9; }
+.observatory-star-image i { z-index:2; left:calc(50% - 3px); bottom:-3px; }
+.observatory-star strong { max-width:100%; color:#f3f0e7; font-size:13px; line-height:1.18; text-shadow:0 2px 10px #000,0 0 5px #000; }
+.observatory-star small { color:#b9c8d0; text-shadow:0 1px 7px #000; }
+.observatory-star:hover .observatory-star-image,.observatory-star:focus-visible .observatory-star-image { transform:translateY(-4px) scale(1.04); box-shadow:0 0 0 6px #dec6a026,0 0 36px #dec6a04d,0 14px 32px #000c; }
+.observatory-star[aria-pressed=true] .observatory-star-image { outline:1px solid var(--atlas-connection-color); outline-offset:7px; box-shadow:0 0 0 7px #dec6a02a,0 0 48px #dec6a07a,0 12px 38px #000d; }
+.observatory-star[aria-pressed=true] strong { color:#f9dcaa; }
+.observatory-origin { width:180px; transform:translate(-50%,-45%); }
+.observatory-origin-image { width:130px; margin:0; border-color:#f0d8adad; box-shadow:0 0 0 7px #dec6a01f,0 0 55px #dec6a04d,0 18px 45px #000b; }
+.observatory-origin-reticle { width:170px; height:170px; top:-20px; left:5px; border-color:#e5d4b05e; transform:none; box-shadow:0 0 0 20px #e5d4b00b,0 0 0 40px #e5d4b006; }
+.observatory-origin strong { margin-top:14px; color:#f6e7cd; font-size:23px; line-height:1.02; text-shadow:0 2px 12px #000; }
+.observatory-origin small { color:#c7d4d8; text-shadow:0 1px 8px #000; }
+.observatory-origin[aria-pressed=true] .observatory-origin-image { box-shadow:0 0 0 7px #dec6a030,0 0 75px #dec6a07f,0 18px 45px #000b; }
+.is-grouped .observatory-chart-glow { background:radial-gradient(ellipse at 50% 82%,#dfcfb020,transparent 38%); }
+.is-grouped .observatory-star { width:clamp(86px,7.6vw,112px); transform:translate(-50%,-35%); }
+.is-grouped .observatory-star-image { display:block; width:clamp(64px,5.5vw,82px); height:auto; margin-bottom:8px; }
+.is-grouped .observatory-origin { width:160px; transform:translate(-50%,-43%); }
+.is-grouped .observatory-origin-image { display:block; width:76px; margin:0; }
+.is-grouped .observatory-origin-reticle { position:absolute; width:106px; height:106px; top:-15px; left:27px; border:1px solid #e5d4b05e; background:none; border-radius:50%; transform:none; box-shadow:0 0 0 12px #e5d4b00a; }
+.is-grouped .observatory-origin strong { margin-top:11px; font-size:19px; }
+.is-grouped .observatory-origin small { margin-top:4px; }
+.observatory-reading { background:linear-gradient(155deg,#192938,#101923 42%,#101923); border-color:#cfcebc32; box-shadow:0 22px 70px #0005; }
+.observatory-reading-image { background:#172635; }
+.observatory-reading-image::after { content:''; position:absolute; inset:0; pointer-events:none; box-shadow:inset 0 -75px 70px #08101985; }
+.observatory-reading-image>.atlas-art-fallback { font-size:38px; }
+.observatory-reading-body { background:radial-gradient(circle at 95% 0%,#dec6a012,transparent 40%); }
+.observatory-reading-label { letter-spacing:.15em; text-transform:uppercase; font-size:10px; }
+.observatory-follow { box-shadow:0 10px 26px #0006,0 0 25px #dec6a023; }
+.atlas-art-fallback { position:relative; overflow:hidden; isolation:isolate; color:#e4d4b8; background:radial-gradient(circle at 32% 24%,#c2a986aa,transparent 16%),radial-gradient(circle at 56% 48%,#657c83 0%,#253949 43%,#0b141e 78%); }
+.atlas-art-fallback::before { content:''; position:absolute; z-index:-1; width:130%; height:130%; border-radius:50%; border:1px solid #f1dfbf33; box-shadow:0 0 0 9px #f1dfbf0b,0 0 0 24px #f1dfbf06; transform:rotate(-27deg) scaleY(.58); }
+.atlas-art-fallback>span { font:400 clamp(15px,2vw,26px)/1 var(--font-display),Georgia,serif; color:#f3e3c5b8; text-shadow:0 0 18px #eed3a58c; }
+.observatory-welcome { min-height:calc(100dvh - 145px); grid-template-columns:minmax(0,1.3fr) minmax(330px,.8fr); gap:clamp(20px,5vw,86px); }
+.observatory-welcome-chart { isolation:isolate; max-width:none; aspect-ratio:1.13; overflow:hidden; background:radial-gradient(circle at 50% 48%,#d8c7a329 0%,#273d4a66 18%,transparent 45%),radial-gradient(ellipse at 50% 110%,#49627747,transparent 55%),#0b141e; border:1px solid #acb9bd32; box-shadow:inset 0 0 100px #060b15,0 24px 80px #0006; }
+.observatory-welcome-chart::before { inset:10%; transform:rotate(-24deg) scaleY(.68); border-color:#e1d2b25e; box-shadow:0 0 0 20px #e1d2b20c,0 0 0 55px #e1d2b207,0 0 0 94px #e1d2b204; }
+.observatory-welcome-chart::after { content:''; position:absolute; z-index:0; inset:14%; border:1px solid #d8c6a43d; border-radius:50%; transform:rotate(30deg) scaleY(.52); pointer-events:none; }
+.observatory-welcome-orbit { position:absolute; z-index:1; inset:23%; border-radius:50%; border:1px solid #f0dfb376; box-shadow:0 0 25px #dfc69a4d,inset 0 0 28px #dfc69a19; pointer-events:none; }
+.observatory-welcome-film { position:absolute; z-index:2; display:flex; flex-direction:column; align-items:center; width:56%; height:auto; left:22%; top:25%; aspect-ratio:auto; border:0; background:none; text-align:center; }
+.observatory-welcome-image { width:clamp(150px,19vw,255px); height:auto; margin:0 auto 20px; border-color:#f0dfb5b5; box-shadow:0 0 0 10px #dec6a01c,0 0 80px #dec6a066,0 28px 65px #000b; }
+.observatory-welcome-film strong { margin:0; max-width:100%; color:#f5e8d1; font-size:clamp(20px,2.5vw,35px); text-shadow:0 2px 18px #000; }
+.observatory-welcome-film small { margin-top:9px; letter-spacing:.13em; color:#cfddde; text-shadow:0 1px 10px #000; }
+.observatory-welcome-image .atlas-art-fallback>span { display:none; }
+.observatory-unknown-film { display:block; width:100%; height:100%; background:radial-gradient(circle at 37% 34%,#e9d5aa6b,transparent 16%),radial-gradient(circle at 46% 50%,#7f958d 0%,#203340 45%,#07111b 80%); }
+.observatory-welcome-copy>p:first-child { text-transform:uppercase; letter-spacing:.18em; font-size:11px; }
+.observatory-welcome-copy h2 { font-size:clamp(58px,6.2vw,92px); line-height:.98; text-shadow:0 8px 35px #0008; }
+.observatory-welcome-copy>p { color:#c7d1d4; }
+@media(max-width:1050px) {
+  .observatory-chart { height:590px; min-height:590px; }
+  .observatory-star { width:105px; }
+  .observatory-star-image { width:78px; }
+  .is-grouped .observatory-star { width:76px; }
+  .is-grouped .observatory-star-image { width:57px; }
+  .observatory-welcome-image { width:180px; }
+}
+@media(max-width:850px) {
+  .observatory-navigation { position:relative; top:auto; }
+  .observatory-chart { height:600px; min-height:600px; }
+  .observatory-reading-image { aspect-ratio:1.45; }
+  .observatory-welcome { grid-template-columns:1fr; }
+}
+@media(max-width:600px) {
+  .observatory-masthead { min-height:76px; }
+  .observatory-masthead h1>svg { width:32px; height:32px; }
+  .observatory-brand small { font-size:8px; }
+  .observatory-brand>span { font-size:21px; }
+  .observatory-tools { gap:10px; }
+  .observatory-heading { padding:24px 0 18px; }
+  .observatory-heading h2 { font-size:31px; }
+  .observatory-chart { height:510px; min-height:510px; margin:0 -9px; }
+  .observatory-chart::before { inset:12% 8%; }
+  .observatory-territory { top:14px; }
+  .observatory-territory strong { font-size:16px; }
+  .observatory-territory>span { display:none; }
+  .observatory-star { width:82px; min-height:96px; transform:translate(-50%,-40%); }
+  .observatory-star-image { display:block; width:64px; height:auto; margin-bottom:7px; }
+  .observatory-star strong { font-size:11px; line-height:1.16; -webkit-line-clamp:3; }
+  .observatory-star small { font-size:9px; margin-top:3px; }
+  .observatory-origin { width:130px; transform:translate(-50%,-43%); }
+  .observatory-origin-image { width:92px; height:auto; }
+  .observatory-origin-reticle { width:120px; height:120px; top:-14px; left:5px; }
+  .observatory-origin strong { font-size:18px; }
+  .is-grouped .observatory-origin { width:118px; transform:translate(-50%,-47%); }
+  .is-grouped .observatory-origin-image { display:block; width:54px; }
+  .is-grouped .observatory-origin-reticle { width:76px; height:76px; top:-11px; left:21px; }
+  .is-grouped .observatory-origin strong { font-size:14px; margin-top:6px; }
+  .is-grouped .observatory-star,.is-grouped .observatory-star:not([data-dense=true]) { width:76px; min-height:91px; transform:translate(-50%,-31%); }
+  .is-grouped .observatory-star-image,.is-grouped .observatory-star:not([data-dense=true]) .observatory-star-image { display:block; width:52px; height:auto; margin-bottom:6px; transform:none; border-radius:50%; }
+  .is-grouped .observatory-star-image img,.is-grouped .observatory-star-image .atlas-art-fallback,.is-grouped .observatory-star:not([data-dense=true]) .observatory-star-image img,.is-grouped .observatory-star:not([data-dense=true]) .atlas-art-fallback { display:block; }
+  .is-grouped .observatory-star strong,.is-grouped .observatory-star:not([data-dense=true]) strong { font-size:10px; -webkit-line-clamp:3; }
+  .is-grouped[data-group-count="3"] .observatory-star[data-dense=true] { width:55px; }
+  .is-grouped[data-group-count="3"] .observatory-star[data-dense=true] .observatory-star-image { width:38px; }
+  .is-grouped[data-group-count="3"] .observatory-star[data-dense=true] strong { font-size:9px; }
+  .observatory-welcome { display:flex; flex-direction:column; gap:24px; padding:18px 0 44px; }
+  .observatory-welcome-chart { width:100%; max-width:480px; aspect-ratio:1.14; }
+  .observatory-welcome-film { width:66%; left:17%; top:23%; }
+  .observatory-welcome-image { width:clamp(120px,41vw,185px); margin-bottom:15px; }
+  .observatory-welcome-film strong { font-size:clamp(19px,6vw,25px); }
+  .observatory-welcome-copy { padding:0 2px; }
+  .observatory-welcome-copy h2 { font-size:clamp(51px,13vw,68px); line-height:.98; }
+  .observatory-welcome-copy h2 br { display:initial; }
+}
+@media(prefers-reduced-motion:reduce) { .observatory-chart,.observatory-welcome-chart { scroll-behavior:auto; } }

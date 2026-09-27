@@ -7,6 +7,7 @@ import { FACET_KEYS, type CinematicFacet, type FacetKey, type FacetSource, type 
 import { FacetTab } from './facet-tab';
 import { FilmIdentity } from './film-identity';
 import { LikeButton } from './like-button';
+import { CelestialSky, OrbitMark } from './celestial';
 
 export function ScreeningReel({ films, metadata, selected, onSelect, onOpen, onExplore, likedKeys, savedKeys, onLike, onSave,
   onResolve, selectedFacets, onBorrow, locked, pending, lightTable, onReplace, onCompare }: {
@@ -51,7 +52,8 @@ export function ScreeningReel({ films, metadata, selected, onSelect, onOpen, onE
           srcSet={still ? `${still.replace('/w1280/', '/w780/')} 780w, ${still} 1280w` : undefined}
           sizes={still ? '(max-width: 760px) 100vw, 75vw' : undefined}
           alt={`${film.title} ${still ? 'film still' : 'poster'}`} fetchPriority="high" decoding="async"
-          onError={() => setFailed(current => [...current, artwork])} /> : <div className="screening-artwork-fallback" aria-hidden="true"><span>{String(index + 1).padStart(2, '0')}</span><p>{pending ? 'Finding the film image' : 'A film worth picturing'}</p></div>}
+          onError={() => setFailed(current => [...current, artwork])} /> : <div className="screening-artwork-fallback" aria-hidden="true"><CelestialSky variant="reel" /><div className="screening-empty-aperture"><OrbitMark /></div><p>{pending ? 'Finding the film image' : 'An image yet to come into focus'}</p></div>}
+        <div className="screening-frame" aria-hidden="true"><span>{String(index + 1).padStart(2, '0')} / {String(films.length).padStart(2, '0')}</span><i /><span>AFTERIMAGE · YOUR REEL</span></div>
         <div className="screening-caption" key={key}>
           <p className="screening-position">{index === 0 ? 'Closest to your request' : 'Another way into your reel'}</p>
           <h2 id="screening-title">{film.title}</h2>

@@ -8,6 +8,7 @@ import { Landing, nextWelcomeFilm, type WelcomeFilm } from './components/landing
 import { ATLAS_STORAGE_KEY, buildAtlasInput, parseAtlasInputRequest, type AtlasInput } from './lib/atlas';
 import { ATLAS_TRAIL_STORAGE_KEY, parseAtlasTrail, activeAtlasStop } from './lib/atlas-trail';
 import { ScreeningReel } from './components/screening-reel';
+import { CelestialSky, MotionToggle, OrbitMark } from './components/celestial';
 import { FilmLibrary } from './components/film-library';
 import { ReelComparison } from './components/reel-comparison';
 import { WATCHLIST_KEY, parseWatchlist, toggleWatchlist, type SavedFilm } from './lib/library';
@@ -834,10 +835,12 @@ export default function Home() {
   return (
     <main data-ready={hydrated} className={`site-shell projection-room${lightTableEnabled ? ' has-light-table' : ''}${result ? ' has-reel' : ''}${showLanding ? ' is-landing' : ''}`}
       style={{ '--reel-color': result?.palette[2] || '#254438' } as CSSProperties}>
+      {!showLanding ? <CelestialSky variant="page" /> : null}
       <div className="wrap">
         <header className="masthead">
-          <h1 className="title"><button type="button" aria-label="Afterimage home" onClick={goHome}>AFTERIMAGE<span className="brand-print" aria-hidden="true"><i /><i /><i /><i /></span></button></h1>
-          {showLanding ? <nav className="welcome-home-nav" aria-label="Welcome navigation"><a href="#discover-afterimage">How it works</a><button onClick={() => enterReel()}>{hasSession ? 'Continue' : 'Begin'} <span aria-hidden="true">↗</span></button></nav> : <div className="masthead-actions">
+          <h1 className="title"><button type="button" aria-label="Afterimage home" onClick={goHome}><OrbitMark />AFTERIMAGE</button></h1>
+          {showLanding ? <nav className="welcome-home-nav" aria-label="Welcome navigation"><MotionToggle /><a href="#discover-afterimage">How it works</a><button onClick={() => enterReel()}>{hasSession ? 'Continue' : 'Begin'} <span aria-hidden="true">↗</span></button></nav> : <div className="masthead-actions">
+            <MotionToggle />
             <button type="button" className="library-open-button" onClick={event => { setLibraryOpener(event.currentTarget); const url = new URL(location.href); url.hash = 'library'; history.pushState({ afterimageOverlay: true }, '', url); setLibraryOpen(true); }}>Library{watchlist.length ? ` (${watchlist.length})` : ''}</button>
             {result ? <button type="button" className="atlas-open-button" disabled={developing} onClick={event => openAtlas(result.recommendations[screeningIndex] || result.recommendations[0], event.currentTarget, true)}>Atlas</button> : null}
             <span className={`privacy-mark ${connection === 'connected' ? 'is-connected' : ''}`}>

@@ -11,6 +11,7 @@ import { parseJobStart } from '../lib/generation-state';
 import { LikeButton } from './like-button';
 import { FacetTab } from './facet-tab';
 import { AtlasFilmSearch } from './atlas-film-search';
+import { CelestialSky, MotionToggle, OrbitMark } from './celestial';
 
 type Props = {
   target: AtlasInput | null; opener: HTMLElement | null; connected: boolean; preferSaved: boolean;
@@ -34,7 +35,7 @@ function Artwork({ film, metadata, portrait = false }: { film: FacetSource; meta
   const urls = metadata?.status === 'matched' ? [metadata.backdropUrl, metadata.posterUrl] : [];
   const src = urls.find(url => url && !failed.includes(url));
   return src ? <img src={src} alt="" loading={portrait ? 'eager' : 'lazy'} decoding="async" onError={() => setFailed(current => [...current, src])} />
-    : <span className="atlas-art-fallback" aria-hidden="true">{film.title.slice(0, 1)}</span>;
+    : <span className="atlas-art-fallback" aria-hidden="true"><span>{film.title.slice(0, 1)}</span></span>;
 }
 
 export function AtlasWorkspace(props: Props) {
@@ -261,8 +262,9 @@ export function AtlasWorkspace(props: Props) {
     <div className="observatory-shell">
       <header className="observatory-masthead">
         <button ref={back} type="button" className="observatory-back" onClick={onClose}><span aria-hidden="true">←</span> Your reel</button>
-        <h1 id="atlas-title"><svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="11" /><path d="M16 1v8m0 14v8M1 16h8m14 0h8M9 23 23 9" /><circle cx="16" cy="16" r="2" /></svg>Atlas</h1>
+        <h1 id="atlas-title"><OrbitMark /><span className="observatory-brand"><small>AFTERIMAGE</small><span>Atlas</span></span></h1>
         <div className="observatory-tools">
+          <MotionToggle />
           <button type="button" aria-expanded={searchOpen} aria-controls="observatory-search" onClick={() => setSearchOpen(value => !value)}>{searchOpen ? 'Close search' : 'Find a film'}<span aria-hidden="true">⌕</span></button>
           <details className="observatory-visited"><summary>Visited <span>{saved.maps.length}</span></summary><div>
             <h2>Your explored films</h2>
@@ -299,9 +301,10 @@ export function AtlasWorkspace(props: Props) {
             </div>
 
             <div className={`observatory-chart${lens !== 'all' ? ' is-grouped' : ''}`} hidden={mapView !== 'map'} data-group-count={layout.groups.length} aria-label={lens === 'all' ? 'Six connections around your film' : `Films grouped by ${FACET_META[lens].compactLabel.toLowerCase()}`}>
-              <div className="observatory-sky" aria-hidden="true"><span /><span /></div>
+              <CelestialSky variant="atlas" />
+              <div className="observatory-chart-glow" aria-hidden="true" />
               {layout.groups.map(group => <div className="observatory-territory" data-affinity={group.affinity} key={group.affinity} style={{ '--x': `${group.x}%`, '--width': `${group.width}%` } as CSSProperties}><strong>{group.label}</strong><span>{AFFINITY_DESCRIPTIONS[group.affinity]}</span>{group.count === 0 ? <small>No films in this group</small> : null}</div>)}
-              <svg className="observatory-paths" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">{layout.nodes.map((point, index) => <path key={movieKey(atlas.neighbors[index].title, atlas.neighbors[index].year)} d={`M ${layout.anchor.x} ${layout.anchor.y} L ${point.x} ${point.y}`} style={{ d: `path("M ${layout.anchor.x} ${layout.anchor.y} L ${point.x} ${point.y}")` } as CSSProperties} className={selected === index ? 'is-selected' : ''} data-affinity={point.affinity} />)}</svg>
+              <svg className="observatory-paths" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">{layout.nodes.map((point, index) => <path key={movieKey(atlas.neighbors[index].title, atlas.neighbors[index].year)} d={`M ${layout.anchor.x} ${layout.anchor.y} L ${point.x} ${point.y}`} style={{ d: `path("M ${layout.anchor.x} ${layout.anchor.y} L ${point.x} ${point.y}")` } as CSSProperties} className={selected === index ? 'is-selected' : ''} data-affinity={point.affinity} />)}{selected >= 0 ? <path key={`${stop?.id}-${lens}-${selected}`} className="observatory-trace" pathLength={1} d={`M ${layout.anchor.x} ${layout.anchor.y} L ${layout.nodes[selected].x} ${layout.nodes[selected].y}`} /> : null}</svg>
               <button type="button" className="observatory-origin" aria-label={`Select anchor film ${atlas.anchor.title}`} aria-pressed={selected === -1} style={{ '--x': `${layout.anchor.x}%`, '--y': `${layout.anchor.y}%` } as CSSProperties} onClick={() => select(-1)}><span className="observatory-origin-reticle" aria-hidden="true" /><span className="observatory-origin-image"><Artwork film={atlas.anchor} metadata={anchorMetadata} /></span><strong>{atlas.anchor.title}</strong><small>Your starting film</small></button>
               {atlas.neighbors.map((film, index) => <button type="button" key={movieKey(film.title, film.year)} className="observatory-star" data-film-index={index} data-dense={layout.groups.length === 3 && (layout.groups.find(group => group.affinity === layout.nodes[index]?.affinity)?.count ?? 0) > 3} data-affinity={layout.nodes[index]?.affinity} style={{ '--x': `${layout.nodes[index]?.x}%`, '--y': `${layout.nodes[index]?.y}%` } as CSSProperties} aria-label={`Explore ${film.title}: ${film.label}${lens === 'all' ? '' : `. ${FACET_META[lens].label}: ${AFFINITY[film.lenses[lens].affinity]}`}`} aria-pressed={selected === index} onClick={() => select(index, true)} onKeyDown={event => { if (['ArrowRight', 'ArrowLeft', 'ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) { event.preventDefault(); const next = event.key === 'Home' ? 0 : event.key === 'End' ? 5 : atlasDirectionalNeighbor(layout.nodes, index, event.key as 'ArrowRight' | 'ArrowLeft' | 'ArrowUp' | 'ArrowDown'); select(next); dialog.current?.querySelectorAll<HTMLButtonElement>('.observatory-star')[next]?.focus(); } }}><span className="observatory-star-image"><Artwork film={film} metadata={getMetadata(film)} /><i aria-hidden="true" /></span><strong>{film.title}</strong><small>{film.year}</small></button>)}
             </div>
@@ -330,7 +333,7 @@ export function AtlasWorkspace(props: Props) {
         </div>
         <section className="observatory-light-table" aria-label="Your borrowed qualities">{lightTable}</section>
       </> : <section className="observatory-welcome" aria-label="Begin an Atlas">
-        <div className="observatory-welcome-chart" aria-hidden="true"><svg viewBox="0 0 600 500"><ellipse cx="300" cy="250" rx="250" ry="160" transform="rotate(-24 300 250)" /><ellipse cx="300" cy="250" rx="245" ry="160" transform="rotate(32 300 250)" /><path d="M65 164 300 250 496 108M110 392 300 250 532 334M220 60 300 250 340 465" /><circle cx="65" cy="164" r="3" /><circle cx="496" cy="108" r="3" /><circle cx="110" cy="392" r="3" /><circle cx="532" cy="334" r="3" /><circle cx="220" cy="60" r="3" /><circle cx="340" cy="465" r="3" /></svg><div className="observatory-welcome-film">{anchor ? <Artwork film={anchor} metadata={anchorMetadata} portrait /> : null}<strong>{anchor?.title}</strong><small>{anchor?.year}</small></div></div>
+        <div className="observatory-welcome-chart"><CelestialSky variant="atlas" /><div className="observatory-welcome-orbit" aria-hidden="true" /><div className="observatory-welcome-film"><span className="observatory-welcome-image">{anchor ? <Artwork film={anchor} metadata={anchorMetadata} portrait /> : <span className="observatory-unknown-film" aria-hidden="true" />}</span><strong>{anchor?.title || 'A film to begin with'}</strong><small>{anchor?.year || 'YOUR STARTING POINT'}</small></div></div>
         <div className="observatory-welcome-copy"><p>A film is a starting point.</p><h2>See what<br />connects.</h2><p>Follow {anchor?.title || 'a film you love'} into six new directions. Explore a shared feeling, a way of seeing, or an unexpected contrast.</p><button type="button" className="observatory-follow" disabled={!connected || busy} onClick={() => { if (target) void develop(target); }}><span>{busy ? 'Finding your connections…' : 'Explore this film'}</span><i aria-hidden="true">↗</i></button><button type="button" className="observatory-text-button" onClick={() => setSearchOpen(true)}>Or start with another film</button></div>
       </section>}
       <footer className="observatory-footer"><span>Afterimage · Atlas</span><small>Film identities & imagery: TMDB. Connections are editorial interpretations.</small></footer>

@@ -1,6 +1,7 @@
 'use client';
 
 import { useRef, useState, type KeyboardEvent } from 'react';
+import { CelestialSky, OrbitMark } from './celestial';
 
 // Verified TMDB stills. These are editorial examples, never generated user results.
 const FILMS = {
@@ -29,7 +30,9 @@ function Still({ film, eager = false }: { film: typeof FILMS.yang; eager?: boole
   return failed ? <div className="welcome-image-fallback">{film.title}</div> : <img src={film.image} alt={`${film.title} film still`} loading={eager ? 'eager' : 'lazy'} fetchPriority={eager ? 'high' : 'auto'} decoding="async" onError={() => setFailed(true)} />;
 }
 export function Landing({ onStart, hasDraft, hasReel = false, featuredFilm }: { featuredFilm: WelcomeFilm; onStart: (prompt?: string) => void; hasDraft: boolean; hasReel?: boolean }) {
-  const featured = FILMS[featuredFilm];
+  const [viewing, setViewing] = useState<WelcomeFilm | null>(null);
+  const selectedFilm = viewing ?? featuredFilm;
+  const featured = FILMS[selectedFilm];
   const [chapter, setChapter] = useState(0);
   const [qualities, setQualities] = useState([true, true]);
   const [connection, setConnection] = useState<'columbus' | 'mood'>('columbus');
@@ -41,19 +44,27 @@ export function Landing({ onStart, hasDraft, hasReel = false, featuredFilm }: { 
   }
   return <div className="welcome">
     <section className="welcome-hero" aria-labelledby="welcome-title">
-      <div className="welcome-hero-image"><Still key={featuredFilm} film={featured} eager /></div>
+      <CelestialSky variant="landing" />
       <div className="welcome-hero-copy">
-        <p className="welcome-prelude">For the love of film.</p>
-        <h2 id="welcome-title" tabIndex={-1}>Some films stay.<br />Find the next one.</h2>
-        <p className="welcome-description">Start with a film you love or a feeling you can’t quite name. Discover what to watch next—and why it might stay with you.</p>
+        <p className="welcome-prelude"><span aria-hidden="true">✦</span> A universe of cinema, connected.</p>
+        <h2 id="welcome-title" tabIndex={-1}>Some films<br /><em>stay with you.</em></h2>
+        <p className="welcome-description">Follow that feeling. Begin with a film you love and discover the worlds waiting just beyond it.</p>
         <div className="welcome-actions"><button className="welcome-primary" onClick={() => onStart()}>{hasReel ? 'Return to your reel' : hasDraft ? 'Continue your request' : 'Find my next film'} <span aria-hidden="true">↗</span></button><a href="#discover-afterimage">Take a look inside <span aria-hidden="true">↓</span></a></div>
-        <p className="welcome-footnote">Your taste is the starting point.</p>
+        <p className="welcome-footnote">Five considered films. A new direction to explore.</p>
       </div>
-      <div className="welcome-film-credit"><span>On the screen</span><strong>{featured.title}</strong><span>{featured.year} · {featured.director}</span></div>
+      <div className="welcome-portal" aria-label="Look through three films">
+        <div className="welcome-portal-aura" aria-hidden="true" />
+        <svg className="welcome-portal-rings" viewBox="0 0 680 680" fill="none" aria-hidden="true"><circle cx="340" cy="340" r="227" /><circle cx="340" cy="340" r="243" strokeDasharray="1 9" /><ellipse cx="340" cy="340" rx="326" ry="130" transform="rotate(-28 340 340)" /><path className="welcome-portal-trace" d="M42 457C-20 393 162 241 336 196s306-22 305 35" /><path d="M340 70v17m0 506v17M70 340h17m506 0h17" /></svg>
+        <div className="welcome-hero-image"><Still key={selectedFilm} film={featured} eager /></div>
+        <div className="welcome-aperture-edge" aria-hidden="true" />
+        <div className="welcome-film-credit" aria-live="polite"><span>In the aperture</span><strong>{featured.title}</strong><span>{featured.year} · {featured.director}</span></div>
+        <div className="welcome-film-choices" aria-label="Choose a featured film">{(Object.keys(FILMS) as WelcomeFilm[]).map((key, index) => <button key={key} type="button" aria-label={`View ${FILMS[key].title}`} aria-pressed={selectedFilm === key} onClick={() => setViewing(key)}><span className="welcome-film-dot" aria-hidden="true" /><span>{String(index + 1).padStart(2, '0')}</span></button>)}</div>
+        <span className="welcome-portal-caption">A film is only the beginning.</span>
+      </div>
     </section>
     {!hasDraft ? <section className="welcome-starting-points" aria-label="Ideas for your first reel"><p>Or begin with a feeling</p><div>{STARTERS.map(starter => <button key={starter.name} onClick={() => onStart(starter.prompt)}>{starter.name}<span aria-hidden="true">↗</span></button>)}</div></section> : null}
     <section className="welcome-discovery" id="discover-afterimage" aria-labelledby="welcome-discovery-title">
-      <header><p>A different way to find a film</p><h2 id="welcome-discovery-title">Let your curiosity lead.</h2></header>
+      <header><p><OrbitMark /> Three ways to follow a feeling</p><h2 id="welcome-discovery-title">Let your curiosity lead.</h2></header>
       <div className="welcome-chapters" role="tablist" aria-label="Explore Afterimage">{CHAPTERS.map((item, index) => <button key={item.name} ref={el => { tabs.current[index] = el; }} id={`welcome-tab-${index}`} role="tab" aria-selected={chapter === index} aria-controls="welcome-chapter" tabIndex={chapter === index ? 0 : -1} onClick={() => setChapter(index)} onKeyDown={event => moveTab(event, index)}>{item.name}<span aria-hidden="true">{index === chapter ? '−' : '+'}</span></button>)}</div>
       <div className="welcome-chapter" role="tabpanel" id="welcome-chapter" aria-labelledby={`welcome-tab-${chapter}`} tabIndex={0}>
         <div className="welcome-chapter-copy"><h3>{CHAPTERS[chapter].title}</h3><p>{CHAPTERS[chapter].copy}</p><small>Explore an illustrative example</small></div>
