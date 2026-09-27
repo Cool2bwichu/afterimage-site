@@ -5,13 +5,13 @@ import { movieKey } from '../lib/movie-metadata';
 import { mergeLibraryBackup, type SavedFilm } from '../lib/library';
 import type { LikedFilm } from '../lib/taste-profile';
 
-export function FilmLibrary({ open, opener, onClose, watchlist, likes, onRemove, onUnlike, onImport, onExplore }: {
+export function FilmLibrary({ open, opener, onClose, watchlist, likes, onRemove, onUnlike, onImport, onExplore, tab, onTabChange }: {
   open: boolean; opener: HTMLElement | null; onClose: () => void; watchlist: SavedFilm[]; likes: LikedFilm[];
+  tab: 'watchlist' | 'likes'; onTabChange: (tab: 'watchlist' | 'likes') => void;
   onRemove: (film: SavedFilm) => void; onUnlike: (film: LikedFilm) => void;
   onImport: (films: SavedFilm[]) => void; onExplore: (film: SavedFilm, opener: HTMLElement) => void;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
-  const [tab, setTab] = useState<'watchlist' | 'likes'>('watchlist');
   const [query, setQuery] = useState('');
   const [error, setError] = useState('');
   useEffect(() => {
@@ -28,7 +28,7 @@ export function FilmLibrary({ open, opener, onClose, watchlist, likes, onRemove,
   const films = (tab === 'watchlist' ? watchlist : likes).filter(film => `${film.title} ${film.year}`.toLocaleLowerCase().includes(query.toLocaleLowerCase()));
   return <dialog ref={dialog} className="film-library" aria-labelledby="library-title" onCancel={event => { event.preventDefault(); onClose(); }}>
     <header><div><p>Your collection</p><h2 id="library-title">The films you keep.</h2></div><button type="button" onClick={onClose} aria-label="Close library">Close ×</button></header>
-    <div className="library-tabs" role="group" aria-label="Library collection"><button type="button" aria-pressed={tab === 'watchlist'} onClick={() => setTab('watchlist')}>Watchlist <span>{watchlist.length}</span></button><button type="button" aria-pressed={tab === 'likes'} onClick={() => setTab('likes')}>Liked films <span>{likes.length}</span></button></div>
+    <div className="library-tabs" role="group" aria-label="Library collection"><button type="button" aria-pressed={tab === 'watchlist'} onClick={() => onTabChange('watchlist')}>Saved films <span>{watchlist.length}</span></button><button type="button" aria-pressed={tab === 'likes'} onClick={() => onTabChange('likes')}>Liked films <span>{likes.length}</span></button></div>
     <p>{tab === 'watchlist' ? 'Films to return to. Saving one here does not change your taste profile.' : 'Films you have seen and loved. These gently inform future recommendations.'}</p>
     <label className="library-search">Find a saved film<input type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="Title or year" /></label>
     {films.length ? <ul className="library-films">{films.map(film => <li key={movieKey(film.title, film.year)}><div><h3>{film.title}</h3><span>{film.year}</span></div><div><button type="button" onClick={event => onExplore(film, event.currentTarget)}>Explore connections</button><button type="button" onClick={() => tab === 'watchlist' ? onRemove(film) : onUnlike(film)} aria-label={`Remove ${film.title} from ${tab === 'watchlist' ? 'watchlist' : 'Likes'}`}>Remove</button></div></li>)}</ul> : <div className="library-empty"><h3>{query ? 'No films match that search.' : tab === 'watchlist' ? 'Leave a film here for another night.' : 'Your taste begins with a film you love.'}</h3><p>{query ? 'Try another title or year.' : 'Return to your reel to save or like a film.'}</p></div>}

@@ -6,7 +6,11 @@ import { AtlasWorkspace } from './components/atlas';
 import { parseFilmSearchResults, type FilmSearchResult } from './lib/film-search';
 import { Landing, nextWelcomeFilm, type WelcomeFilm } from './components/landing';
 import { ATLAS_STORAGE_KEY, buildAtlasInput, parseAtlasInputRequest, type AtlasInput } from './lib/atlas';
-import { ATLAS_TRAIL_STORAGE_KEY, parseAtlasTrail, activeAtlasStop } from './lib/atlas-trail';
+import { ATLAS_TRAIL_STORAGE_KEY, parseAtlasTrail, activeAtlasStop, emptyAtlasTrail, type AtlasTrail } from './lib/atlas-trail';
+import { CollectionMenu } from './components/collection-menu';
+import { SavedJourneys } from './components/saved-journeys';
+import { parseCollectionRoute, type Collection, type LibraryTab } from './lib/navigation';
+import { REEL_HISTORY_KEY, parseReelHistory, rememberReel, serializeReelHistory, type SavedReel } from './lib/reel-history';
 import { ScreeningReel } from './components/screening-reel';
 import { CelestialSky, MotionToggle, OrbitMark } from './components/celestial';
 import { FilmLibrary } from './components/film-library';
@@ -85,7 +89,15 @@ export default function Home() {
   const [atlasOpener, setAtlasOpener] = useState<HTMLElement | null>(null);
   const [atlasBusy, setAtlasBusy] = useState(false);
   const [atlasResume, setAtlasResume] = useState(false);
-  const [atlasResetRevision, setAtlasResetRevision] = useState(0);
+  const [atlasMapId, setAtlasMapId] = useState<string | null>(null);
+  const [atlasTrail, setAtlasTrail] = useState(emptyAtlasTrail);
+  const atlasTrailRef = useRef(atlasTrail);
+  const [reels, setReels] = useState<SavedReel[]>([]);
+  const reelsRef = useRef(reels);
+  const restoredReelId = useRef<string | null>(null);
+  const [collection, setCollection] = useState<Collection | null>(null);
+  const [collectionOpener, setCollectionOpener] = useState<HTMLElement | null>(null);
+  const [libraryTab, setLibraryTab] = useState<LibraryTab>('watchlist');
   const closeAtlas = useCallback(() => {
     if (window.history.state?.afterimageOverlay) window.history.back();
     else { const url = new URL(location.href); url.hash = ''; history.replaceState(null, '', url); setAtlasTarget(null); }
@@ -123,6 +135,8 @@ export default function Home() {
   const startLockRef = useRef(false);
   const developing = starting || jobStatus === 'queued' || jobStatus === 'running' || jobStatus === 'reconnecting';
   const reelLocked = developing || Boolean(activeJobId) || atlasBusy || atlasLookupBusy;
+  const navigationLocked = useRef(true);
+  useEffect(() => { navigationLocked.current = reelLocked; }, [reelLocked]);
   const resetLocked = starting || Boolean(activeJobId && jobStatus !== 'failed') || atlasBusy || atlasLookupBusy;
   const hasSession = Boolean(result || films.length || draft || creativeBrief || activeJobId || excludedFilms.length || selectionCount(selectedFacets));
   const showLanding = hydrated && !activeJobId && (welcomeRequested || (landingOpen && !result));
@@ -156,6 +170,10 @@ export default function Home() {
       try {
         const readAtlas = (key: string) => { try { return JSON.parse(localStorage.getItem(key) || 'null'); } catch { return null; } };
         const atlasTrail = parseAtlasTrail(readAtlas(ATLAS_TRAIL_STORAGE_KEY), readAtlas(ATLAS_STORAGE_KEY));
+        atlasTrailRef.current = atlasTrail; setAtlasTrail(atlasTrail);
+        setAtlasBusy(Boolean(atlasTrail.pending));
+        const history = parseReelHistory(localStorage.getItem(REEL_HISTORY_KEY));
+        reelsRef.current = history; setReels(history);
         const saved = parseStoredState(localStorage.getItem(STORAGE_KEY), atlasTrail.maps.flatMap(map => [map.atlas.anchor, ...map.atlas.neighbors]));
         const savedAtlas = activeAtlasStop(atlasTrail);
         if (location.hash === '#atlas' && savedAtlas) {
@@ -247,15 +265,50 @@ export default function Home() {
     else { const url = new URL(location.href); url.hash = ''; history.replaceState(null, '', url); setSelectedRecommendation(null); }
   }
   useEffect(() => {
+    if (!hydrated) return;
     const pop = () => {
+      const route = parseCollectionRoute(location.hash);
+      setWelcomeRequested(route?.kind === 'home' || new URLSearchParams(location.search).get('welcome') === '1');
+      setCollection(route?.kind === 'atlases' || route?.kind === 'reels' ? route.kind : null);
+      setLibraryOpen(route?.kind === 'library');
+      if (route?.kind === 'library') setLibraryTab(route.tab);
+      if (route?.kind === 'current' || route?.kind === 'reel') {
+        setWelcomeRequested(false); setLandingOpen(false);
+        const url = new URL(location.href); url.searchParams.delete('welcome'); history.replaceState(history.state, '', url);
+      }
+      if (route?.kind === 'reel' && route.id !== restoredReelId.current) {
+        const saved = reelsRef.current.find(item => item.id === route.id);
+        if (!saved || navigationLocked.current || startLockRef.current || atlasLookupLock.current) {
+          setCollection('reels');
+          const url = new URL(location.href); url.hash = 'reels'; history.replaceState(history.state, '', url);
+          setNotice(saved ? 'Finish the current discovery before switching reels.' : 'That reel is no longer saved in this browser.');
+        } else {
+          restoredReelId.current = saved.id;
+          const state = saved.state;
+          setExperience(state.experience); setFilms(state.films); setCreativeBrief(state.creativeBrief); setDraft('');
+          setResult(state.result); setMetadataByKey(state.metadataByKey); setDisplayedInput(state.displayedInput);
+          setExcludedFilms(state.excludedFilms); setScreeningIndex(state.screeningIndex ?? 0);
+          setAcceptedInput(undefined); setAcceptedInputJobId(''); setReplacementJob(undefined); setReplacementUndo(null);
+          setSelectedFacets(state.selectedFacets ?? {}); setSelectedReelIdentity(state.selectedReelIdentity ?? ''); setFacetUndo(null);
+          lastAttemptRef.current = undefined; setError(''); setNotice(''); setComposerOpen(false);
+          requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: 'instant' }));
+        }
+      }
       let key = '';
       try { key = location.hash.startsWith('#film=') ? decodeURIComponent(location.hash.slice(6)) : ''; } catch { /* Ignore damaged links. */ }
       const index = result?.recommendations.findIndex(film => movieKey(film.title, film.year) === key) ?? -1;
       setSelectedRecommendation(index < 0 ? null : index);
       if (index >= 0) setScreeningIndex(index);
-      setLibraryOpen(location.hash === '#library');
-      if (location.hash !== '#atlas') setAtlasTarget(null);
-      else if (lastAtlasTarget.current) { setAtlasResume(true); setAtlasTarget(lastAtlasTarget.current); }
+      if (route?.kind !== 'atlas') setAtlasTarget(null);
+      else {
+        const saved = route.id ? atlasTrailRef.current.maps.find(map => map.id === route.id) : activeAtlasStop(atlasTrailRef.current);
+        const request = saved ? parseAtlasInputRequest(saved.inputKey, saved.atlas.anchor) : null;
+        if (saved && request) {
+          const target = buildAtlasInput(saved.atlas.anchor, request, request.excludedFilms ?? [], []);
+          lastAtlasTarget.current = target; setAtlasMapId(saved.id); setAtlasResume(true); setAtlasTarget(target);
+        } else if (!route.id && lastAtlasTarget.current) { setAtlasMapId(null); setAtlasResume(true); setAtlasTarget(lastAtlasTarget.current); }
+        else { setAtlasTarget(null); setCollection('atlases'); if (route.id) setNotice('That Atlas is no longer saved in this browser.'); }
+      }
       if (location.hash.startsWith('#compare=')) {
         try {
           const keys: unknown = JSON.parse(decodeURIComponent(location.hash.slice(9)));
@@ -267,8 +320,29 @@ export default function Home() {
     };
     const timer = setTimeout(pop, 0);
     window.addEventListener('popstate', pop);
-    return () => { clearTimeout(timer); window.removeEventListener('popstate', pop); };
-  }, [result]);
+    window.addEventListener('hashchange', pop);
+    return () => { clearTimeout(timer); window.removeEventListener('popstate', pop); window.removeEventListener('hashchange', pop); };
+    // Navigation reads the latest collections through refs; browsing a lens must not reopen a dialog.
+  }, [result, hydrated]);
+
+  const rememberAtlasTrail = useCallback((trail: AtlasTrail) => { atlasTrailRef.current = trail; setAtlasTrail(trail); }, []);
+  const updateAtlasAddress = useCallback((id: string) => {
+    if (parseCollectionRoute(location.hash)?.kind !== 'atlas') return;
+    setAtlasMapId(id);
+    const url = new URL(location.href); url.hash = `atlas=${id}`;
+    history.replaceState(history.state, '', url);
+  }, []);
+  function navigateCollection(hash: string, opener: HTMLElement) {
+    setNotice('');
+    setCollectionOpener(opener); setLibraryOpener(opener); setAtlasOpener(opener);
+    const url = new URL(location.href); url.hash = hash;
+    if (location.hash !== hash) history.pushState({ afterimageOverlay: true }, '', url);
+    window.dispatchEvent(new PopStateEvent('popstate'));
+  }
+  function closeCollection() {
+    if (history.state?.afterimageOverlay) history.back();
+    else { const url = new URL(location.href); url.hash = ''; history.replaceState(null, '', url); setCollection(null); }
+  }
   function closeLibrary() {
     if (history.state?.afterimageOverlay) history.back();
     else { const url = new URL(location.href); url.hash = ''; history.replaceState(null, '', url); setLibraryOpen(false); }
@@ -297,6 +371,7 @@ export default function Home() {
     const syncLikes = (event: StorageEvent) => {
       if (event.storageArea === localStorage && (event.key === WATCHLIST_KEY || event.key === null)) setWatchlist(parseWatchlist(event.key === null ? null : event.newValue));
       if (event.storageArea === localStorage && (event.key === TASTE_STORAGE_KEY || event.key === null)) setLikedFilms(parseLikedFilms(event.newValue));
+      if (event.storageArea === localStorage && (event.key === REEL_HISTORY_KEY || event.key === null)) { const next = parseReelHistory(event.newValue); reelsRef.current = next; setReels(next); }
     };
     window.addEventListener('storage', syncLikes);
     return () => window.removeEventListener('storage', syncLikes);
@@ -304,7 +379,7 @@ export default function Home() {
 
   useEffect(() => {
     if (!hydrated) return;
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify({
+    const stored = {
       version: 4,
       films,
       creativeBrief,
@@ -315,7 +390,20 @@ export default function Home() {
       selectedFilmKey: result ? movieKey(result.recommendations[screeningIndex]?.title ?? '', result.recommendations[screeningIndex]?.year ?? '') : undefined,
       replacementJob, acceptedInput, acceptedInputJobId, displayedInput: displayedInput ?? null, displayedReelIdentity: getRecommendationIdentity(result),
       ...(lightTableEnabled ? { experience, selectedFacets, selectedReelIdentity, blendDraft: { version: 1, facets: selectedFacets } } : {}),
-    })); } catch {
+    };
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(stored));
+      // Merge with storage so another tab's saved reels are not overwritten.
+      const currentHistory = parseReelHistory(localStorage.getItem(REEL_HISTORY_KEY));
+      const next = rememberReel(currentHistory, parseStoredState(JSON.stringify(stored)), crypto.randomUUID(), new Date().toISOString());
+      const serialized = serializeReelHistory(next);
+      if (serialized !== localStorage.getItem(REEL_HISTORY_KEY)) localStorage.setItem(REEL_HISTORY_KEY, serialized);
+      if (serialized !== serializeReelHistory(reelsRef.current)) {
+        reelsRef.current = next;
+        const timer = window.setTimeout(() => setReels(next), 0);
+        return () => window.clearTimeout(timer);
+      }
+    } catch {
       const timer = window.setTimeout(() => setNotice('This browser could not save the reel. Keep this page open to retain your selections.'), 0);
       return () => window.clearTimeout(timer);
     }
@@ -374,6 +462,10 @@ export default function Home() {
 
         if (controller.signal.aborted) return;
         if (terminal.status === 'complete') {
+          if (parseCollectionRoute(location.hash)?.kind === 'reel') {
+            const url = new URL(location.href); url.hash = 'current'; history.replaceState(history.state, '', url);
+          }
+          restoredReelId.current = null;
           const replaced = replacementJob?.jobId === terminal.jobId ? replacementJob : null;
           if (replaced) {
             if (result && displayedInput) setReplacementUndo({ result, input: displayedInput, index: replaced.index });
@@ -741,8 +833,10 @@ export default function Home() {
     if (resetLocked || startLockRef.current) return;
     setAtlasTarget(null);
     setLandingOpen(true);
-    try { localStorage.removeItem(ATLAS_STORAGE_KEY); localStorage.removeItem(ATLAS_TRAIL_STORAGE_KEY); } catch { /* The current view still resets. */ }
-    setAtlasResetRevision(current => current + 1);
+    restoredReelId.current = null;
+    lastAtlasTarget.current = null; setAtlasMapId(null);
+    setCollection(null); setLibraryOpen(false);
+    const url = new URL(location.href); url.hash = ''; history.replaceState(null, '', url);
     setFilms([]);
     setDraft('');
     setCreativeBrief('');
@@ -797,6 +891,7 @@ export default function Home() {
     };
     setAtlasOpener(atlasTarget ? atlasOpener : selectedRecommendation !== null ? dossierOpener || opener : opener);
     setAtlasResume(resume);
+    setAtlasMapId(null);
     const details = metadataByKey[movieKey(film.title, film.year)];
     const catalogFilm = film as FacetSource & { tmdbId?: number; id?: number };
     const identity = { ...film, tmdbId: catalogFilm.tmdbId ?? catalogFilm.id ?? (details?.status === 'matched' ? details.tmdbId : undefined) };
@@ -832,6 +927,8 @@ export default function Home() {
     requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: 'instant' }));
   }
 
+  const collectionMenu = <CollectionMenu atlasCount={atlasTrail.maps.length} reelCount={reels.length} savedCount={watchlist.length} likedCount={likedFilms.length} recentAtlas={activeAtlasStop(atlasTrail) ?? undefined} onNavigate={navigateCollection} />;
+
   return (
     <main data-ready={hydrated} className={`site-shell projection-room${lightTableEnabled ? ' has-light-table' : ''}${result ? ' has-reel' : ''}${showLanding ? ' is-landing' : ''}`}
       style={{ '--reel-color': result?.palette[2] || '#254438' } as CSSProperties}>
@@ -839,10 +936,8 @@ export default function Home() {
       <div className="wrap">
         <header className="masthead">
           <h1 className="title"><button type="button" aria-label="Afterimage home" onClick={goHome}><OrbitMark />AFTERIMAGE</button></h1>
-          {showLanding ? <nav className="welcome-home-nav" aria-label="Welcome navigation"><MotionToggle /><a href="#discover-afterimage">How it works</a><button onClick={() => enterReel()}>{hasSession ? 'Continue' : 'Begin'} <span aria-hidden="true">↗</span></button></nav> : <div className="masthead-actions">
+          {showLanding ? <nav className="welcome-home-nav" aria-label="Welcome navigation"><MotionToggle /><a href="#discover-afterimage">How it works</a>{collectionMenu}</nav> : <div className="masthead-actions">
             <MotionToggle />
-            <button type="button" className="library-open-button" onClick={event => { setLibraryOpener(event.currentTarget); const url = new URL(location.href); url.hash = 'library'; history.pushState({ afterimageOverlay: true }, '', url); setLibraryOpen(true); }}>Library{watchlist.length ? ` (${watchlist.length})` : ''}</button>
-            {result ? <button type="button" className="atlas-open-button" disabled={developing} onClick={event => openAtlas(result.recommendations[screeningIndex] || result.recommendations[0], event.currentTarget, true)}>Atlas</button> : null}
             <span className={`privacy-mark ${connection === 'connected' ? 'is-connected' : ''}`}>
               <i aria-hidden="true" />{connection === 'connected' ? 'Connected' : connection === 'checking' ? 'Connecting…' : 'Not connected'}
             </span>
@@ -853,6 +948,7 @@ export default function Home() {
               title={resetLocked ? 'Available when this reel finishes developing' : 'Clear this reel, its inputs, and selected qualities'}>
               Start over <span aria-hidden="true">↺</span>
             </button> : null}
+            {collectionMenu}
           </div>}
         </header>
         {showLanding ? <Landing featuredFilm={featuredFilm} onStart={enterReel} hasDraft={hasSession} hasReel={Boolean(result)} /> : null}
@@ -1126,14 +1222,16 @@ export default function Home() {
         </section>
         <footer>AFTERIMAGE · reasoned live, frame by frame</footer>
         {result ? <ReelComparison first={comparison ? { recommendation: result.recommendations[comparison.first], metadata: metadataByKey[movieKey(result.recommendations[comparison.first].title, result.recommendations[comparison.first].year)], index: comparison.first } : null} second={comparison ? { recommendation: result.recommendations[comparison.second], metadata: metadataByKey[movieKey(result.recommendations[comparison.second].title, result.recommendations[comparison.second].year)], index: comparison.second } : null} opener={comparison?.opener ?? null} onClose={closeComparison} onSelect={index => { setScreeningIndex(index); closeComparison(); }} onBorrow={lightTableEnabled ? handleSelectFacet : undefined} selectedFacets={selectedFacets} facetDisabled={reelLocked} /> : null}
-        <FilmLibrary open={libraryOpen} opener={libraryOpener} onClose={closeLibrary}
+        </div>
+        <SavedJourneys key={collection ?? 'closed'} collection={collection} opener={collectionOpener} atlases={atlasTrail.maps} reels={reels} reelLocked={reelLocked} notice={notice} onClose={closeCollection} onNavigate={navigateCollection} />
+        <FilmLibrary open={libraryOpen} opener={libraryOpener} onClose={closeLibrary} tab={libraryTab} onTabChange={tab => { setLibraryTab(tab); const url = new URL(location.href); url.hash = tab === 'likes' ? 'likes' : 'library'; history.replaceState(history.state, '', url); }}
           watchlist={watchlist} likes={likedFilms} onRemove={toggleSave} onUnlike={toggleLike}
           onImport={next => { if (!saveWatchlist(next)) throw new Error('The backup could not be saved in this browser.'); }}
           onExplore={(film, opener) => { setLibraryOpen(false); openAtlas(film, libraryOpener || opener, false, true); }} />
-        <AtlasWorkspace key={atlasResetRevision} target={atlasTarget} opener={atlasOpener} onClose={closeAtlas} onBusy={setAtlasBusy} preferSaved={atlasResume}
+        <AtlasWorkspace target={atlasTarget} opener={atlasOpener} onClose={closeAtlas} onBusy={setAtlasBusy} preferSaved={atlasResume}
+          requestedMapId={atlasMapId} onTrailChange={rememberAtlasTrail} onMapChange={updateAtlasAddress} navigation={collectionMenu}
           connected={connection === 'connected'} metadataByKey={metadataByKey} likedKeys={likedKeys} onLike={toggleLike} savedKeys={savedKeys} onSave={toggleSave}
           onExplore={(film, opener, request) => openAtlas(film, opener, false, false, request)} onSearchExplore={(film, opener) => openAtlas(film, opener, false, true)} selectedFacets={selectedFacets} onBorrow={lightTableEnabled ? handleSelectFacet : undefined} lightTable={atlasTarget ? lightTable : null} />
-        </div>
       </div>
     </main>
   );

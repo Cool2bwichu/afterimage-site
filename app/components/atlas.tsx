@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 
 import { ATLAS_STORAGE_KEY, atlasInputKey, parseAtlas, parseAtlasInputRequest, type AtlasInput, type AtlasIdentity } from '../lib/atlas';
 import { atlasLayout, atlasDirectionalNeighbor } from '../lib/atlas-layout';
 import { ATLAS_ARTWORK_KEY, readAtlasArtwork, serializeAtlasArtwork } from '../lib/atlas-artwork';
-import { ATLAS_TRAIL_STORAGE_KEY, MAX_ATLAS_MAPS, activeAtlasStop, emptyAtlasTrail, finishAtlasMap, moveAtlasTrail, parseAtlasTrail, updateAtlasView, visitAtlasMap } from '../lib/atlas-trail';
+import { ATLAS_TRAIL_STORAGE_KEY, MAX_ATLAS_MAPS, activeAtlasStop, emptyAtlasTrail, finishAtlasMap, moveAtlasTrail, parseAtlasTrail, updateAtlasView, visitAtlasMap, type AtlasTrail } from '../lib/atlas-trail';
 import { FACET_KEYS, FACET_META, type CinematicFacet, type FacetKey, type FacetSource, type SelectedFacets } from '../lib/light-table';
 import { parseEnrichmentResponse, movieKey, imdbUrl, type FilmEnrichment } from '../lib/movie-metadata';
 import { parseJobStart } from '../lib/generation-state';
@@ -16,6 +16,7 @@ import { CelestialSky, MotionToggle, OrbitMark } from './celestial';
 type Props = {
   target: AtlasInput | null; opener: HTMLElement | null; connected: boolean; preferSaved: boolean;
   onClose: () => void; onBusy: (busy: boolean) => void;
+  requestedMapId: string | null; onTrailChange: (trail: AtlasTrail) => void; onMapChange: (id: string) => void; navigation: ReactNode;
   metadataByKey: Record<string, FilmEnrichment>; likedKeys: Set<string>;
   savedKeys: Set<string>; onSave: (film: AtlasIdentity) => void;
   onLike: (film: FacetSource) => void; onExplore: (film: FacetSource, opener: HTMLElement, request: AtlasInput['request']) => void;
@@ -39,11 +40,12 @@ function Artwork({ film, metadata, portrait = false }: { film: FacetSource; meta
 }
 
 export function AtlasWorkspace(props: Props) {
-  const { target, opener, onClose, onBusy, connected, preferSaved, metadataByKey, likedKeys, onLike, onExplore, selectedFacets, onBorrow, lightTable } = props;
+  const { target, opener, onClose, onBusy, connected, preferSaved, metadataByKey, likedKeys, onLike, onExplore, selectedFacets, onBorrow, lightTable, requestedMapId, onTrailChange, onMapChange } = props;
   const [saved, setSaved] = useState(emptyAtlasTrail);
   const [ready, setReady] = useState(false);
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState('');
+  const [storageError, setStorageError] = useState(false);
   const [metadata, setMetadata] = useState<Record<string, FilmEnrichment>>({});
   const [searchOpen, setSearchOpen] = useState(false);
   const [reading, setReading] = useState<'connection' | 'difference' | 'notes'>('connection');
@@ -86,8 +88,19 @@ export function AtlasWorkspace(props: Props) {
   useEffect(() => {
     if (!ready) return;
     try { localStorage.setItem(ATLAS_TRAIL_STORAGE_KEY, JSON.stringify(saved)); }
-    catch { /* Browsing still works when storage is unavailable. */ }
+    catch { const timer = setTimeout(() => setStorageError(true), 0); return () => clearTimeout(timer); }
   }, [ready, saved]);
+  useEffect(() => { if (ready) onTrailChange(saved); }, [ready, saved, onTrailChange]);
+  useEffect(() => {
+    if (!ready || !target || !requestedMapId) return;
+    const id = requestedMapId;
+    const timer = setTimeout(() => setSaved(current => visitAtlasMap(current, id)), 0);
+    return () => clearTimeout(timer);
+  }, [ready, target, requestedMapId]);
+  useEffect(() => {
+    if (!ready || !target || !stop || (requestedMapId && requestedMapId !== stop.id)) return;
+    if (preferSaved || stop.inputKey === atlasInputKey(target)) onMapChange(stop.id);
+  }, [ready, target, stop, preferSaved, requestedMapId, onMapChange]);
   useEffect(() => { onBusy(busy); }, [busy, onBusy]);
 
   function rememberArtwork(records: FilmEnrichment[]) {
@@ -228,6 +241,7 @@ export function AtlasWorkspace(props: Props) {
     navigationRevision.current += 1;
     setReading('connection');
     setSaved(current => moveAtlasTrail(current, cursor));
+    if (saved.route[cursor]) onMapChange(saved.route[cursor]);
     if (!saved.pending) setError('');
     dialog.current?.scrollTo({ top: 0, behavior: 'instant' });
   }
@@ -235,6 +249,7 @@ export function AtlasWorkspace(props: Props) {
     navigationRevision.current += 1;
     setReading('connection');
     setSaved(current => visitAtlasMap(current, id));
+    onMapChange(id);
     if (!saved.pending) setError('');
     dialog.current?.scrollTo({ top: 0, behavior: 'instant' });
   }
@@ -261,7 +276,7 @@ export function AtlasWorkspace(props: Props) {
   return <dialog ref={dialog} className="atlas-dialog atlas-observatory" aria-labelledby="atlas-title" onCancel={event => { event.preventDefault(); onClose(); }}>
     <div className="observatory-shell">
       <header className="observatory-masthead">
-        <button ref={back} type="button" className="observatory-back" onClick={onClose}><span aria-hidden="true">←</span> Your reel</button>
+        <button ref={back} type="button" className="observatory-back" onClick={onClose}><span aria-hidden="true">←</span> Back</button>
         <h1 id="atlas-title"><OrbitMark /><span className="observatory-brand"><small>AFTERIMAGE</small><span>Atlas</span></span></h1>
         <div className="observatory-tools">
           <MotionToggle />
@@ -274,7 +289,10 @@ export function AtlasWorkspace(props: Props) {
             <p className="observatory-storage-note">Your {MAX_ATLAS_MAPS} most recent maps stay in this browser.</p>
           </div></details>
         </div>
+        {props.navigation}
       </header>
+
+      {storageError ? <p className="observatory-notice" role="alert">This browser could not save your Atlas. Keep this page open and free some browser storage before leaving.</p> : null}
 
       <div id="observatory-search" hidden={!searchOpen}><AtlasFilmSearch busy={busy} connected={connected} onDevelop={(film, trigger) => { setSearchOpen(false); props.onSearchExplore(film, trigger); }} /></div>
 
