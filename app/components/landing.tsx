@@ -39,9 +39,9 @@ function Still({ film, eager = false }: { film: typeof FILMS.yang; eager?: boole
 }
 
 /**
- * Three films orbit the aperture on the same inclined ring. They pass behind the lens and
- * in front of it, and stop whenever a pointer or keyboard focus is inside the instrument,
- * so nothing moves while you aim at it.
+ * Three films orbit the aperture on the same inclined ring, passing behind the lens and in
+ * front of it. When a pointer or keyboard focus reaches the instrument they gather on the
+ * near side and rest there, each fully in reach, until you leave.
  */
 function Orrery({ selected, onChoose }: { selected: WelcomeFilm; onChoose: (film: WelcomeFilm) => void }) {
   const { running } = useCelestialMotion();
@@ -69,10 +69,11 @@ function Orrery({ selected, onChoose }: { selected: WelcomeFilm; onChoose: (film
   }, []);
   useEffect(() => {
     const tilt = -28 * Math.PI / 180;
-    const place = (offset: number) => ORDER.forEach((_, index) => {
+    // Where the films rest when someone reaches for them: on the near side, clear of the lens and its credit.
+    const front = [.25, .75, .95].map(turn => turn * Math.PI);
+    const place = (index: number, t: number) => {
       const planet = planets.current[index];
       if (!planet) return;
-      const t = running ? offset + index * Math.PI * 2 / 3 : [.2, .5, .8][index] * Math.PI;
       const ex = 326 * Math.cos(t);
       const ey = 130 * Math.sin(t);
       const x = 340 + ex * Math.cos(tilt) - ey * Math.sin(tilt);
@@ -82,14 +83,21 @@ function Orrery({ selected, onChoose }: { selected: WelcomeFilm; onChoose: (film
       planet.style.setProperty('--y', `${(y / 680 * 100).toFixed(3)}%`);
       planet.style.setProperty('--depth', (0.72 + 0.28 * (depth + 1) / 2).toFixed(3));
       planet.dataset.side = depth < -0.12 ? 'far' : 'near';
-    });
-    if (!running) { place(0); return; }
+    };
+    if (!running) { front.forEach((t, index) => place(index, t)); return; }
+    const current = ORDER.map((_, index) => angle.current + index * Math.PI * 2 / 3);
     let frame = 0;
     let last = performance.now();
     const tick = (time: number) => {
-      if (!held.current) angle.current += (time - last) / 1000 * (Math.PI * 2 / 96);
+      const seconds = Math.min(.1, (time - last) / 1000);
       last = time;
-      place(angle.current);
+      if (!held.current) angle.current += seconds * (Math.PI * 2 / 96);
+      current.forEach((t, index) => {
+        const target = held.current ? front[index] : angle.current + index * Math.PI * 2 / 3;
+        const delta = ((target - t + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI;
+        current[index] = t + delta * Math.min(1, seconds * 7);
+        place(index, current[index]);
+      });
       frame = requestAnimationFrame(tick);
     };
     frame = requestAnimationFrame(tick);

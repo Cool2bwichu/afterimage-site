@@ -386,6 +386,8 @@
 @media (max-width: 600px) {
   .welcome-home-nav > .sky-link { display: inline-flex; min-height: 36px; padding: 4px 10px; gap: 6px; font-size: 12px; }
   .welcome-home-nav > .sky-link > span { display: none; }
+  /* A first visit has no sky yet; keep the header on one line until there is one. */
+  .welcome-home-nav > .sky-link.is-empty { display: none; }
 }
 @media (max-width: 760px) {
   .projection-room .masthead-actions > .sky-link { grid-column: 1; grid-row: 2; justify-self: start; min-height: 36px; padding: 4px 11px 4px 9px; font-size: 12px; }
