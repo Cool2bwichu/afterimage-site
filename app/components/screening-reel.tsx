@@ -9,12 +9,13 @@ import { FilmIdentity } from './film-identity';
 import { LikeButton } from './like-button';
 import { CelestialSky, OrbitMark } from './celestial';
 
-export function ScreeningReel({ films, metadata, selected, onSelect, onOpen, onExplore, likedKeys, savedKeys, onLike, onSave,
+export function ScreeningReel({ films, metadata, selected, onSelect, onOpen, onExplore, likedKeys, savedKeys, afterimageKeys, onLike, onSave, onAfterimage,
   onResolve, selectedFacets, onBorrow, locked, pending, lightTable, onReplace, onCompare }: {
   films: RecommendationV2[]; metadata: Record<string, FilmEnrichment>; selected: number;
   onSelect: (index: number) => void; onOpen: (index: number, event: MouseEvent<HTMLButtonElement>) => void;
   onExplore: (index: number, event: MouseEvent<HTMLButtonElement>) => void;
-  likedKeys: Set<string>; savedKeys: Set<string>; onLike: (film: RecommendationV2) => void; onSave: (film: RecommendationV2) => void;
+  likedKeys: Set<string>; savedKeys: Set<string>; afterimageKeys: Set<string>; onLike: (film: RecommendationV2) => void; onSave: (film: RecommendationV2) => void;
+  onAfterimage: (film: RecommendationV2, opener: HTMLElement) => void;
   onResolve: (record: FilmEnrichment) => void; selectedFacets: SelectedFacets;
   onBorrow?: (channel: FacetKey, facet: CinematicFacet, source: FacetSource, trigger: HTMLButtonElement) => void;
   onCompare: (first: number, second: number, opener: HTMLElement) => void;
@@ -59,7 +60,7 @@ export function ScreeningReel({ films, metadata, selected, onSelect, onOpen, onE
           <h2 id="screening-title">{film.title}</h2>
           <p className="screening-credits"><span>{film.year}</span>{details?.directors.length ? <span>{details.directors.join(', ')}</span> : null}{details?.runtime ? <span>{details.runtime} min</span> : null}</p>
           <p className="screening-reason">{film.reason}</p>
-          <div className="screening-actions"><button type="button" className="screening-read" onClick={event => onOpen(index, event)}>Read the film notes <span aria-hidden="true">↗</span></button><button type="button" aria-pressed={savedKeys.has(key)} onClick={() => onSave(film)}>{savedKeys.has(key) ? 'Saved to watchlist ✓' : 'Save for later +'}</button><LikeButton film={film} liked={likedKeys.has(key)} onToggle={() => onLike(film)} /></div>
+          <div className="screening-actions"><button type="button" className="screening-read" onClick={event => onOpen(index, event)}>Read the film notes <span aria-hidden="true">↗</span></button><button type="button" aria-pressed={savedKeys.has(key)} onClick={() => onSave(film)}>{savedKeys.has(key) ? 'Saved to watchlist ✓' : 'Save for later +'}</button><LikeButton film={film} liked={likedKeys.has(key)} onToggle={() => onLike(film)} /><button type="button" className="screening-afterimage" aria-pressed={afterimageKeys.has(key)} aria-label={afterimageKeys.has(key) ? `Revisit your afterimage of ${film.title}` : `Watched ${film.title}? Keep what stayed with you`} onClick={event => onAfterimage(film, event.currentTarget)}><span aria-hidden="true">✦</span>{afterimageKeys.has(key) ? 'Afterimage kept' : 'Watched it?'}</button></div>
         </div>
       </article>
       <nav className="reel-index" aria-label="Your five films">

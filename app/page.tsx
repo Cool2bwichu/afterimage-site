@@ -9,16 +9,21 @@ import { ATLAS_STORAGE_KEY, buildAtlasInput, parseAtlasInputRequest, type AtlasI
 import { ATLAS_TRAIL_STORAGE_KEY, parseAtlasTrail, activeAtlasStop, emptyAtlasTrail, type AtlasTrail } from './lib/atlas-trail';
 import { CollectionMenu } from './components/collection-menu';
 import { SavedJourneys } from './components/saved-journeys';
-import { parseCollectionRoute, type Collection, type LibraryTab } from './lib/navigation';
+import { libraryHash, parseCollectionRoute, type Collection, type LibraryTab } from './lib/navigation';
 import { REEL_HISTORY_KEY, parseReelHistory, rememberReel, serializeReelHistory, type SavedReel } from './lib/reel-history';
 import { ScreeningReel } from './components/screening-reel';
-import { CelestialSky, MotionToggle, OrbitMark } from './components/celestial';
+import { CelestialSky, MotionToggle, OrbitMark, StarGlyph } from './components/celestial';
+import { YourSky } from './components/your-sky';
+import { ReelConstellation } from './components/reel-constellation';
+import { ChartingRoom, announceReady, useDevelopingTitle } from './components/charting';
+import { AfterimageLog, type AfterimageTarget } from './components/afterimage-log';
+import { AFTERIMAGE_JOURNAL_KEY, findAfterimage, parseAfterimages, removeAfterimage, serializeAfterimages, upsertAfterimage, type AfterimageDraft, type AfterimageEntry } from './lib/afterimages';
 import { FilmLibrary } from './components/film-library';
 import { ReelComparison } from './components/reel-comparison';
 import { WATCHLIST_KEY, parseWatchlist, toggleWatchlist, type SavedFilm } from './lib/library';
 import { SearchFingerprint } from './components/search-fingerprint';
 import { LightTable } from './components/light-table';
-import { LIGHT_TABLE_EXPERIENCE, buildBlendPayload, isSameSelectedFacet, removeFacet, selectFacet, selectionCount, type CinematicFacet, type FacetKey, type FacetSource, type SelectedFacets } from './lib/light-table';
+import { LIGHT_TABLE_EXPERIENCE, buildBlendPayload, isSameSelectedFacet, removeFacet, selectFacet, selectionCount, type CinematicFacet, type FacetKey, type FacetMap, type FacetSource, type SelectedFacets } from './lib/light-table';
 import { animateFacetToLane } from './lib/light-table-motion';
 import { fetchFilmEnrichment, persistableEnrichment } from './lib/enrichment-client';
 import type { FilmEnrichment } from './lib/movie-metadata';
@@ -105,6 +110,10 @@ export default function Home() {
   const [excludedFilms, setExcludedFilms] = useState<ExcludedFilm[]>([]);
   const [likedFilms, setLikedFilms] = useState<LikedFilm[]>([]);
   const [watchlist, setWatchlist] = useState<SavedFilm[]>([]);
+  const [afterimages, setAfterimages] = useState<AfterimageEntry[]>([]);
+  const [afterimageTarget, setAfterimageTarget] = useState<{ film: AfterimageTarget; opener: HTMLElement | null } | null>(null);
+  const [skyOpen, setSkyOpen] = useState(false);
+  const [skyOpener, setSkyOpener] = useState<HTMLElement | null>(null);
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [libraryOpener, setLibraryOpener] = useState<HTMLElement | null>(null);
   const [screeningIndex, setScreeningIndex] = useState(0);
@@ -113,6 +122,7 @@ export default function Home() {
   const [replacementUndo, setReplacementUndo] = useState<{ result: AfterimageResultV2; input: DevelopInput; index: number } | null>(null);
   const savedKeys = useMemo(() => new Set(watchlist.map(film => movieKey(film.title, film.year))), [watchlist]);
   const likedKeys = useMemo(() => new Set(likedFilms.map(film => movieKey(film.title, film.year))), [likedFilms]);
+  const afterimageKeys = useMemo(() => new Set(afterimages.map(entry => movieKey(entry.title, entry.year))), [afterimages]);
   const [hydrated, setHydrated] = useState(false);
   const [notice, setNotice] = useState('');
   const [facetUndo, setFacetUndo] = useState<{ facets: SelectedFacets; identity: string } | null>(null);
@@ -185,6 +195,7 @@ export default function Home() {
         }
         setLikedFilms(parseLikedFilms(localStorage.getItem(TASTE_STORAGE_KEY)));
         setWatchlist(parseWatchlist(localStorage.getItem(WATCHLIST_KEY)));
+        setAfterimages(parseAfterimages(localStorage.getItem(AFTERIMAGE_JOURNAL_KEY)));
         setWelcomeRequested(new URLSearchParams(window.location.search).get('welcome') === '1');
         const requested = new URLSearchParams(window.location.search).get('experience');
         const mode = requested === null ? saved.experience : requested === LIGHT_TABLE_EXPERIENCE ? LIGHT_TABLE_EXPERIENCE : undefined;
@@ -271,6 +282,7 @@ export default function Home() {
       setWelcomeRequested(route?.kind === 'home' || new URLSearchParams(location.search).get('welcome') === '1');
       setCollection(route?.kind === 'atlases' || route?.kind === 'reels' ? route.kind : null);
       setLibraryOpen(route?.kind === 'library');
+      setSkyOpen(route?.kind === 'sky');
       if (route?.kind === 'library') setLibraryTab(route.tab);
       if (route?.kind === 'current' || route?.kind === 'reel') {
         setWelcomeRequested(false); setLandingOpen(false);
@@ -334,7 +346,7 @@ export default function Home() {
   }, []);
   function navigateCollection(hash: string, opener: HTMLElement) {
     setNotice('');
-    setCollectionOpener(opener); setLibraryOpener(opener); setAtlasOpener(opener);
+    setCollectionOpener(opener); setLibraryOpener(opener); setAtlasOpener(opener); setSkyOpener(opener);
     const url = new URL(location.href); url.hash = hash;
     if (location.hash !== hash) history.pushState({ afterimageOverlay: true }, '', url);
     window.dispatchEvent(new PopStateEvent('popstate'));
@@ -346,6 +358,10 @@ export default function Home() {
   function closeLibrary() {
     if (history.state?.afterimageOverlay) history.back();
     else { const url = new URL(location.href); url.hash = ''; history.replaceState(null, '', url); setLibraryOpen(false); }
+  }
+  function closeSky() {
+    if (history.state?.afterimageOverlay) history.back();
+    else { const url = new URL(location.href); url.hash = ''; history.replaceState(null, '', url); setSkyOpen(false); }
   }
   function openComparison(first: number, second: number, opener: HTMLElement) {
     const url = new URL(location.href); url.hash = `compare=${encodeURIComponent(JSON.stringify([first, second].map(index => movieKey(result!.recommendations[index].title, result!.recommendations[index].year))))}`;
@@ -367,11 +383,44 @@ export default function Home() {
     } catch (error) { setNotice(error instanceof Error ? error.message : 'The Like could not be saved.'); }
   }
 
+  function facetsFor(film: { title: string; year: string }): FacetMap | undefined {
+    const key = movieKey(film.title, film.year);
+    const fromReel = (reel: AfterimageResultV2 | null | undefined) => reel?.recommendations.find(item => movieKey(item.title, item.year) === key)?.facets;
+    const fromAtlas = atlasTrail.maps.flatMap(map => [map.atlas.anchor, ...map.atlas.neighbors]).find(item => movieKey(item.title, item.year) === key)?.facets;
+    return fromReel(result) ?? reels.map(reel => fromReel(reel.state.result)).find(Boolean) ?? fromAtlas;
+  }
+  function openAfterimage(film: { title: string; year: string; tmdbId?: number }, opener: HTMLElement | null) {
+    const details = metadataByKey[movieKey(film.title, film.year)];
+    const tmdbId = film.tmdbId ?? (details?.status === 'matched' ? details.tmdbId : undefined);
+    setAfterimageTarget({ film: { title: film.title, year: film.year, ...(tmdbId ? { tmdbId } : {}), facets: facetsFor(film) }, opener });
+  }
+  function saveAfterimage(draft: AfterimageDraft, options: { like: boolean; unsave: boolean }): string | null {
+    let next: AfterimageEntry[];
+    try {
+      next = upsertAfterimage(afterimages, draft);
+      localStorage.setItem(AFTERIMAGE_JOURNAL_KEY, serializeAfterimages(next));
+    } catch (reason) {
+      return reason instanceof DOMException || !(reason instanceof Error) ? 'This browser could not keep the afterimage. Free some storage and try again.' : reason.message;
+    }
+    setAfterimages(next);
+    const film = { title: draft.title, year: draft.year, ...(draft.tmdbId ? { tmdbId: draft.tmdbId } : {}) };
+    if (options.like && !likedKeys.has(movieKey(film.title, film.year))) toggleLike(film);
+    if (options.unsave && savedKeys.has(movieKey(film.title, film.year))) toggleSave(film);
+    setNotice(`An afterimage of ${draft.title} now glows in your sky.`);
+    return null;
+  }
+  function forgetAfterimage(film: { title: string; year: string }) {
+    const next = removeAfterimage(afterimages, film);
+    try { localStorage.setItem(AFTERIMAGE_JOURNAL_KEY, serializeAfterimages(next)); setAfterimages(next); setNotice(`The afterimage of ${film.title} has been removed.`); }
+    catch { setNotice('This browser could not update your afterimages. Please try again.'); }
+  }
+
   useEffect(() => {
     const syncLikes = (event: StorageEvent) => {
       if (event.storageArea === localStorage && (event.key === WATCHLIST_KEY || event.key === null)) setWatchlist(parseWatchlist(event.key === null ? null : event.newValue));
       if (event.storageArea === localStorage && (event.key === TASTE_STORAGE_KEY || event.key === null)) setLikedFilms(parseLikedFilms(event.newValue));
       if (event.storageArea === localStorage && (event.key === REEL_HISTORY_KEY || event.key === null)) { const next = parseReelHistory(event.newValue); reelsRef.current = next; setReels(next); }
+      if (event.storageArea === localStorage && (event.key === AFTERIMAGE_JOURNAL_KEY || event.key === null)) setAfterimages(parseAfterimages(event.newValue));
     };
     window.addEventListener('storage', syncLikes);
     return () => window.removeEventListener('storage', syncLikes);
@@ -495,6 +544,7 @@ export default function Home() {
           setJobStatus(null);
           setError('');
           setNotice(replaced ? 'One new film. The rest of your reel stays with you.' : '');
+          announceReady(replaced ? 'One new film has joined your reel.' : `Five films are waiting: ${terminal.reel.persona}.`);
           window.setTimeout(() => {
             resultsRef.current?.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth', block: 'start' });
           }, 80);
@@ -864,6 +914,22 @@ export default function Home() {
     });
   }
 
+  useDevelopingTitle(developing);
+  const chartingInput = acceptedInput ?? (films.length || creativeBrief ? { films, creativeBrief } as DevelopInput : undefined);
+  const chartingSources = chartingInput ? [
+    ...chartingInput.films,
+    ...Object.values(chartingInput.selectedFacets ?? {}).map(facet => facet.label),
+    ...(!chartingInput.films.length && !selectionCount(chartingInput.selectedFacets ?? {}) && chartingInput.creativeBrief ? [`“${chartingInput.creativeBrief.length > 64 ? `${chartingInput.creativeBrief.slice(0, 63)}…` : chartingInput.creativeBrief}”`] : []),
+  ] : [];
+  const starCount = useMemo(() => {
+    const keys = new Set<string>();
+    const add = (film: { title: string; year: string }) => keys.add(movieKey(film.title, film.year));
+    reels.forEach(reel => reel.state.result?.recommendations.forEach(add));
+    atlasTrail.maps.forEach(map => [map.atlas.anchor, ...map.atlas.neighbors].forEach(add));
+    [...likedFilms, ...watchlist, ...afterimages].forEach(add);
+    return keys.size;
+  }, [reels, atlasTrail, likedFilms, watchlist, afterimages]);
+
   const leaderMessage = starting
     ? 'Starting your reel'
     : jobStatus === 'reconnecting'
@@ -927,7 +993,9 @@ export default function Home() {
     requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: 'instant' }));
   }
 
-  const collectionMenu = <CollectionMenu atlasCount={atlasTrail.maps.length} reelCount={reels.length} savedCount={watchlist.length} likedCount={likedFilms.length} recentAtlas={activeAtlasStop(atlasTrail) ?? undefined} onNavigate={navigateCollection} />;
+  const collectionMenu = <CollectionMenu atlasCount={atlasTrail.maps.length} reelCount={reels.length} savedCount={watchlist.length} likedCount={likedFilms.length} starCount={starCount} afterimageCount={afterimages.length} recentAtlas={activeAtlasStop(atlasTrail) ?? undefined} onNavigate={navigateCollection} />;
+  const skyLink = <a className="sky-link" href="#sky" onClick={event => { if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); navigateCollection('#sky', event.currentTarget); }}>
+    <StarGlyph /><span>Your sky</span>{hydrated && starCount ? <small>{starCount}</small> : null}</a>;
 
   return (
     <main data-ready={hydrated} className={`site-shell projection-room${lightTableEnabled ? ' has-light-table' : ''}${result ? ' has-reel' : ''}${showLanding ? ' is-landing' : ''}`}
@@ -936,18 +1004,16 @@ export default function Home() {
       <div className="wrap">
         <header className="masthead">
           <h1 className="title"><button type="button" aria-label="Afterimage home" onClick={goHome}><OrbitMark />AFTERIMAGE</button></h1>
-          {showLanding ? <nav className="welcome-home-nav" aria-label="Welcome navigation"><MotionToggle /><a href="#discover-afterimage">How it works</a>{collectionMenu}</nav> : <div className="masthead-actions">
+          {showLanding ? <nav className="welcome-home-nav" aria-label="Welcome navigation"><MotionToggle /><a href="#discover-afterimage">How it works</a>{skyLink}{collectionMenu}</nav> : <div className="masthead-actions">
             <MotionToggle />
             <span className={`privacy-mark ${connection === 'connected' ? 'is-connected' : ''}`}>
               <i aria-hidden="true" />{connection === 'connected' ? 'Connected' : connection === 'checking' ? 'Connecting…' : 'Not connected'}
             </span>
-            <div className="ai-mode-note">
-              {lightTableEnabled ? <a href="?experience=standard">Use standard reel</a> : <a href="?experience=light-table-v1">Enable Light Table</a>}
-            </div>
             {hydrated && hasSession ? <button className="start-over" type="button" onClick={startOver} disabled={resetLocked}
               title={resetLocked ? 'Available when this reel finishes developing' : 'Clear this reel, its inputs, and selected qualities'}>
               Start over <span aria-hidden="true">↺</span>
             </button> : null}
+            {skyLink}
             {collectionMenu}
           </div>}
         </header>
@@ -964,6 +1030,13 @@ export default function Home() {
           </div>
           {result.sourceFilms.length ? <div className="request-references"><span className="panel-label">Reference films</span><p>{result.sourceFilms.join(' · ')}</p></div> : null}
         </section>}
+
+        {developing ? (
+          <ChartingRoom variant={replacementJob ? 'replacement' : 'reel'} message={replacementJob ? 'Finding one new film' : leaderMessage}
+            detail={result ? 'Your previous reel is still here. You can browse it while you wait.' : 'You can refresh this page; your accepted reel will resume.'}
+            elapsed={jobStartedAt !== null ? `${Math.floor(elapsedSeconds / 60)}:${String(elapsedSeconds % 60).padStart(2, '0')}` : null}
+            sources={chartingSources} />
+        ) : null}
 
         {connection !== 'connected' && connection !== 'checking' ? (
           <section className="connection-panel" aria-live="polite">
@@ -1115,21 +1188,19 @@ export default function Home() {
           </div>
         ) : null}
 
-        {developing ? (
-          <section className="leader" role="status" aria-live="polite">
-            <span className="status-orbit" aria-hidden="true" />
-            <div><p>{replacementJob ? 'Finding one new film' : leaderMessage}</p><span>{result ? 'Your previous reel is still here. You can browse it while you wait.' : 'You can refresh this page; your accepted reel will resume.'}</span></div>
-            {jobStartedAt !== null ? <time aria-live="off" className="elapsed">{Math.floor(elapsedSeconds / 60)}:{String(elapsedSeconds % 60).padStart(2, '0')} elapsed</time> : null}
-          </section>
-        ) : null}
+
 
         {result ? (
           <section className="results" aria-live="polite" ref={resultsRef}>
             <div className={developing ? "reel-heading" : "sr-only"}><h2>{developing ? 'Your previous reel' : 'Your reel'}</h2><span>Five films, considered together.</span></div>
 
+            <ReelConstellation key={`constellation-${recommendationIdentity}`} seed={recommendationIdentity} name={result.persona} insight={result.insight} palette={result.palette}
+              films={result.recommendations} selected={screeningIndex} onSelect={setScreeningIndex} onNotice={setNotice}
+              onOpenSky={opener => navigateCollection('#sky', opener)} />
             <ScreeningReel key={recommendationIdentity} films={result.recommendations} metadata={metadataByKey}
               selected={screeningIndex} onSelect={setScreeningIndex} onCompare={openComparison} onReplace={displayedInput && connection === 'connected' ? index => void replaceFilm(index) : undefined} pending={enrichmentPending} locked={reelLocked}
-              likedKeys={likedKeys} savedKeys={savedKeys} onLike={toggleLike} onSave={toggleSave} onResolve={resolveFilm}
+              likedKeys={likedKeys} savedKeys={savedKeys} afterimageKeys={afterimageKeys} onLike={toggleLike} onSave={toggleSave} onResolve={resolveFilm}
+              onAfterimage={(film, opener) => openAfterimage(film, opener)}
               selectedFacets={selectedFacets} onBorrow={lightTableEnabled ? handleSelectFacet : undefined}
               lightTable={selectedRecommendation === null && !atlasTarget ? lightTable : null}
               onOpen={(index, event) => openDossier(index, event.currentTarget)}
@@ -1174,6 +1245,8 @@ export default function Home() {
               onSelectFilm={index => { history.replaceState(history.state, '', filmUrl(index)); setSelectedRecommendation(index); setScreeningIndex(index); }}
               saved={selectedRecommendation !== null && savedKeys.has(movieKey(result.recommendations[selectedRecommendation].title, result.recommendations[selectedRecommendation].year))}
               onSave={() => { if (selectedRecommendation !== null) toggleSave(result.recommendations[selectedRecommendation]); }}
+              afterimage={selectedRecommendation !== null && afterimageKeys.has(movieKey(result.recommendations[selectedRecommendation].title, result.recommendations[selectedRecommendation].year))}
+              onAfterimage={opener => { if (selectedRecommendation !== null) openAfterimage(result.recommendations[selectedRecommendation], opener); }}
               lightTable={lightTable}
               selection={selectedRecommendation === null ? null : {
                 recommendation: result.recommendations[selectedRecommendation],
@@ -1200,7 +1273,7 @@ export default function Home() {
         ) : null}
 
         {hydrated ? <details className="taste-history"><summary>Your taste <span>{likedFilms.length ? `${likedFilms.length} liked ${likedFilms.length === 1 ? 'film' : 'films'}` : 'No Likes yet'}</span></summary>
-          <p>Like films you have seen and loved. Shared patterns gently guide future discoveries; your current request and Light Table qualities come first. Saved in this browser, even when you start over.</p>
+          <p>Like films you have seen and loved. Shared patterns gently guide future discoveries; your current request and Light Table qualities come first. Saved in this browser, even when you start over. <a href="#sky" onClick={event => { if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); navigateCollection('#sky', event.currentTarget); }}>See them shine in your sky ✦</a></p>
           {likedFilms.length ? <><ul>{likedFilms.map(film => <li key={movieKey(film.title, film.year)}><span>{film.title} <small>{film.year}</small></span><button type="button" onClick={() => toggleLike(film)} aria-label={`Remove like for ${film.title}`}>Remove</button></li>)}</ul>
           <button type="button" className="clear-taste" onClick={() => { if (window.confirm('Clear all liked films from your taste history? Your current reel will stay.')) { if (saveLikes([])) setNotice('Your taste history has been cleared.'); } }}>Clear taste history</button>
           {likedFilms.length === MAX_LIKED_FILMS ? <p>Your history is full. Remove a Like to make room.</p> : null}</> : <p>Look for ♡ Like beside a recommendation or inside its dossier.</p>}
@@ -1220,14 +1293,27 @@ export default function Home() {
             </div>
           </details>
         </section>
-        <footer>AFTERIMAGE · reasoned live, frame by frame</footer>
+        <footer className="site-footer"><span>AFTERIMAGE · reasoned live, frame by frame</span>
+          <span className="ai-mode-note">{lightTableEnabled ? <a href="?experience=standard">Use standard reel</a> : <a href="?experience=light-table-v1">Enable Light Table</a>}</span>
+        </footer>
         {result ? <ReelComparison first={comparison ? { recommendation: result.recommendations[comparison.first], metadata: metadataByKey[movieKey(result.recommendations[comparison.first].title, result.recommendations[comparison.first].year)], index: comparison.first } : null} second={comparison ? { recommendation: result.recommendations[comparison.second], metadata: metadataByKey[movieKey(result.recommendations[comparison.second].title, result.recommendations[comparison.second].year)], index: comparison.second } : null} opener={comparison?.opener ?? null} onClose={closeComparison} onSelect={index => { setScreeningIndex(index); closeComparison(); }} onBorrow={lightTableEnabled ? handleSelectFacet : undefined} selectedFacets={selectedFacets} facetDisabled={reelLocked} /> : null}
         </div>
         <SavedJourneys key={collection ?? 'closed'} collection={collection} opener={collectionOpener} atlases={atlasTrail.maps} reels={reels} reelLocked={reelLocked} notice={notice} onClose={closeCollection} onNavigate={navigateCollection} />
-        <FilmLibrary open={libraryOpen} opener={libraryOpener} onClose={closeLibrary} tab={libraryTab} onTabChange={tab => { setLibraryTab(tab); const url = new URL(location.href); url.hash = tab === 'likes' ? 'likes' : 'library'; history.replaceState(history.state, '', url); }}
-          watchlist={watchlist} likes={likedFilms} onRemove={toggleSave} onUnlike={toggleLike}
+        <FilmLibrary open={libraryOpen} opener={libraryOpener} onClose={closeLibrary} tab={libraryTab} onTabChange={tab => { setLibraryTab(tab); const url = new URL(location.href); url.hash = libraryHash(tab); history.replaceState(history.state, '', url); }}
+          watchlist={watchlist} likes={likedFilms} afterimages={afterimages} onRemove={toggleSave} onUnlike={toggleLike}
+          onEditAfterimage={(entry, opener) => openAfterimage(entry, opener)} onRemoveAfterimage={entry => forgetAfterimage(entry)}
           onImport={next => { if (!saveWatchlist(next)) throw new Error('The backup could not be saved in this browser.'); }}
           onExplore={(film, opener) => { setLibraryOpen(false); openAtlas(film, libraryOpener || opener, false, true); }} />
+        <YourSky open={skyOpen} opener={skyOpener} onClose={closeSky} reels={reels} atlases={atlasTrail.maps} likes={likedFilms} watchlist={watchlist} afterimages={afterimages}
+          metadataByKey={metadataByKey} likedKeys={likedKeys} savedKeys={savedKeys} canExplore={connection === 'connected' && !reelLocked}
+          onLike={toggleLike} onSave={toggleSave} onLogAfterimage={(film, opener) => openAfterimage(film, opener)} onNavigate={navigateCollection}
+          onExplore={(film, opener) => { setSkyOpen(false); openAtlas(film, skyOpener || opener, false, true); }}
+          onBegin={() => { setSkyOpen(false); enterReel(); }} />
+        <AfterimageLog key={afterimageTarget ? `afterimage:${movieKey(afterimageTarget.film.title, afterimageTarget.film.year)}` : 'afterimage-closed'} target={afterimageTarget?.film ?? null} opener={afterimageTarget?.opener ?? null}
+          existing={afterimageTarget ? findAfterimage(afterimages, afterimageTarget.film) : undefined}
+          liked={afterimageTarget ? likedKeys.has(movieKey(afterimageTarget.film.title, afterimageTarget.film.year)) : false}
+          saved={afterimageTarget ? savedKeys.has(movieKey(afterimageTarget.film.title, afterimageTarget.film.year)) : false}
+          onSave={saveAfterimage} onRemove={() => { if (afterimageTarget) forgetAfterimage(afterimageTarget.film); }} onClose={() => setAfterimageTarget(null)} />
         <AtlasWorkspace target={atlasTarget} opener={atlasOpener} onClose={closeAtlas} onBusy={setAtlasBusy} preferSaved={atlasResume}
           requestedMapId={atlasMapId} onTrailChange={rememberAtlasTrail} onMapChange={updateAtlasAddress} navigation={collectionMenu}
           connected={connection === 'connected'} metadataByKey={metadataByKey} likedKeys={likedKeys} onLike={toggleLike} savedKeys={savedKeys} onSave={toggleSave}

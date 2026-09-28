@@ -5,12 +5,12 @@ import type { AtlasStop } from '../lib/atlas-trail';
 import { OrbitMark } from './celestial';
 
 export type CollectionMenuProps = {
-  atlasCount: number; reelCount: number; savedCount: number; likedCount: number;
+  atlasCount: number; reelCount: number; savedCount: number; likedCount: number; starCount: number; afterimageCount: number;
   recentAtlas?: AtlasStop;
   onNavigate: (hash: string, opener: HTMLElement) => void;
 };
 
-export function CollectionMenu({ atlasCount, reelCount, savedCount, likedCount, recentAtlas, onNavigate }: CollectionMenuProps) {
+export function CollectionMenu({ atlasCount, reelCount, savedCount, likedCount, starCount, afterimageCount, recentAtlas, onNavigate }: CollectionMenuProps) {
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
@@ -27,11 +27,13 @@ export function CollectionMenu({ atlasCount, reelCount, savedCount, likedCount, 
     if (trigger.current) onNavigate(hash, trigger.current);
   }
   const entries = [
+    { hash: '#sky', label: 'Your sky', count: starCount, symbol: '✧' },
     { hash: '#current', label: 'Current reel', count: null, symbol: '↗' },
     { hash: '#atlases', label: 'My Atlases', count: atlasCount, symbol: '✦' },
     { hash: '#reels', label: 'My reels', count: reelCount, symbol: '▤' },
     { hash: '#library', label: 'Saved films', count: savedCount, symbol: '+' },
     { hash: '#likes', label: 'Liked films', count: likedCount, symbol: '♡' },
+    { hash: '#afterimages', label: 'Afterimages', count: afterimageCount, symbol: '◎' },
   ];
   return <div className="collection-menu" ref={root} onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false); }} onKeyDown={event => {
     if (event.key === 'Escape' && open) { event.preventDefault(); event.stopPropagation(); setOpen(false); trigger.current?.focus(); }
