@@ -176,7 +176,7 @@ export async function renderStarChart(data: StarChartData): Promise<Blob> {
   const charted = (data.chartedAt ?? new Date()).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' });
   context.fillStyle = MUTED;
   context.font = `500 14px ${sans}`;
-  spaced(context, `FIVE FILMS, A THREAD BETWEEN THEM · CHARTED ${charted.toUpperCase()}`, WIDTH / 2, HEIGHT - 76, 2.6);
+  spaced(context, `FIVE FILMS, A THREAD BETWEEN THEM · CHARTED BY CLAUDE · ${charted.toUpperCase()}`, WIDTH / 2, HEIGHT - 76, 2.6);
 
   return new Promise((resolve, reject) => canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('The star chart could not be drawn.')), 'image/png'));
 }

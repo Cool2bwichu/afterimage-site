@@ -1,5 +1,6 @@
 # dependencies
 /node_modules
+/companion/node_modules
 /.pnp
 .pnp.*
 .yarn/*
@@ -31,6 +32,7 @@ yarn-error.log*
 !.env.example
 
 # deployment and generated files
+/companion/data/
 .vercel
 next-env.d.ts
 /dist/

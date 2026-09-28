@@ -4,6 +4,10 @@ This repository is the production website source. The companion backend lives
 in `Cool2bwichu/afterimage-subscription-bridge`; do not substitute its prototype
 frontend for this site.
 
+On the Claude branches, `companion/` is the Claude-backed replacement for that
+bridge. It answers the same contract; run its tests with `npm run test:companion`
+and keep `ANTHROPIC_API_KEY` out of the repository.
+
 ## Development
 
 - Use Node.js 22.13 or newer and `npm ci`.

@@ -31,6 +31,7 @@ import { movieKey } from './lib/movie-metadata';
 import { MAX_LIKED_FILMS, TASTE_STORAGE_KEY, parseLikedFilms, toggleLikedFilm, type LikedFilm } from './lib/taste-profile';
 import type { AfterimageResultV2, ExcludedFilm, DevelopInput, Experience } from './lib/reel-state';
 import { GenerationPollError, pollGeneration } from './lib/generation-poller';
+import { statusModelLabel } from './lib/claude';
 import {
   isGenerationJobId,
   parseJobStart,
@@ -51,7 +52,6 @@ import {
 
 const STORAGE_KEY = 'afterimage:mobile-state';
 type ConnectionState = 'checking' | 'connected' | 'disconnected' | 'unreachable';
-type AuthFlow = { verificationUrl: string; userCode: string } | null;
 type JobStatus = 'queued' | 'running' | 'reconnecting' | 'failed' | null;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -128,7 +128,7 @@ export default function Home() {
   const [facetUndo, setFacetUndo] = useState<{ facets: SelectedFacets; identity: string } | null>(null);
   const [error, setError] = useState('');
   const [connection, setConnection] = useState<ConnectionState>('checking');
-  const [authFlow, setAuthFlow] = useState<AuthFlow>(null);
+  const [claudeModel, setClaudeModel] = useState<string | null>(null);
   const [connecting, setConnecting] = useState(false);
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [jobStatus, setJobStatus] = useState<JobStatus>(null);
@@ -159,9 +159,9 @@ export default function Home() {
     try {
       const response = await fetch('/api/status', { cache: 'no-store' });
       const payload = await response.json();
+      if (response.ok) setClaudeModel(statusModelLabel(payload));
       if (response.ok && isRecord(payload) && payload.authenticated) {
         setConnection('connected');
-        setAuthFlow(null);
       } else {
         setConnection(response.status === 503 || response.status === 502 ? 'unreachable' : 'disconnected');
       }
@@ -464,12 +464,6 @@ export default function Home() {
   }, [refreshConnection]);
 
   useEffect(() => {
-    if (!authFlow || connection === 'connected') return;
-    const timer = window.setInterval(() => void refreshConnection(true), 2200);
-    return () => window.clearInterval(timer);
-  }, [authFlow, connection, refreshConnection]);
-
-  useEffect(() => {
     if (!hydrated || !activeJobId || connection !== 'connected') return;
 
     const controller = new AbortController();
@@ -688,21 +682,22 @@ export default function Home() {
     setSelectedRecommendation(null);
   }
 
+  // Claude runs on the companion's Anthropic key, so there is no sign-in to start:
+  // the companion re-checks the key and says plainly what is missing.
   async function startConnection() {
     setConnecting(true);
     setError('');
     try {
       const response = await fetch('/api/connect', { method: 'POST' });
       const payload = await response.json();
-      if (!response.ok || !isRecord(payload)) throw new Error(responseMessage(payload, 'ChatGPT sign-in could not start.'));
-      if (payload.alreadyAuthenticated) {
+      if (response.ok && isRecord(payload) && payload.alreadyAuthenticated) {
         await refreshConnection();
-      } else if (typeof payload.verificationUrl === 'string' && typeof payload.userCode === 'string') {
-        setAuthFlow({ verificationUrl: payload.verificationUrl, userCode: payload.userCode });
-        setConnection('disconnected');
-      } else throw new Error('ChatGPT sign-in could not start.');
-    } catch (connectionError) {
-      setError(connectionError instanceof Error ? connectionError.message : 'ChatGPT sign-in could not start.');
+        return;
+      }
+      setConnection(isRecord(payload) && payload.code === 'CLAUDE_NOT_CONNECTED' ? 'disconnected' : 'unreachable');
+      setError(responseMessage(payload, 'Claude could not be reached.'));
+    } catch {
+      setError('Claude could not be reached.');
       setConnection('unreachable');
     } finally {
       setConnecting(false);
@@ -1041,27 +1036,17 @@ export default function Home() {
         {connection !== 'connected' && connection !== 'checking' ? (
           <section className="connection-panel" aria-live="polite">
             <div>
-              <div className="connection-kicker">Private Intelligence</div>
-              <h2>Connect your ChatGPT account</h2>
+              <div className="connection-kicker">Private intelligence · Claude</div>
+              <h2>{connection === 'unreachable' ? 'Claude is out of reach' : 'Connect Claude'}</h2>
               <p>
                 {connection === 'unreachable'
                   ? 'The reel service is unavailable. Your films and saved reel remain on this device.'
-                  : 'Connect to develop recommendations. Your existing reel stays available while you reconnect.'}
+                  : 'AFTERIMAGE is programmed by Claude through its private companion. Add an Anthropic API key to the companion, then check again. Your existing reel stays available.'}
               </p>
             </div>
-            {!authFlow ? (
-              <button type="button" onClick={startConnection} disabled={connecting}>
-                {connecting ? 'Starting…' : 'Connect ChatGPT'}
-              </button>
-            ) : null}
-            {authFlow ? (
-              <div className="device-flow">
-                <span>ONE-TIME CODE</span>
-                <strong>{authFlow.userCode}</strong>
-                <a href={authFlow.verificationUrl} target="_blank" rel="noreferrer">Open secure sign-in ↗</a>
-                <small>Return here after approving it. This page will reconnect automatically.</small>
-              </div>
-            ) : null}
+            <button type="button" onClick={startConnection} disabled={connecting}>
+              {connecting ? 'Checking…' : 'Check connection'}
+            </button>
           </section>
         ) : null}
 
@@ -1293,7 +1278,7 @@ export default function Home() {
             </div>
           </details>
         </section>
-        <footer className="site-footer"><span>AFTERIMAGE · reasoned live, frame by frame</span>
+        <footer className="site-footer"><span>AFTERIMAGE · reasoned live by {claudeModel ?? 'Claude'}</span>
           <span className="ai-mode-note">{lightTableEnabled ? <a href="?experience=standard">Use standard reel</a> : <a href="?experience=light-table-v1">Enable Light Table</a>}</span>
         </footer>
         {result ? <ReelComparison first={comparison ? { recommendation: result.recommendations[comparison.first], metadata: metadataByKey[movieKey(result.recommendations[comparison.first].title, result.recommendations[comparison.first].year)], index: comparison.first } : null} second={comparison ? { recommendation: result.recommendations[comparison.second], metadata: metadataByKey[movieKey(result.recommendations[comparison.second].title, result.recommendations[comparison.second].year)], index: comparison.second } : null} opener={comparison?.opener ?? null} onClose={closeComparison} onSelect={index => { setScreeningIndex(index); closeComparison(); }} onBorrow={lightTableEnabled ? handleSelectFacet : undefined} selectedFacets={selectedFacets} facetDisabled={reelLocked} /> : null}
