@@ -5,6 +5,11 @@ authenticated HTTP contract as `afterimage-subscription-bridge`, so the site's
 server routes (`/api/status`, `/api/connect`, `/api/generations`,
 `/api/atlas/generations`, `/api/replacements/generations`) talk to it unchanged.
 
+It can also serve the browser directly, for the static GitHub Pages build of the
+site, which has no server of its own. In that case it answers the site's
+`/api/*` routes itself, including film search and details, behind the owner's
+passphrase. See [../docs/github-pages.md](../docs/github-pages.md).
+
 It reaches Claude in one of two ways:
 
 - **`subscription` (default):** runs Claude Code, signed in with your Claude Pro
@@ -43,9 +48,29 @@ npm run dev              # starts the site; it reaches the companion server-side
 ```
 
 Subscription mode needs the `claude` command on the companion's `PATH`, or
-`CLAUDE_BIN` pointing at it. `GET /health` is public. Everything else requires
-`Authorization: Bearer $AFTERIMAGE_BRIDGE_SECRET`. The browser never sees the
-secret, the token or a key.
+`CLAUDE_BIN` pointing at it.
+
+## Who may call it
+
+- `GET /health` is public.
+- **The bridge routes** (`/v1/…`, `/v2/…`) are for a site with server routes.
+  They require `Authorization: Bearer $AFTERIMAGE_BRIDGE_SECRET`.
+- **The browser routes** (`/api/…`) are for the GitHub Pages site. They mirror
+  the site's own API (status, connect, reels, Atlases, replacements, job
+  polling, `films/search` and `films/enrich`). A call is accepted only when:
+  - `AFTERIMAGE_SITE_PASSPHRASE` is set; until then they answer
+    `SITE_API_DISABLED`;
+  - the call carries `Authorization: Bearer <passphrase>`;
+  - a browser call comes from an origin in `AFTERIMAGE_ALLOWED_ORIGINS`.
+    Outside production, `localhost` and `127.0.0.1` are allowed when the list
+    is empty.
+- **Wrong credentials are throttled.** After 10 wrong attempts from one
+  address within 10 minutes, the companion answers `PASSPHRASE_THROTTLED`. The
+  address is the last `X-Forwarded-For` entry, which the host's edge proxy
+  adds.
+- **Nothing private reaches the browser.** It gets the passphrase from its
+  owner and never sees the bridge secret, the Claude token, an API key or the
+  TMDB token.
 
 ## Configuration
 
@@ -56,8 +81,12 @@ secret, the token or a key.
 | `ANTHROPIC_API_KEY` | none | API key for `api` mode. It is never passed to Claude Code, where it would override the subscription. |
 | `CLAUDE_BIN` | `claude` | The Claude Code executable. |
 | `AFTERIMAGE_CLAUDE_WORKDIR` | a temporary folder | Claude Code's empty working and configuration folder. |
-| `AFTERIMAGE_BRIDGE_SECRET` | `afterimage-local-development` outside production | Shared with the site. At least 24 characters in production. |
-| `AFTERIMAGE_FILM_METADATA_URL` | none | The site's `/api/films/enrich`. Needed to verify Atlas and replacement films; HTTPS, or HTTP to `localhost`. |
+| `AFTERIMAGE_BRIDGE_SECRET` | `afterimage-local-development` outside production | Shared with a site that has server routes. At least 24 characters in production. Production needs this, the passphrase, or both. |
+| `AFTERIMAGE_SITE_PASSPHRASE` | none (browser routes closed) | Opens the browser routes for the GitHub Pages site. At least 16 characters in production. |
+| `AFTERIMAGE_ALLOWED_ORIGINS` | none | Comma-separated site origins allowed to call the browser routes, such as `https://cool2bwichu.github.io`. Required in production with a passphrase. |
+| `TMDB_READ_TOKEN` | none | TMDB read access token for the browser routes' film search and details. Without `AFTERIMAGE_FILM_METADATA_URL`, it also verifies Atlas and replacement films in-process. |
+| `TMDB_API_BASE` | TMDB's API | Only for tests against a stand-in. |
+| `AFTERIMAGE_FILM_METADATA_URL` | none | A site's `/api/films/enrich`, used to verify Atlas and replacement films when the site has server routes; HTTPS, or HTTP to `localhost`. |
 | `AFTERIMAGE_JOB_DIR` | `companion/data/generation-jobs` | Durable job files. Required in production; mount persistent storage. |
 | `AFTERIMAGE_CLAUDE_MODEL` | `claude-opus-5-5` | Any current Claude model ID your account can use. |
 | `AFTERIMAGE_CLAUDE_EFFORT` | `high` | `low`, `medium`, `high`, `xhigh` or `max`. |
@@ -116,16 +145,28 @@ same work would cost on the API, not a charge.
 ## Deploy
 
 `Dockerfile` builds a Node 22 image with Claude Code pinned to 2.1.284, the
-version the companion was verified against. Run it as an always-on service
-with:
+version the companion was verified against. The companion shares the site's film
+code in `app/lib`, so build it from the repository root:
 
-- persistent storage mounted at `/data/afterimage-generation-jobs`;
+```sh
+docker build -f companion/Dockerfile .
+```
+
+`railway.json` at the repository root points Railway at this Dockerfile and at
+`/health`. Run it as an always-on service with:
+
+- persistent storage mounted at `/data`, where jobs are kept in
+  `/data/afterimage-generation-jobs`;
 - TLS at the edge;
-- `CLAUDE_CODE_OAUTH_TOKEN` (or `ANTHROPIC_API_KEY`) and
-  `AFTERIMAGE_BRIDGE_SECRET` in the host's secret store.
+- `CLAUDE_CODE_OAUTH_TOKEN` (or `ANTHROPIC_API_KEY`) in the host's secret store.
 
-Point the Claude version of the site at it with `AFTERIMAGE_BRIDGE_URL` and the
-same `AFTERIMAGE_BRIDGE_SECRET`.
+Then connect the site in one of two ways:
+
+- **GitHub Pages:** set `AFTERIMAGE_SITE_PASSPHRASE`,
+  `AFTERIMAGE_ALLOWED_ORIGINS` and `TMDB_READ_TOKEN`. The full steps are in
+  [../docs/github-pages.md](../docs/github-pages.md).
+- **A site with server routes:** set `AFTERIMAGE_BRIDGE_SECRET`, and point the
+  site's `AFTERIMAGE_BRIDGE_URL` at the companion with the same secret.
 
 ## Tests
 
@@ -136,6 +177,12 @@ same `AFTERIMAGE_BRIDGE_SECRET`.
 - The Claude Code runner against a stand-in `claude` executable that records its
   arguments, environment and input.
 - The HTTP routes and job lifecycle.
+- The browser routes:
+  - the passphrase, allowed origins and preflight;
+  - the throttle;
+  - production start-up checks;
+  - film search through the site's TMDB code;
+  - in-process film verification.
 - A contract test that parses the companion's jobs with the site's own
   `generation-state.ts`.
 

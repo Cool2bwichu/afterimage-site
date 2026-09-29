@@ -32,6 +32,7 @@ import { MAX_LIKED_FILMS, TASTE_STORAGE_KEY, parseLikedFilms, toggleLikedFilm, t
 import type { AfterimageResultV2, ExcludedFilm, DevelopInput, Experience } from './lib/reel-state';
 import { GenerationPollError, pollGeneration } from './lib/generation-poller';
 import { statusModelLabel } from './lib/claude';
+import { apiFetch, savePassphrase, usesRemoteCompanion } from './lib/api';
 import {
   isGenerationJobId,
   parseJobStart,
@@ -51,11 +52,17 @@ import {
 } from './lib/reel-state';
 
 const STORAGE_KEY = 'afterimage:mobile-state';
-type ConnectionState = 'checking' | 'connected' | 'disconnected' | 'unreachable';
+type ConnectionState = 'checking' | 'connected' | 'disconnected' | 'unreachable' | 'locked';
 type JobStatus = 'queued' | 'running' | 'reconnecting' | 'failed' | null;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+// The GitHub Pages build reaches the companion directly; it answers 401 with this
+// code until the owner's passphrase is entered in this browser.
+function lockedOut(value: unknown): boolean {
+  return isRecord(value) && (value.code === 'PASSPHRASE_REQUIRED' || value.code === 'PASSPHRASE_THROTTLED');
 }
 
 function responseMessage(value: unknown, fallback: string): string {
@@ -130,6 +137,7 @@ export default function Home() {
   const [connection, setConnection] = useState<ConnectionState>('checking');
   const [claudeModel, setClaudeModel] = useState<string | null>(null);
   const [connectionNote, setConnectionNote] = useState('');
+  const [passphraseDraft, setPassphraseDraft] = useState('');
   const [connecting, setConnecting] = useState(false);
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [jobStatus, setJobStatus] = useState<JobStatus>(null);
@@ -155,22 +163,49 @@ export default function Home() {
     ? acceptedInputForResumedJob(activeJobId, acceptedInputJobId || undefined, acceptedInput)
     : undefined;
 
-  const refreshConnection = useCallback(async (silent = false) => {
+  const refreshConnection = useCallback(async (silent = false): Promise<ConnectionState> => {
     if (!silent) setConnection('checking');
+    let next: ConnectionState;
     try {
-      const response = await fetch('/api/status', { cache: 'no-store' });
+      const response = await apiFetch('/api/status', { cache: 'no-store' });
       const payload = await response.json();
       if (response.ok) setClaudeModel(statusModelLabel(payload));
       if (response.ok && isRecord(payload) && payload.authenticated) {
-        setConnection('connected');
+        next = 'connected';
         setConnectionNote('');
+      } else if (lockedOut(payload)) {
+        next = 'locked';
+        if (response.status === 429) setConnectionNote(responseMessage(payload, 'Too many wrong attempts. Try again in a few minutes.'));
       } else {
-        setConnection(response.status === 503 || response.status === 502 ? 'unreachable' : 'disconnected');
+        next = response.status === 503 || response.status === 502 ? 'unreachable' : 'disconnected';
       }
     } catch {
-      setConnection('unreachable');
+      next = 'unreachable';
     }
+    setConnection(next);
+    return next;
   }, []);
+
+  async function unlockCompanion(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const passphrase = passphraseDraft.trim();
+    if (!passphrase) return;
+    setConnecting(true);
+    setConnectionNote('');
+    if (!savePassphrase(passphrase)) {
+      setConnectionNote('This browser would not keep the passphrase. Allow site storage, then try again.');
+      setConnecting(false);
+      return;
+    }
+    const next = await refreshConnection();
+    if (next === 'locked') {
+      savePassphrase('');
+      setConnectionNote((current) => current || 'That passphrase did not unlock the companion.');
+    } else {
+      setPassphraseDraft('');
+    }
+    setConnecting(false);
+  }
 
   useEffect(() => {
     const hydration = window.setTimeout(() => {
@@ -475,7 +510,7 @@ export default function Home() {
         const terminal = await pollGeneration({
           signal: controller.signal,
           fetchStatus: async (signal) => {
-            const response = await fetch(`/api/generations/${encodeURIComponent(activeJobId)}`, {
+            const response = await apiFetch(`/api/generations/${encodeURIComponent(activeJobId)}`, {
               cache: 'no-store',
               signal,
             });
@@ -659,7 +694,7 @@ export default function Home() {
     setAtlasChoices([]);
     setNotice('');
     try {
-      const response = await fetch(`/api/films/search?q=${encodeURIComponent(query)}`, { signal: AbortSignal.timeout(10000) });
+      const response = await apiFetch(`/api/films/search?q=${encodeURIComponent(query)}`, { signal: AbortSignal.timeout(10000) });
       if (!response.ok) throw new Error('Film search could not connect. Try again.');
       const payload = await response.json();
       if (!isRecord(payload) || !Array.isArray(payload.films)) throw new Error('Film search could not connect. Try again.');
@@ -690,7 +725,7 @@ export default function Home() {
     setConnecting(true);
     setError('');
     try {
-      const response = await fetch('/api/connect', { method: 'POST' });
+      const response = await apiFetch('/api/connect', { method: 'POST' });
       const payload = await response.json();
       if (response.ok && isRecord(payload) && payload.alreadyAuthenticated) {
         await refreshConnection();
@@ -735,7 +770,7 @@ export default function Home() {
     setError('');
     setNotice('');
     try {
-      const response = await fetch('/api/generations', {
+      const response = await apiFetch('/api/generations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(input),
@@ -771,7 +806,7 @@ export default function Home() {
         return;
       }
 
-      if (response.status === 401) setConnection('disconnected');
+      if (response.status === 401) setConnection(lockedOut(payload) ? 'locked' : 'disconnected');
       if (response.status !== 202) {
         throw new Error(responseMessage(payload, 'The reel could not enter the gate.'));
       }
@@ -852,7 +887,7 @@ export default function Home() {
     setElapsedSeconds(0); setJobStartedAt(null);
     try {
       const request = withCurrentExclusions({ ...displayedInput, likedFilms }, excludedFilms);
-      const response = await fetch('/api/replacements/generations', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request, reel: result, replaceIndex: index }) });
+      const response = await apiFetch('/api/replacements/generations', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request, reel: result, replaceIndex: index }) });
       const payload: unknown = await response.json();
       if (response.status !== 202) throw new Error(responseMessage(payload, response.status === 409 ? 'Another discovery is still developing. Your reel is unchanged.' : 'This film could not be replaced. Your reel is unchanged.'));
       const job = parseJobStart(payload);
@@ -1039,17 +1074,30 @@ export default function Home() {
           <section className="connection-panel" aria-live="polite">
             <div>
               <div className="connection-kicker">Private intelligence · Claude</div>
-              <h2>{connection === 'unreachable' ? 'Claude is out of reach' : 'Connect Claude'}</h2>
+              <h2>{connection === 'locked' ? 'Unlock AFTERIMAGE' : connection === 'unreachable' ? 'Claude is out of reach' : 'Connect Claude'}</h2>
               <p>
-                {connection === 'unreachable'
-                  ? 'The reel service is unavailable. Your films and saved reel remain on this device.'
-                  : 'AFTERIMAGE is programmed by Claude through its private companion. Connect the companion to your Claude subscription, then check again. Your existing reel stays available.'}
+                {connection === 'locked'
+                  ? 'This copy of AFTERIMAGE talks to your private Claude companion. Enter its passphrase to continue; it stays in this browser.'
+                  : connection === 'unreachable'
+                    ? usesRemoteCompanion
+                      ? 'The companion is unavailable. Your films and saved reel remain on this device.'
+                      : 'The reel service is unavailable. Your films and saved reel remain on this device.'
+                    : 'AFTERIMAGE is programmed by Claude through its private companion. Connect the companion to your Claude subscription, then check again. Your existing reel stays available.'}
               </p>
               {connectionNote ? <p className="connection-note" role="status">{connectionNote}</p> : null}
             </div>
-            <button type="button" onClick={startConnection} disabled={connecting}>
-              {connecting ? 'Checking…' : 'Check connection'}
-            </button>
+            {connection === 'locked' ? (
+              <form className="connection-unlock" onSubmit={unlockCompanion}>
+                <label htmlFor="companion-passphrase" className="sr-only">Passphrase</label>
+                <input id="companion-passphrase" type="password" autoComplete="current-password" placeholder="Passphrase"
+                  value={passphraseDraft} onChange={(event) => setPassphraseDraft(event.target.value)} />
+                <button type="submit" disabled={connecting || !passphraseDraft.trim()}>{connecting ? 'Unlocking…' : 'Unlock'}</button>
+              </form>
+            ) : (
+              <button type="button" onClick={startConnection} disabled={connecting}>
+                {connecting ? 'Checking…' : 'Check connection'}
+              </button>
+            )}
           </section>
         ) : null}
 

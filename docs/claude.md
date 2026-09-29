@@ -66,6 +66,45 @@ Browser ──> site server routes ──(bearer secret)──> companion/ ─�
 No browser storage key, request shape, job shape or route changed. Saved reels,
 Atlases, Likes, the watchlist and afterimages carry over between the two versions.
 
+## GitHub Pages
+
+This version can also run as a static site on GitHub Pages, with the companion
+on Railway. The setup steps are in [github-pages.md](github-pages.md).
+
+```text
+cool2bwichu.github.io/afterimage-site/ ──(passphrase)──> companion on Railway ──> Claude Code on your plan
+static page, no secrets                                 /api/* browser routes  └─> TMDB
+```
+
+- **`github-pages/` and `vite.pages.config.ts`** build the same interface as a
+  single static page. The companion's address is compiled in and checked:
+  HTTPS, with no path. The page, icons and web manifest sit under
+  `/afterimage-site/`.
+- **Every private call goes through `app/lib/api.ts`.** In the normal site it
+  calls the site's own `/api/…` routes, unchanged. In the Pages build it calls
+  the companion with the passphrase instead.
+- **The companion answers the site's `/api/*` routes directly** (status, reels,
+  Atlases, replacements, job polling, film search and details). It reuses the
+  site's own TMDB code and verifies Atlas and replacement films in-process.
+  - It accepts a call only with the passphrase, and only from the allowed
+    origin.
+  - It throttles wrong attempts.
+  - In production it refuses to start with a passphrase shorter than 16
+    characters, or with no allowed origin.
+- **Unlocking:** when the companion asks for the passphrase, the connection
+  panel reads *Unlock AFTERIMAGE* and has a passphrase field.
+  - A wrong passphrase is refused plainly and not kept.
+  - The right one is kept in that browser (`afterimage:companion-passphrase:v1`),
+    so the site stays unlocked after a refresh.
+- **Deploy files:**
+  - `.github/workflows/github-pages.yml` tests, builds and publishes on pushes
+    to `claude/observatory-claude`. It is skipped until the repository variable
+    `AFTERIMAGE_COMPANION_URL` is set.
+  - `railway.json` builds `companion/Dockerfile` from the repository root.
+
+A Pages site is public even from a private repository. The passphrase is what
+keeps Claude, your plan's allowance and TMDB for you.
+
 ## Model settings
 
 Claude Opus 5.5 at `high` effort with adaptive thinking, in both modes. Model
@@ -85,16 +124,19 @@ plan that can't be used, and a model the plan doesn't include.
 
 ## Validation
 
-- Companion: 85 tests, all offline. They cover:
+- Companion: 95 tests, all offline. They cover:
   - the bridge's carried-over contract suites;
   - the engine against a scripted API client;
   - the Claude Code runner against a stand-in `claude` executable, checking its
     arguments, environment isolation, stdin, typed failures, the rejected-token
     state and the deadline;
   - the HTTP routes and job lifecycle;
+  - the browser routes' passphrase, origins, throttle, start-up checks and film
+    search;
   - the site's own job parser applied to the companion's output.
-- Site: 125 tests, including three for the Claude identity and connection copy.
-  TypeScript, lint and the production build pass.
+- Site: 129 tests, including the Claude identity and connection copy and the
+  Pages API client. TypeScript, lint, the production build and the Pages build
+  pass.
 - The real Claude Code 2.1.284 binary, run through the companion against a local
   stand-in API:
   - It accepted every flag and signed in with the subscription token as a bearer
@@ -117,6 +159,18 @@ plan that can't be used, and a model the plan doesn't include.
   The captured requests confirmed that the SDK sent the beta Messages route with
   `server-side-fallback-2026-07-01`, `claude-opus-5-5`, streaming, adaptive
   thinking, `high` effort, a JSON schema and a cached system prompt.
+- The GitHub Pages build, end to end in Chromium, against the companion running
+  real Claude Code on the stand-in:
+  - it asks to be unlocked, refuses a wrong passphrase and accepts the right one;
+  - it stays unlocked after a refresh;
+  - the reel, a replacement, an Atlas and film search complete, and every
+    private call goes to the companion;
+  - the phone layout fits, with no page errors.
+- The companion's Docker image, built and run in production mode, developed a
+  complete reel through the Claude Code inside it.
+  - This environment blocks Debian's package mirror, so the test build copied
+    in a CA bundle in place of the `ca-certificates` install.
+  - Railway builds the Dockerfile unchanged.
 
 ## Not verified
 
@@ -125,7 +179,7 @@ token nor an API key. Recommendation quality, latency and how much of the plan's
 allowance a reel uses are therefore unmeasured. Check the first live reel, Atlas
 and replacement before relying on it. The companion logs token counts per call,
 and in subscription mode Claude Code's API-price estimate, to make usage
-visible. The Docker image's Claude Code install was not built here.
+visible. No live Railway or GitHub Pages deploy was made from here.
 
 ## Run and deploy
 
@@ -140,9 +194,16 @@ Local:
    - `AFTERIMAGE_FILM_METADATA_URL=http://localhost:3000/api/films/enrich`
 4. Run `npm run companion` and `npm run dev`.
 
-Hosted: deploy `companion/` (Dockerfile, which installs Claude Code 2.1.284) as
-its own always-on service with persistent job storage and
-`CLAUDE_CODE_OAUTH_TOKEN` in the host's secret store. Renew the token yearly. Give this version of the site its own hosting
-environment pointing `AFTERIMAGE_BRIDGE_URL` at it. Publishing is a separate,
-explicit step. It should not reuse the production Sites project, which keeps
-serving the GPT version.
+Hosted on GitHub Pages with the companion on Railway: follow
+[github-pages.md](github-pages.md).
+
+Hosted elsewhere:
+
+- Deploy `companion/` (the Dockerfile installs Claude Code 2.1.284) as its own
+  always-on service, with persistent job storage and `CLAUDE_CODE_OAUTH_TOKEN`
+  in the host's secret store. Renew the token yearly.
+- Give this version of the site its own hosting environment, with
+  `AFTERIMAGE_BRIDGE_URL` pointing at the companion.
+
+Publishing is a separate, explicit step. It should not reuse the production
+Sites project, which keeps serving the GPT version.

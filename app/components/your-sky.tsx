@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react';
 import { buildSky, hashString, nearestStarInDirection, parseSkyRegistry, serializeSkyRegistry, skyReadingOrder, updateSkyRegistry, SKY_REGISTRY_KEY, type SkyConstellation, type SkyMap, type SkyStar } from '../lib/sky';
 import { reelCaption, type SavedReel } from '../lib/reel-history';
+import { apiFetch } from '../lib/api';
 import { getRecommendationIdentity } from '../lib/reel-state';
 import type { AtlasStop } from '../lib/atlas-trail';
 import type { AfterimageEntry } from '../lib/afterimages';
@@ -535,7 +536,7 @@ export function YourSky({ open, opener, onClose, reels, atlases, likes, watchlis
     const controller = new AbortController();
     const timer = window.setTimeout(async () => {
       try {
-        const response = await fetch('/api/films/enrich', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ films: [{ title: selectedStar.title, year: selectedStar.year }] }), signal: controller.signal });
+        const response = await apiFetch('/api/films/enrich', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ films: [{ title: selectedStar.title, year: selectedStar.year }] }), signal: controller.signal });
         if (!response.ok) return;
         const records = parseEnrichmentResponse(await response.json());
         if (!controller.signal.aborted) setArtwork(current => ({ ...current, ...Object.fromEntries(records.map(record => [record.key, record])) }));

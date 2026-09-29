@@ -7,6 +7,9 @@ frontend for this site.
 On the Claude branches, `companion/` is the Claude-backed replacement for that
 bridge. It answers the same contract; run its tests with `npm run test:companion`
 and keep `CLAUDE_CODE_OAUTH_TOKEN` and `ANTHROPIC_API_KEY` out of the repository.
+The same branches can build a static GitHub Pages site (`npm run build:pages`)
+whose private calls go to the companion behind a passphrase; see
+`docs/github-pages.md`, and keep the passphrase out of the repository too.
 
 ## Development
 

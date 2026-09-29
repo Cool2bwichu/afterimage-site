@@ -8,6 +8,7 @@ import { ATLAS_TRAIL_STORAGE_KEY, MAX_ATLAS_MAPS, activeAtlasStop, emptyAtlasTra
 import { FACET_KEYS, FACET_META, type CinematicFacet, type FacetKey, type FacetSource, type SelectedFacets } from '../lib/light-table';
 import { parseEnrichmentResponse, movieKey, imdbUrl, type FilmEnrichment } from '../lib/movie-metadata';
 import { parseJobStart } from '../lib/generation-state';
+import { apiFetch } from '../lib/api';
 import { LikeButton } from './like-button';
 import { FacetTab } from './facet-tab';
 import { AtlasFilmSearch } from './atlas-film-search';
@@ -117,7 +118,7 @@ export function AtlasWorkspace(props: Props) {
     lock.current = true; setStarting(true); setError('');
     const startedAtNavigation = navigationRevision.current;
     try {
-      const response = await fetch('/api/atlas/generations', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input), signal: AbortSignal.timeout(15000) });
+      const response = await apiFetch('/api/atlas/generations', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input), signal: AbortSignal.timeout(15000) });
       const raw = await response.json();
       if (!response.ok) throw new Error(response.status === 409 ? 'Another reel or Atlas is developing. Return to it, then try again.' : 'The Atlas could not start. Your reel is still here.');
       const job = parseJobStart(raw);
@@ -152,7 +153,7 @@ export function AtlasWorkspace(props: Props) {
     let failures = 0;
     const poll = async () => {
       try {
-        const response = await fetch(`/api/generations/${pending.jobId}`, { cache: 'no-store', signal: AbortSignal.any([controller.signal, AbortSignal.timeout(12000)]) });
+        const response = await apiFetch(`/api/generations/${pending.jobId}`, { cache: 'no-store', signal: AbortSignal.any([controller.signal, AbortSignal.timeout(12000)]) });
         if ([404, 401].includes(response.status)) throw Object.assign(new Error(response.status === 404 ? 'This Atlas job has expired. Develop a new map.' : 'Reconnect the film service, then resume the Atlas.'), { terminal: true, expired: response.status === 404 });
         if (!response.ok) throw new Error('The Atlas service is reconnecting.');
         const raw: unknown = await response.json();
@@ -188,7 +189,7 @@ export function AtlasWorkspace(props: Props) {
     const controller = new AbortController();
     const films = [atlas.anchor, ...atlas.neighbors].filter(film => getMetadata(film)?.status !== 'matched');
     void Promise.all([films.slice(0, 5), films.slice(5)].filter(batch => batch.length).map(async batch => {
-      const response = await fetch('/api/films/enrich', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ films: batch.map(film => ({ title: film.title, year: film.year, ...(film.tmdbId ? { tmdbId: film.tmdbId } : {}) })) }), signal: controller.signal });
+      const response = await apiFetch('/api/films/enrich', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ films: batch.map(film => ({ title: film.title, year: film.year, ...(film.tmdbId ? { tmdbId: film.tmdbId } : {}) })) }), signal: controller.signal });
       if (!response.ok) return;
       const records = parseEnrichmentResponse(await response.json());
       if (!controller.signal.aborted) rememberArtwork(records);
@@ -203,7 +204,7 @@ export function AtlasWorkspace(props: Props) {
     if (!anchors.length) return;
     const controller = new AbortController();
     void Promise.all(Array.from({ length: Math.ceil(anchors.length / 5) }, async (_, index) => {
-      const response = await fetch('/api/films/enrich', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ films: anchors.slice(index * 5, index * 5 + 5) }), signal: controller.signal });
+      const response = await apiFetch('/api/films/enrich', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ films: anchors.slice(index * 5, index * 5 + 5) }), signal: controller.signal });
       if (!response.ok) return;
       const records = parseEnrichmentResponse(await response.json());
       if (!controller.signal.aborted) rememberArtwork(records);

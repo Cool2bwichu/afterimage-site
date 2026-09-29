@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { parseFilmSearchResults, type FilmSearchResult } from '../lib/film-search';
 import { parseEnrichmentResponse, type FilmEnrichment } from '../lib/movie-metadata';
+import { apiFetch } from '../lib/api';
 
 /** Ambiguity stays visible until a viewer chooses a catalog record. */
 export function FilmIdentity({ title, year, onResolve }: { title: string; year: string; onResolve: (film: FilmEnrichment) => void }) {
@@ -16,7 +17,7 @@ export function FilmIdentity({ title, year, onResolve }: { title: string; year: 
     abort.current?.abort(); const controller = new AbortController(); abort.current = controller;
     setOpen(true); setBusy(true); setError('');
     try {
-      const response = await fetch(`/api/films/search?q=${encodeURIComponent(title)}`, { signal: controller.signal });
+      const response = await apiFetch(`/api/films/search?q=${encodeURIComponent(title)}`, { signal: controller.signal });
       if (!response.ok) throw Error();
       const raw = await response.json();
       setChoices(parseFilmSearchResults(raw && typeof raw === 'object' && 'films' in raw ? raw.films : null));
@@ -26,7 +27,7 @@ export function FilmIdentity({ title, year, onResolve }: { title: string; year: 
   async function choose(choice: FilmSearchResult) {
     setBusy(true); setError('');
     try {
-      const response = await fetch('/api/films/enrich', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      const response = await apiFetch('/api/films/enrich', { method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ films: [{ title, year, tmdbId: choice.id }] }), signal: abort.current?.signal });
       if (!response.ok) throw Error();
       const [film] = parseEnrichmentResponse(await response.json());

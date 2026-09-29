@@ -271,6 +271,20 @@ summary {
   border-left: 2px solid var(--gold-dim);
   padding-left: 12px;
 }
+.connection-unlock {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.connection-unlock input {
+  min-height: 44px;
+  min-width: min(260px, 100%);
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+}
 .connection-panel button {
   min-height: 44px;
   border: 1px solid var(--gold-dim);

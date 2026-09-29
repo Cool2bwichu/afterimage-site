@@ -41,7 +41,7 @@ export function announceReady(body: string) {
     document.addEventListener('visibilitychange', restore);
   }, 0);
   if (readPermission() === 'granted' && wantsNotice()) {
-    try { new Notification('Your reel is ready', { body, icon: '/icon-192.png', tag: 'afterimage-reel' }); } catch { /* Some browsers only allow notifications from a service worker. */ }
+    try { new Notification('Your reel is ready', { body, icon: new URL('icon-192.png', document.baseURI).href, tag: 'afterimage-reel' }); } catch { /* Some browsers only allow notifications from a service worker. */ }
   }
 }
 

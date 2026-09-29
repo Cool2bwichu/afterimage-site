@@ -8,9 +8,9 @@
     "node": ">=22.13.0"
   },
   "scripts": {
-    "start": "node server.mjs",
-    "dev": "node --env-file-if-exists=../.env.local --env-file-if-exists=.env server.mjs",
-    "check": "node --check server.mjs && node --check lib/*.mjs && npm test",
+    "start": "node --experimental-strip-types server.mjs",
+    "dev": "node --experimental-strip-types --env-file-if-exists=../.env.local --env-file-if-exists=.env server.mjs",
+    "check": "node --experimental-strip-types --check server.mjs && node --check lib/*.mjs && npm test",
     "test": "node --experimental-strip-types --test test/*.test.mjs"
   },
   "dependencies": {
