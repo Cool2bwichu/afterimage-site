@@ -6,10 +6,10 @@ companion that develops reels, Atlases and single-film replacements. The GPT
 version, its bridge and the published Sites project are untouched.
 
 ```text
-Browser ──> site server routes ──(bearer secret)──> companion/ ──> Anthropic Messages API
-            /api/status, /api/connect,               same contract as     claude-opus-5-5,
-            /api/generations, /api/atlas/…,          the subscription     streaming, adaptive
-            /api/replacements/…                      bridge               thinking, JSON schema
+Browser ──> site server routes ──(bearer secret)──> companion/ ──┬─> Claude Code (`claude -p`) on your Claude plan   [subscription, default]
+            /api/status, /api/connect,               same contract │     CLAUDE_CODE_OAUTH_TOKEN from `claude setup-token`
+            /api/generations, /api/atlas/…,          as the        └─> Anthropic Messages API with an API key          [api]
+            /api/replacements/…                      subscription bridge
 ```
 
 ## What changed
@@ -18,6 +18,17 @@ Browser ──> site server routes ──(bearer secret)──> companion/ ─�
   private HTTP contract with Claude. The bridge's validators, durable job store and
   coordinator are carried over; the Codex app-server, ChatGPT device sign-in and
   prompt builders are replaced. See `companion/README.md`.
+- **Your Claude subscription, like the GPT version's ChatGPT one.** By default
+  the companion runs Claude Code in non-interactive mode, signed in with a
+  one-year token from `claude setup-token`. Reels draw on your Pro or Max plan's
+  usage limits, with no API key and no per-token bill.
+  - Claude Code runs with no tools apart from structured output, and no
+    settings, MCP servers or memory.
+  - It works in an empty folder, and only the token reaches its environment.
+  - An Anthropic API key remains an alternative (`AFTERIMAGE_CLAUDE_AUTH=api`).
+
+  Keep the subscription mode for a site only you use. Anthropic documents the
+  token for your own scripts; products for other people need an API key.
 - **Claude's brief.** AFTERIMAGE's editorial rules were rewritten as Claude system
   prompts (reel, Light Table reel, replacement, Atlas). They keep every product
   decision in the GPT prompts:
@@ -35,11 +46,18 @@ Browser ──> site server routes ──(bearer secret)──> companion/ ─�
   the fallback beta), that call is retried once without those optional features,
   with the schema stated in the prompt instead. Nothing else is retried by the
   companion; the SDK handles ordinary transient retries.
-- **Connection.** Claude runs on the companion's Anthropic API key, so the ChatGPT
-  device-code flow is gone. The connection panel reads *Connect Claude* and its
-  *Check connection* button asks the companion to verify the key against the
-  Models API. It reports a missing or rejected key plainly; nothing is disguised
-  as success.
+- **Connection.** Claude runs on the companion's own credential, so the ChatGPT
+  device-code flow is gone. The connection panel reads *Connect Claude*. Its
+  *Check connection* button asks the companion, which says plainly what is
+  wrong, inside the panel:
+  - a missing token (with the `claude setup-token` steps);
+  - a token Claude rejected;
+  - Claude Code not being installed;
+  - or, in API mode, a missing or rejected key.
+
+  Nothing is disguised as success. Checking the subscription connection doesn't
+  spend any allowance. A token Claude refuses is reported from the first reel
+  that tries it.
 - **Identity.** The footer names the companion's model ("reasoned live by Claude
   Opus 5.5"). The charting room reads "Claude is charting your next
   constellation". The exported star chart is marked "charted by Claude" and the
@@ -50,28 +68,50 @@ Atlases, Likes, the watchlist and afterimages carry over between the two version
 
 ## Model settings
 
-Claude Opus 5.5 at `high` effort with adaptive thinking. It streams up to 64,000
-output tokens, and the system prompt is marked for prompt caching. Server-side
-refusal fallbacks (`fallbacks: "default"`) are on by default; set
-`AFTERIMAGE_CLAUDE_FALLBACKS=off` to disable them. Model and effort are
-configuration (`AFTERIMAGE_CLAUDE_MODEL`, `AFTERIMAGE_CLAUDE_EFFORT`). Operations
-are bounded: 5 minutes for a reel, 4 for a replacement and 7 for an Atlas.
+Claude Opus 5.5 at `high` effort with adaptive thinking, in both modes. Model
+and effort are configuration (`AFTERIMAGE_CLAUDE_MODEL`,
+`AFTERIMAGE_CLAUDE_EFFORT`); use a model your plan includes. Operations are
+bounded: 5 minutes for a reel, 4 for a replacement and 7 for an Atlas.
+
+API mode also:
+
+- streams up to 64,000 output tokens;
+- marks the system prompt for caching;
+- turns on server-side refusal fallbacks (`fallbacks: "default"`), which
+  `AFTERIMAGE_CLAUDE_FALLBACKS=off` disables.
+
+Subscription mode adds its own failure explanations: a usage limit reached, a
+plan that can't be used, and a model the plan doesn't include.
 
 ## Validation
 
-- Companion: 78 tests, all offline. They cover the bridge's carried-over contract
-  suites, the engine against a scripted client, the HTTP routes and job
-  lifecycle, and the site's own job parser applied to the companion's output.
+- Companion: 85 tests, all offline. They cover:
+  - the bridge's carried-over contract suites;
+  - the engine against a scripted API client;
+  - the Claude Code runner against a stand-in `claude` executable, checking its
+    arguments, environment isolation, stdin, typed failures, the rejected-token
+    state and the deadline;
+  - the HTTP routes and job lifecycle;
+  - the site's own job parser applied to the companion's output.
 - Site: 125 tests, including three for the Claude identity and connection copy.
   TypeScript, lint and the production build pass.
-- End to end in Chromium, with the companion on the real Anthropic SDK pointed at
-  a local stand-in for the Messages and Models APIs that streams SSE as the API
-  does:
+- The real Claude Code 2.1.284 binary, run through the companion against a local
+  stand-in API:
+  - It accepted every flag and signed in with the subscription token as a bearer
+    token. An `ANTHROPIC_API_KEY` in the companion's environment was not passed on.
+  - It requested `claude-opus-5-5` with adaptive thinking at `high` effort.
+  - It offered only the `StructuredOutput` tool and made one model request per
+    operation.
+  - A rejected token and a hit usage limit came back as `AUTH_REQUIRED` and
+    `CLAUDE_USAGE_LIMIT`.
+- End to end in Chromium, in subscription mode (real Claude Code) and in API mode
+  (real Anthropic SDK), each against the stand-in:
   - the footer names Claude Opus 5.5;
   - the charting room credits Claude;
   - a refresh mid-reel resumes the same job;
   - the reel, a single-film replacement and an Atlas all complete;
-  - a rejected or missing key shows *Connect Claude* with the exact reason;
+  - a missing token, a token rejected during a reel, and a rejected or missing
+    API key each show *Connect Claude* with the exact reason in the panel;
   - no page errors at 1440×900 or 390×844.
 
   The captured requests confirmed that the SDK sent the beta Messages route with
@@ -80,21 +120,29 @@ are bounded: 5 minutes for a reel, 4 for a replacement and 7 for an Atlas.
 
 ## Not verified
 
-No live Claude request was made: this environment has no Anthropic credentials.
-Recommendation quality, latency and cost with the real model are therefore
-unmeasured. The first live reel, Atlas and replacement should be checked before
-this version is shared. The companion logs token counts per call to make cost
-visible.
+No live Claude request was made: this environment has neither your subscription
+token nor an API key. Recommendation quality, latency and how much of the plan's
+allowance a reel uses are therefore unmeasured. Check the first live reel, Atlas
+and replacement before relying on it. The companion logs token counts per call,
+and in subscription mode Claude Code's API-price estimate, to make usage
+visible. The Docker image's Claude Code install was not built here.
 
 ## Run and deploy
 
-Local: install `companion/` (`npm --prefix companion ci`), put `ANTHROPIC_API_KEY`,
-`AFTERIMAGE_BRIDGE_URL=http://localhost:8788`, `AFTERIMAGE_BRIDGE_SECRET` and
-`AFTERIMAGE_FILM_METADATA_URL=http://localhost:3000/api/films/enrich` in
-`.env.local`, then run `npm run companion` and `npm run dev`.
+Local:
 
-Hosted: deploy `companion/` (Dockerfile) as its own always-on service with
-persistent job storage. Give this version of the site its own hosting
+1. Install Claude Code and run `claude setup-token`.
+2. Install `companion/` with `npm --prefix companion ci`.
+3. Put these in `.env.local`:
+   - `CLAUDE_CODE_OAUTH_TOKEN`
+   - `AFTERIMAGE_BRIDGE_URL=http://localhost:8788`
+   - `AFTERIMAGE_BRIDGE_SECRET`
+   - `AFTERIMAGE_FILM_METADATA_URL=http://localhost:3000/api/films/enrich`
+4. Run `npm run companion` and `npm run dev`.
+
+Hosted: deploy `companion/` (Dockerfile, which installs Claude Code 2.1.284) as
+its own always-on service with persistent job storage and
+`CLAUDE_CODE_OAUTH_TOKEN` in the host's secret store. Renew the token yearly. Give this version of the site its own hosting
 environment pointing `AFTERIMAGE_BRIDGE_URL` at it. Publishing is a separate,
 explicit step. It should not reuse the production Sites project, which keeps
 serving the GPT version.

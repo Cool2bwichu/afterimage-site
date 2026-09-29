@@ -264,6 +264,13 @@ summary {
   color: var(--muted);
   max-width: 660px;
 }
+.connection-panel .connection-note {
+  margin-top: 12px;
+  color: var(--ivory, #f4efe5);
+  font-size: 14px;
+  border-left: 2px solid var(--gold-dim);
+  padding-left: 12px;
+}
 .connection-panel button {
   min-height: 44px;
   border: 1px solid var(--gold-dim);

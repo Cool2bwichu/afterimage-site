@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "AFTERIMAGE's private recommendation service, programmed by Claude through the Anthropic API.",
+  "description": "AFTERIMAGE's private recommendation service, programmed by Claude on your Claude subscription (through Claude Code) or an Anthropic API key.",
   "engines": {
     "node": ">=22.13.0"
   },

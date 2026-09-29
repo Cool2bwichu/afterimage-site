@@ -242,11 +242,17 @@ test('status reports connected, missing and rejected credentials honestly and ca
 });
 
 test('configuration defaults to Claude Opus 5.5 at high effort and rejects unknown values', () => {
-  assert.deepEqual(resolveClaudeConfig({}), { model: 'claude-opus-5-5', effort: 'high', fallbacks: true });
+  assert.deepEqual(resolveClaudeConfig({}), { auth: 'subscription', model: 'claude-opus-5-5', effort: 'high', fallbacks: true });
   assert.deepEqual(
     resolveClaudeConfig({ AFTERIMAGE_CLAUDE_MODEL: 'claude-sonnet-5-5', AFTERIMAGE_CLAUDE_EFFORT: 'medium', AFTERIMAGE_CLAUDE_FALLBACKS: 'off' }),
-    { model: 'claude-sonnet-5-5', effort: 'medium', fallbacks: false },
+    { auth: 'subscription', model: 'claude-sonnet-5-5', effort: 'medium', fallbacks: false },
   );
+  // The credential that is present picks the mode; an explicit setting wins.
+  assert.equal(resolveClaudeConfig({ CLAUDE_CODE_OAUTH_TOKEN: 'token' }).auth, 'subscription');
+  assert.equal(resolveClaudeConfig({ ANTHROPIC_API_KEY: 'key' }).auth, 'api');
+  assert.equal(resolveClaudeConfig({ ANTHROPIC_API_KEY: 'key', CLAUDE_CODE_OAUTH_TOKEN: 'token' }).auth, 'subscription');
+  assert.equal(resolveClaudeConfig({ CLAUDE_CODE_OAUTH_TOKEN: 'token', AFTERIMAGE_CLAUDE_AUTH: 'api' }).auth, 'api');
+  assert.throws(() => resolveClaudeConfig({ AFTERIMAGE_CLAUDE_AUTH: 'chatgpt' }), /AFTERIMAGE_CLAUDE_AUTH/);
   assert.throws(() => resolveClaudeConfig({ AFTERIMAGE_CLAUDE_MODEL: 'gpt-6-astra' }), /Claude model/);
   assert.throws(() => resolveClaudeConfig({ AFTERIMAGE_CLAUDE_EFFORT: 'ultra' }), /EFFORT/);
   assert.throws(() => resolveClaudeConfig({ AFTERIMAGE_CLAUDE_FALLBACKS: 'maybe' }), /FALLBACKS/);

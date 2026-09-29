@@ -118,7 +118,7 @@ test('fail preserves the approved AUTH_REQUIRED semantics across restart', async
 
   assert.deepEqual(second.get(JOB_ID).error, {
     code: 'AUTH_REQUIRED',
-    message: 'Claude is not connected. Add an Anthropic API key to the companion, then develop the reel again.',
+    message: 'Claude is not connected. Check the companion\'s Claude sign-in, then develop the reel again.',
   });
 });
 

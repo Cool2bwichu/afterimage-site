@@ -4,6 +4,7 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { validateAtlasInput } from './lib/atlas-contract.mjs';
+import { ClaudeCodeRunner } from './lib/claude-code-runner.mjs';
 import { ClaudeEngine, resolveClaudeConfig } from './lib/claude-engine.mjs';
 import { GenerationCoordinator } from './lib/generation-coordinator.mjs';
 import { JOB_ID_PATTERN, JobStore } from './lib/job-store.mjs';
@@ -16,9 +17,32 @@ const MAX_BODY_BYTES = 384 * 1024; // Bounded 500-film taste history, including 
 const DEVELOPMENT_SECRET = 'afterimage-local-development';
 const JOB_DIRECTORY_CONFIGURATION_ERROR = 'AFTERIMAGE_JOB_DIR must target persistent storage in production.';
 const NOT_CONNECTED = {
-  missing: 'Claude is not connected. Set ANTHROPIC_API_KEY for the AFTERIMAGE companion and restart it.',
-  rejected: 'Claude did not accept the companion\'s Anthropic API key. Replace ANTHROPIC_API_KEY and restart the companion.',
+  subscription: {
+    missing: 'Claude is not connected. Run `claude setup-token` with your Claude subscription, set CLAUDE_CODE_OAUTH_TOKEN for the AFTERIMAGE companion and restart it.',
+    rejected: 'Claude did not accept the subscription token. Run `claude setup-token` again, replace CLAUDE_CODE_OAUTH_TOKEN and restart the companion.',
+    'cli-missing': 'Claude Code is not installed where the AFTERIMAGE companion runs. Install it (see companion/README.md) and restart the companion.',
+  },
+  api: {
+    missing: 'Claude is not connected. Set ANTHROPIC_API_KEY for the AFTERIMAGE companion and restart it.',
+    rejected: 'Claude did not accept the companion\'s Anthropic API key. Replace ANTHROPIC_API_KEY and restart the companion.',
+  },
 };
+const AUTH_MODES = { subscription: 'claude-subscription', api: 'anthropic-api' };
+
+export function createEngine(config, { env = process.env, log } = {}) {
+  const runner = config.auth === 'subscription'
+    ? new ClaudeCodeRunner({
+      binary: env.CLAUDE_BIN || 'claude',
+      token: env.CLAUDE_CODE_OAUTH_TOKEN || '',
+      model: config.model,
+      effort: config.effort,
+      workdir: env.AFTERIMAGE_CLAUDE_WORKDIR || undefined,
+      env,
+      log,
+    })
+    : undefined;
+  return new ClaudeEngine({ ...config, runner, log });
+}
 
 function secretsMatch(candidate, secret) {
   const left = Buffer.from(candidate || '');
@@ -79,24 +103,27 @@ export function createCompanionServer({
     try {
       if (request.method === 'GET' && url.pathname === '/v1/auth/status') {
         const status = await engine.status();
+        const described = engine.describe();
         sendJson(response, 200, {
           authenticated: status.connected,
           planType: null,
-          authMode: status.connected ? 'anthropic-api' : null,
+          authMode: status.connected ? AUTH_MODES[described.auth] : null,
           ...(status.reason ? { reason: status.reason } : {}),
-          generation: engine.describe(),
+          generation: described,
         });
         return;
       }
 
-      // Claude uses the companion's Anthropic credentials; there is no sign-in to
-      // start. This re-checks them so the site's connect button reports the truth.
+      // Claude uses the companion's own credential (a subscription token or an API
+      // key); there is no sign-in to start from the browser. This re-checks it so
+      // the site's connect button reports the truth.
       if (request.method === 'POST' && url.pathname === '/v1/auth/start') {
         const status = await engine.status({ fresh: true });
         if (status.connected) {
           sendJson(response, 200, { alreadyAuthenticated: true, planType: null });
         } else {
-          sendJson(response, 503, { error: NOT_CONNECTED[status.reason], code: 'CLAUDE_NOT_CONNECTED' });
+          const messages = NOT_CONNECTED[engine.describe().auth] || NOT_CONNECTED.api;
+          sendJson(response, 503, { error: messages[status.reason] || messages.missing, code: 'CLAUDE_NOT_CONNECTED' });
         }
         return;
       }
@@ -171,7 +198,7 @@ export async function startCompanionServer(options = {}) {
   const log = options.log ?? console.log;
   // One JSON line per event: token counts and failure codes, never request content.
   const record = (entry) => console.error(JSON.stringify(entry));
-  const engine = options.engine ?? new ClaudeEngine({ ...resolveClaudeConfig(), log: record });
+  const engine = options.engine ?? createEngine(resolveClaudeConfig(), { log: record });
   const configuredDirectory = process.env.AFTERIMAGE_JOB_DIR;
   if (process.env.NODE_ENV === 'production' && !configuredDirectory) throw new Error(JOB_DIRECTORY_CONFIGURATION_ERROR);
   const directory = configuredDirectory || fileURLToPath(new URL('./data/generation-jobs', import.meta.url));
@@ -191,7 +218,7 @@ export async function startCompanionServer(options = {}) {
     return shutdown;
   };
   const described = engine.describe();
-  log(`AFTERIMAGE Claude companion listening on port ${port} (${described.model}, ${described.reasoningEffort} effort)`);
+  log(`AFTERIMAGE Claude companion listening on port ${port} (${described.model}, ${described.reasoningEffort} effort, ${described.auth === 'subscription' ? 'Claude subscription through Claude Code' : 'Anthropic API key'})`);
   return server;
 }
 

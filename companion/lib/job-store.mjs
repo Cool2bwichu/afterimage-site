@@ -7,7 +7,7 @@ export const JOB_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a
 export const SAFE_FAILURES = Object.freeze({
   AUTH_REQUIRED: Object.freeze({
     code: 'AUTH_REQUIRED',
-    message: 'Claude is not connected. Add an Anthropic API key to the companion, then develop the reel again.',
+    message: 'Claude is not connected. Check the companion\'s Claude sign-in, then develop the reel again.',
   }),
   GENERATION_FAILED: Object.freeze({
     code: 'GENERATION_FAILED',
@@ -24,6 +24,22 @@ export const SAFE_FAILURES = Object.freeze({
   CLAUDE_DECLINED: Object.freeze({
     code: 'CLAUDE_DECLINED',
     message: 'Claude declined to develop this request. Try describing it differently.',
+  }),
+  CLAUDE_USAGE_LIMIT: Object.freeze({
+    code: 'CLAUDE_USAGE_LIMIT',
+    message: 'Your Claude plan has reached its usage limit for now. Your inputs are saved; develop the reel again after the limit resets.',
+  }),
+  CLAUDE_PLAN_UNAVAILABLE: Object.freeze({
+    code: 'CLAUDE_PLAN_UNAVAILABLE',
+    message: 'Your Claude plan could not be used for this reel. Check the subscription, then develop the reel again.',
+  }),
+  CLAUDE_MODEL_UNAVAILABLE: Object.freeze({
+    code: 'CLAUDE_MODEL_UNAVAILABLE',
+    message: 'The configured Claude model is not available to this account. Choose another with AFTERIMAGE_CLAUDE_MODEL.',
+  }),
+  CLAUDE_CODE_MISSING: Object.freeze({
+    code: 'CLAUDE_CODE_MISSING',
+    message: 'Claude Code is not installed where the companion runs, so it cannot use your Claude subscription.',
   }),
   METADATA_NOT_CONFIGURED: Object.freeze({
     code: 'METADATA_NOT_CONFIGURED',

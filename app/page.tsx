@@ -129,6 +129,7 @@ export default function Home() {
   const [error, setError] = useState('');
   const [connection, setConnection] = useState<ConnectionState>('checking');
   const [claudeModel, setClaudeModel] = useState<string | null>(null);
+  const [connectionNote, setConnectionNote] = useState('');
   const [connecting, setConnecting] = useState(false);
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [jobStatus, setJobStatus] = useState<JobStatus>(null);
@@ -162,6 +163,7 @@ export default function Home() {
       if (response.ok) setClaudeModel(statusModelLabel(payload));
       if (response.ok && isRecord(payload) && payload.authenticated) {
         setConnection('connected');
+        setConnectionNote('');
       } else {
         setConnection(response.status === 503 || response.status === 502 ? 'unreachable' : 'disconnected');
       }
@@ -695,9 +697,9 @@ export default function Home() {
         return;
       }
       setConnection(isRecord(payload) && payload.code === 'CLAUDE_NOT_CONNECTED' ? 'disconnected' : 'unreachable');
-      setError(responseMessage(payload, 'Claude could not be reached.'));
+      setConnectionNote(responseMessage(payload, 'Claude could not be reached.'));
     } catch {
-      setError('Claude could not be reached.');
+      setConnectionNote('Claude could not be reached.');
       setConnection('unreachable');
     } finally {
       setConnecting(false);
@@ -1041,8 +1043,9 @@ export default function Home() {
               <p>
                 {connection === 'unreachable'
                   ? 'The reel service is unavailable. Your films and saved reel remain on this device.'
-                  : 'AFTERIMAGE is programmed by Claude through its private companion. Add an Anthropic API key to the companion, then check again. Your existing reel stays available.'}
+                  : 'AFTERIMAGE is programmed by Claude through its private companion. Connect the companion to your Claude subscription, then check again. Your existing reel stays available.'}
               </p>
+              {connectionNote ? <p className="connection-note" role="status">{connectionNote}</p> : null}
             </div>
             <button type="button" onClick={startConnection} disabled={connecting}>
               {connecting ? 'Checking…' : 'Check connection'}

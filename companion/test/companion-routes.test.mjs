@@ -62,7 +62,7 @@ test('status and connect describe Claude and report missing credentials without 
     const status = await (await call('/v1/auth/status')).json();
     assert.deepEqual(status, {
       authenticated: true, planType: null, authMode: 'anthropic-api',
-      generation: { provider: 'anthropic', model: 'claude-opus-5-5', reasoningEffort: 'high', engine: 'claude', fallbacks: 'default' },
+      generation: { provider: 'anthropic', auth: 'api', model: 'claude-opus-5-5', reasoningEffort: 'high', engine: 'claude', fallbacks: 'default' },
     });
     assert.deepEqual(await (await call('/v1/auth/start', { method: 'POST' })).json(), { alreadyAuthenticated: true, planType: null });
   });

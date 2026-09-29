@@ -6,7 +6,7 @@ frontend for this site.
 
 On the Claude branches, `companion/` is the Claude-backed replacement for that
 bridge. It answers the same contract; run its tests with `npm run test:companion`
-and keep `ANTHROPIC_API_KEY` out of the repository.
+and keep `CLAUDE_CODE_OAUTH_TOKEN` and `ANTHROPIC_API_KEY` out of the repository.
 
 ## Development
 

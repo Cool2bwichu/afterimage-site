@@ -30,6 +30,9 @@ test('the Claude version has no ChatGPT sign-in and credits Claude where the wor
   assert.doesNotMatch(page, /ChatGPT|verificationUrl|userCode|device-flow/);
   assert.match(page, /Connect Claude/);
   assert.match(page, /payload\.code === 'CLAUDE_NOT_CONNECTED'/);
+  // The companion's exact reason is shown inside the connection panel.
+  assert.match(page, /setConnectionNote\(responseMessage\(payload, 'Claude could not be reached\.'\)\)/);
+  assert.match(page, /className="connection-note"/);
   assert.match(page, /reasoned live by \{claudeModel \?\? 'Claude'\}/);
   assert.match(manifest, /programmed by Claude/);
   assert.doesNotMatch(manifest, /ChatGPT/);
