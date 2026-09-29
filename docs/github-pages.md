@@ -53,18 +53,23 @@ Keep the token private. You will paste it into Railway only.
    `claude/observatory-claude`. Railway reads `railway.json` at the repository
    root, which builds `companion/Dockerfile` and checks `/health`.
 3. Attach a volume to the service, mounted at `/data`. Jobs are kept there, so
-   a restart doesn't lose a reel in progress.
+   a redeploy doesn't lose a reel in progress. The companion runs without one,
+   but a reel that is developing during a redeploy is then lost.
 4. Add these service variables:
 
    | Variable | Value |
    | --- | --- |
    | `CLAUDE_CODE_OAUTH_TOKEN` | The token from step 1. |
    | `AFTERIMAGE_SITE_PASSPHRASE` | A passphrase of your choice, at least 16 characters. A few unrelated words work well. |
-   | `AFTERIMAGE_ALLOWED_ORIGINS` | `https://cool2bwichu.github.io` |
-   | `TMDB_READ_TOKEN` | Your TMDB API read access token, the same one the site uses. |
+   | `TMDB_READ_TOKEN` | Your TMDB API read access token, the same one the site uses. It is listed on themoviedb.org under *Settings → API*. |
 
-   The image already sets `NODE_ENV=production` and the job folder. Railway
-   supplies `PORT`.
+   The image already sets:
+   - `NODE_ENV=production`;
+   - the job folder;
+   - `AFTERIMAGE_ALLOWED_ORIGINS=https://cool2bwichu.github.io`. Set that
+     variable yourself only if the site moves to another address.
+
+   Railway supplies `PORT`.
 5. Under *Networking*, generate a public domain. Open
    `https://<that-domain>/health`. It should answer
    `{"ok":true,"service":"afterimage-claude-companion"}`.
@@ -108,9 +113,8 @@ for it. Pushes and re-runs start it instead.
   `CLAUDE_CODE_OAUTH_TOKEN` in Railway. Railway redeploys the service.
 - **New passphrase:** replace `AFTERIMAGE_SITE_PASSPHRASE` in Railway. Each
   device then asks for the new one.
-- **New companion address:** update `AFTERIMAGE_COMPANION_URL` and
-  `AFTERIMAGE_ALLOWED_ORIGINS` if the site's address changed too, then
-  re-run the workflow.
+- **New companion address:** update `AFTERIMAGE_COMPANION_URL`, then re-run
+  the workflow.
 - **Custom domain for the site:** set it in *Settings → Pages*, then change
   `AFTERIMAGE_ALLOWED_ORIGINS` to that origin. The workflow picks up the new
   base path by itself.

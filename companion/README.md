@@ -162,8 +162,9 @@ docker build -f companion/Dockerfile .
 
 Then connect the site in one of two ways:
 
-- **GitHub Pages:** set `AFTERIMAGE_SITE_PASSPHRASE`,
-  `AFTERIMAGE_ALLOWED_ORIGINS` and `TMDB_READ_TOKEN`. The full steps are in
+- **GitHub Pages:** set `AFTERIMAGE_SITE_PASSPHRASE` and `TMDB_READ_TOKEN`.
+  The image already allows `https://cool2bwichu.github.io`; set
+  `AFTERIMAGE_ALLOWED_ORIGINS` to allow a different site. The full steps are in
   [../docs/github-pages.md](../docs/github-pages.md).
 - **A site with server routes:** set `AFTERIMAGE_BRIDGE_SECRET`, and point the
   site's `AFTERIMAGE_BRIDGE_URL` at the companion with the same secret.

@@ -21,8 +21,11 @@ COPY app/lib /srv/app/lib
 RUN mkdir -p /data/afterimage-generation-jobs /srv/runtime
 
 # Railway volumes mount as root, so the service runs as root like the GPT bridge.
+# The allowed origin is this repository's GitHub Pages site; a service variable
+# of the same name replaces it.
 ENV NODE_ENV=production \
     PORT=8788 \
+    AFTERIMAGE_ALLOWED_ORIGINS=https://cool2bwichu.github.io \
     AFTERIMAGE_JOB_DIR=/data/afterimage-generation-jobs \
     AFTERIMAGE_CLAUDE_WORKDIR=/srv/runtime \
     SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
