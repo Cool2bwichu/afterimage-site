@@ -18,6 +18,7 @@ import {
   buildReplacementPrompt,
   isLightTable,
 } from './prompts.mjs';
+import { createDraftReporter } from './drafts.mjs';
 import { completeReplacement, createReplacementSchema, validateReplacementInput } from './replacement-contract.mjs';
 import { toStructuredSchema } from './structured-output.mjs';
 import { AFTERIMAGE_LIGHT_TABLE_SCHEMA_V1, AFTERIMAGE_SCHEMA_V2, normalizeV2Result, validateV2Input } from './v2-contract.mjs';
@@ -78,33 +79,37 @@ export function createInPageCompanion({
   const jobs = new Map();
   let activeJobId = null;
 
-  async function ask(system, prompt, schema) {
+  async function ask(system, prompt, schema, drafts) {
     const claude = await sample();
     if (!claude) throw { code: 'not_granted' };
     const format = JSON.stringify(toStructuredSchema(schema));
     return claude.json(
       `${system}\n\n${prompt}\n\n<response_format>\nRespond with only a JSON object that satisfies this JSON schema, with no other text:\n${format}\n</response_format>`,
-      { modelTier, cache: false },
+      { modelTier, cache: false, ...(drafts ? { onText: ({ text }) => drafts.partial(text) } : {}) },
     );
   }
 
-  async function generate({ system, prompt, schema, finish }) {
+  async function generate({ kind, system, prompt, schema, finish, onDraft }) {
+    const drafts = createDraftReporter({ kind, onDraft, now });
     let rejection = '';
     for (let attempt = 1; ; attempt += 1) {
       try {
-        return await finish(await ask(system, prompt(rejection), schema));
+        return await finish(await ask(system, prompt(rejection), schema, drafts));
       } catch (error) {
         if (attempt >= 2 || !isContentProblem(error)) throw error;
         rejection = String(error.message || 'The answer was invalid.').slice(0, 300);
         log({ code: 'CLAUDE_ANSWER_REJECTED', attempt });
+        drafts?.retake();
       }
     }
   }
 
   const operations = {
-    reel(input) {
+    reel(input, onDraft) {
       const lightTable = isLightTable(input);
       return generate({
+        kind: 'reel',
+        onDraft,
         system: lightTable ? LIGHT_TABLE_SYSTEM : REEL_SYSTEM,
         prompt: (rejection) => buildReelPrompt(input, rejection),
         schema: lightTable ? AFTERIMAGE_LIGHT_TABLE_SCHEMA_V1 : AFTERIMAGE_SCHEMA_V2,
@@ -115,16 +120,20 @@ export function createInPageCompanion({
         }),
       });
     },
-    replacement(input) {
+    replacement(input, onDraft) {
       return generate({
+        kind: 'replacement',
+        onDraft,
         system: REPLACEMENT_SYSTEM,
         prompt: (rejection) => buildReplacementPrompt(input, rejection),
         schema: createReplacementSchema(input.request.experience),
         finish: (raw) => completeReplacement(raw, input),
       });
     },
-    atlas(input) {
+    atlas(input, onDraft) {
       return generate({
+        kind: 'atlas',
+        onDraft,
         system: ATLAS_SYSTEM,
         prompt: (rejection) => buildAtlasPrompt(input, rejection),
         schema: ATLAS_CANDIDATE_SCHEMA,
@@ -142,6 +151,7 @@ export function createInPageCompanion({
 
   function publicJob(job) {
     const payload = { jobId: job.id, status: job.status, createdAt: job.createdAt, updatedAt: job.updatedAt };
+    if (job.status === 'running' && job.draft) payload.draft = job.draft;
     if (job.status === 'complete') payload.reel = job.reel;
     if (job.status === 'failed') payload.error = job.error;
     return payload;
@@ -161,11 +171,15 @@ export function createInPageCompanion({
     job.done = (async () => {
       await Promise.resolve();
       update(job, { status: 'running' });
+      const onDraft = (draft) => { if (job.status === 'running') job.draft = draft; };
       try {
-        update(job, { status: 'complete', reel: await operations[kind](input) });
+        const reel = await operations[kind](input, onDraft);
+        delete job.draft;
+        update(job, { status: 'complete', reel });
       } catch (error) {
         const failure = failureFor(error);
         if (failure.code === 'GENERATION_FAILED') log({ code: failure.code, jobId: job.id });
+        delete job.draft;
         update(job, { status: 'failed', error: { ...failure } });
       } finally {
         if (activeJobId === job.id) activeJobId = null;

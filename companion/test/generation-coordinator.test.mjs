@@ -98,6 +98,23 @@ test('starts a queued job, then runs it in the background and exposes its comple
   assert.deepEqual(coordinator.get(started.jobId).reel, reel);
 });
 
+test('a running job\'s drafts go to the store as the answer develops', async () => {
+  const store = createStore();
+  const drafts = [];
+  store.setDraft = (jobId, draft) => drafts.push([jobId, draft]);
+  const coordinator = new GenerationCoordinator({
+    store,
+    generate: async (input, { onDraft }) => {
+      onDraft({ take: 1, persona: 'Patient Longing' });
+      return { status: 'complete', recommendations: [] };
+    },
+    schedule: (work) => work(),
+  });
+  const started = await coordinator.start({ films: ['Persona'] });
+  await coordinator.whenIdle();
+  assert.deepEqual(drafts, [[started.jobId, { take: 1, persona: 'Patient Longing' }]]);
+});
+
 test('publishes the queued job before rejecting a concurrent create with its resumable ID', async () => {
   const creation = deferred();
   const store = createStore({ create: () => creation.promise });

@@ -87,6 +87,31 @@ test('a Light Table reel uses its own brief, schema and the selected qualities a
   assert.ok(result.recommendations.every((item) => item.facets));
 });
 
+test('in API mode the answer\'s text streams into drafts, starting over after a fallback', async () => {
+  const json = JSON.stringify(reel());
+  const claude = fakeClaude([answer(reel())]);
+  const listeners = [];
+  const stream = claude.beta.messages.stream;
+  claude.beta.messages.stream = (params, options) => {
+    const handle = stream(params, options);
+    return {
+      on(name, listener) { listeners.push([name, listener]); return this; },
+      async finalMessage() {
+        const emit = (event) => listeners.filter(([name]) => name === 'streamEvent').forEach(([, listener]) => listener(event, {}));
+        emit({ type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: '{"persona":"Earlier Model"' } });
+        emit({ type: 'content_block_start', index: 1, content_block: { type: 'fallback' } });
+        emit({ type: 'content_block_delta', index: 2, delta: { type: 'text_delta', text: json.slice(0, json.indexOf('"insight"')) } });
+        return handle.finalMessage();
+      },
+    };
+  };
+  const drafts = [];
+  let clock = 0;
+  const result = await engine(claude, { now: () => (clock += 1000) }).generateReel(request, { onDraft: (draft) => drafts.push(draft) });
+  assert.equal(result.persona, 'Patient Longing');
+  assert.deepEqual(drafts.map((draft) => draft.persona), ['Earlier Model', 'Patient Longing']);
+});
+
 test('an answer that breaks a rule is rejected once with the reason, then replaced', async () => {
   // Cure (1997) was already marked "not interested"; the second answer avoids it.
   const broken = reel({ titles: ['Cure', 'After Yang', 'Past Lives', 'The Rider', 'Still Walking'] });

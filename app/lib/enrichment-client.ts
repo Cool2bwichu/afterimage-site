@@ -15,7 +15,7 @@ export async function fetchFilmEnrichment({
   fetchImpl = apiFetch,
   signal,
 }: {
-  recommendations: readonly RecommendationV2[];
+  recommendations: readonly Pick<RecommendationV2, 'title' | 'year'>[];
   fetchImpl?: (input: string, init?: RequestInit) => Promise<Response>;
   signal?: AbortSignal;
 }): Promise<FilmEnrichment[]> {

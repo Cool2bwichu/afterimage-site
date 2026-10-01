@@ -93,9 +93,24 @@ export class MessagesRunner {
     };
   }
 
-  // Returns the answer's JSON text.
-  async complete({ kind, system, content, format, signal }) {
-    const send = (optional) => this.client.beta.messages.stream(this.#params({ system, content, format, optional }), { signal }).finalMessage();
+  // Returns the answer's JSON text. `onPartial`, when given, receives the
+  // answer's text so far as it streams.
+  async complete({ kind, system, content, format, signal, onPartial }) {
+    const send = (optional) => {
+      const stream = this.client.beta.messages.stream(this.#params({ system, content, format, optional }), { signal });
+      if (typeof onPartial === 'function' && typeof stream.on === 'function') {
+        let answerText = '';
+        stream.on('streamEvent', (event) => {
+          // After a server-side fallback, the answer starts again with the next model.
+          if (event.type === 'content_block_start' && event.content_block?.type === 'fallback') answerText = '';
+          if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta') {
+            answerText += event.delta.text;
+            try { onPartial(answerText); } catch {}
+          }
+        });
+      }
+      return stream.finalMessage();
+    };
     let message;
     try {
       message = await send(true);

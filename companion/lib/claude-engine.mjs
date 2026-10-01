@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 
 import { normalizeAtlasResult, validateAtlasInput, verifyAtlas, ATLAS_CANDIDATE_SCHEMA } from './atlas-contract.mjs';
+import { createDraftReporter } from './drafts.mjs';
 import { createFilmMetadataProvider } from './film-metadata.mjs';
 import {
   ATLAS_SYSTEM,
@@ -76,6 +77,7 @@ export class ClaudeEngine {
     this.filmMetadataUrl = filmMetadataUrl;
     this.metadataProvider = metadataProvider;
     this.deadlines = deadlines;
+    this.now = now;
     this.log = log;
   }
 
@@ -87,11 +89,14 @@ export class ClaudeEngine {
     return this.runner.status(options);
   }
 
-  async generateReel(requestInput) {
+  // Each operation takes an optional `onDraft`, which receives the answer as it
+  // develops (see drafts.mjs). The returned result is always fully validated.
+  async generateReel(requestInput, { onDraft } = {}) {
     const input = validateV2Input(requestInput);
     const lightTable = isLightTable(input);
     return this.#generate({
       kind: 'reel',
+      onDraft,
       system: lightTable ? LIGHT_TABLE_SYSTEM : REEL_SYSTEM,
       prompt: (rejection) => buildReelPrompt(input, rejection),
       schema: lightTable ? AFTERIMAGE_LIGHT_TABLE_SCHEMA_V1 : AFTERIMAGE_SCHEMA_V2,
@@ -105,11 +110,12 @@ export class ClaudeEngine {
     });
   }
 
-  async generateReplacement(requestInput) {
+  async generateReplacement(requestInput, { onDraft } = {}) {
     const input = validateReplacementInput(requestInput);
     const metadata = this.#metadata();
     return this.#generate({
       kind: 'replacement',
+      onDraft,
       system: REPLACEMENT_SYSTEM,
       prompt: (rejection) => buildReplacementPrompt(input, rejection),
       schema: createReplacementSchema(input.request.experience),
@@ -119,11 +125,12 @@ export class ClaudeEngine {
     });
   }
 
-  async generateAtlas(requestInput) {
+  async generateAtlas(requestInput, { onDraft } = {}) {
     const input = validateAtlasInput(requestInput);
     const metadata = this.#metadata();
     return this.#generate({
       kind: 'atlas',
+      onDraft,
       system: ATLAS_SYSTEM,
       prompt: (rejection) => buildAtlasPrompt(input, rejection),
       schema: ATLAS_CANDIDATE_SCHEMA,
@@ -144,20 +151,23 @@ export class ClaudeEngine {
     return this.metadataProvider;
   }
 
-  async #generate({ kind, system, prompt, schema, maxCharacters, deadlineMs, finish }) {
+  async #generate({ kind, system, prompt, schema, maxCharacters, deadlineMs, finish, onDraft }) {
     const controller = new AbortController();
     const deadline = setTimeout(() => controller.abort(), deadlineMs);
     const format = toStructuredSchema(schema);
+    const drafts = createDraftReporter({ kind, onDraft, now: this.now });
+    const onPartial = drafts ? (text) => drafts.partial(text) : undefined;
     let rejection = '';
     try {
       for (let attempt = 1; ; attempt += 1) {
         try {
-          const text = await this.runner.complete({ kind, system, content: prompt(rejection), format, signal: controller.signal });
+          const text = await this.runner.complete({ kind, system, content: prompt(rejection), format, signal: controller.signal, onPartial });
           return await finish(extractJson(text, maxCharacters));
         } catch (error) {
           if (attempt >= 2 || !isContentProblem(error)) throw error;
           rejection = String(error.message || 'The answer was invalid.').slice(0, 300);
           this.log({ code: 'CLAUDE_ANSWER_REJECTED', attempt });
+          drafts?.retake();
         }
       }
     } catch (error) {

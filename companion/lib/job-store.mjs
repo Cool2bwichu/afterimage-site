@@ -66,6 +66,9 @@ export class JobStore {
     this.now = now;
     this.idFactory = idFactory;
     this.jobs = new Map();
+    // What a running job has developed so far. Kept in memory only: a restart
+    // ends a running job anyway, and the finished answer is what persists.
+    this.drafts = new Map();
   }
 
   async initialize() {
@@ -144,6 +147,7 @@ export class JobStore {
     job.reel = reel;
     await this.#write(job);
     this.jobs.set(job.id, job);
+    this.drafts.delete(job.id);
     return job;
   }
 
@@ -152,7 +156,16 @@ export class JobStore {
     job.error = safeFailure(error);
     await this.#write(job);
     this.jobs.set(job.id, job);
+    this.drafts.delete(job.id);
     return job;
+  }
+
+  // Records what a running job has developed so far; ignored once it has finished.
+  setDraft(jobId, draft) {
+    const job = this.get(jobId);
+    if (!job || job.status !== 'running' || !draft || typeof draft !== 'object') return false;
+    this.drafts.set(job.id, draft);
+    return true;
   }
 
   #transition(jobId, status) {
@@ -174,6 +187,7 @@ export class JobStore {
   toPublic(job) {
     if (!job) return null;
     const payload = { jobId: job.id, status: job.status, createdAt: job.createdAt, updatedAt: job.updatedAt };
+    if (job.status === 'running' && this.drafts.has(job.id)) payload.draft = this.drafts.get(job.id);
     if (job.status === 'complete') payload.reel = job.reel;
     if (job.status === 'failed') payload.error = job.error;
     return payload;

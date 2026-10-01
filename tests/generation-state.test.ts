@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {
   isGenerationJobId,
   nextPollDelay,
+  parseJobDraft,
   parseJobStart,
   parseJobStatus,
 } from '../app/lib/generation-state.ts';
@@ -51,6 +52,33 @@ test('generation state parses start and pending jobs without copying unknown pro
       updatedAt: UPDATED_AT,
     });
   }
+});
+
+test('a running job keeps only a well-formed draft of what has developed so far', () => {
+  const base = { jobId: JOB_ID, status: 'running', createdAt: CREATED_AT, updatedAt: UPDATED_AT };
+  const draft = {
+    take: 1, persona: 'Desert Ghost', insight: 'Distance as tenderness.', palette: ['#111111', 'red', '#333333'],
+    sensibilities: ['Distance', '', 'x'.repeat(81)], spiritDirector: 'Wim Wenders',
+    recommendations: [{ title: 'Alice in the Cities', year: '1974', reason: 'Wenders on the road.', timecode: 'ignored' }, { title: 'No year' }],
+    privateField: 'ignore me',
+  };
+  assert.deepEqual(parseJobStatus({ ...base, draft }), {
+    ...base,
+    draft: {
+      take: 1, persona: 'Desert Ghost', insight: 'Distance as tenderness.', palette: ['#111111', '#333333'],
+      sensibilities: ['Distance'], spiritDirector: 'Wim Wenders',
+      recommendations: [{ title: 'Alice in the Cities', year: '1974', reason: 'Wenders on the road.' }],
+    },
+  });
+  // A malformed draft is dropped; the job itself still parses.
+  for (const bad of [null, 'text', { take: 0 }, { take: 1.5 }, { persona: 'No take' }]) {
+    assert.deepEqual(parseJobStatus({ ...base, draft: bad }), base);
+  }
+  // Only running jobs carry a draft.
+  assert.deepEqual(parseJobStatus({ ...base, status: 'queued', draft }), { ...base, status: 'queued' });
+  assert.deepEqual(parseJobDraft({ take: 2 }), { take: 2 });
+  assert.deepEqual(parseJobDraft({ take: 1, film: { title: 'Yi Yi', year: '2000' }, neighbors: [{ title: 'Late Spring', year: '1949', label: 'Quiet echo' }], thesis: 'Families.' }),
+    { take: 1, film: { title: 'Yi Yi', year: '2000' }, neighbors: [{ title: 'Late Spring', year: '1949', label: 'Quiet echo' }], thesis: 'Families.' });
 });
 
 test('generation state parses complete and failed terminal jobs', () => {

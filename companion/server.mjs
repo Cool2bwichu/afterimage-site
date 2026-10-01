@@ -331,10 +331,10 @@ export async function createGenerationProtocol({ engine, directory, log = () => 
   return new GenerationCoordinator({
     store,
     logError: log,
-    generate: (input) => {
-      if (input.atlasRequest) return engine.generateAtlas(input.atlasRequest);
-      if (input.replacementRequest) return engine.generateReplacement(input.replacementRequest);
-      return engine.generateReel(input);
+    generate: (input, options) => {
+      if (input.atlasRequest) return engine.generateAtlas(input.atlasRequest, options);
+      if (input.replacementRequest) return engine.generateReplacement(input.replacementRequest, options);
+      return engine.generateReel(input, options);
     },
   });
 }

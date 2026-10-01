@@ -31,6 +31,7 @@ import { movieKey } from './lib/movie-metadata';
 import { MAX_LIKED_FILMS, TASTE_STORAGE_KEY, parseLikedFilms, toggleLikedFilm, type LikedFilm } from './lib/taste-profile';
 import type { AfterimageResultV2, ExcludedFilm, DevelopInput, Experience } from './lib/reel-state';
 import { GenerationPollError, pollGeneration } from './lib/generation-poller';
+import type { JobDraft } from './lib/generation-state';
 import { statusModelLabel } from './lib/claude';
 import { answersInPage, apiFetch, savePassphrase, usesRemoteCompanion } from './lib/api';
 import {
@@ -141,6 +142,8 @@ export default function Home() {
   const [connecting, setConnecting] = useState(false);
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [jobStatus, setJobStatus] = useState<JobStatus>(null);
+  // What the running job has developed so far; provisional and never saved.
+  const [jobDraft, setJobDraft] = useState<JobDraft | null>(null);
   const [starting, setStarting] = useState(false);
   const [pollRevision, setPollRevision] = useState(0);
   const [composerOpen, setComposerOpen] = useState(false);
@@ -533,6 +536,9 @@ export default function Home() {
             if (job.status === 'queued' || job.status === 'running') {
               setJobStatus(job.status);
               setJobStartedAt(Date.parse(job.createdAt));
+              setJobDraft(job.status === 'running' && job.draft ? job.draft : null);
+            } else {
+              setJobDraft(null);
             }
           },
           onTransientError: () => {
@@ -605,7 +611,7 @@ export default function Home() {
       }
     })();
 
-    return () => controller.abort();
+    return () => { controller.abort(); setJobDraft(null); };
   // Result and displayed input remain stable while this accepted job is running.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeJobId, connection, hydrated, pollRevision, experience, lightTableEnabled, selectedFacets, selectedReelIdentity, acceptedInput, acceptedInputJobId, replacementJob]);
@@ -621,6 +627,26 @@ export default function Home() {
     () => getRecommendationIdentity(result),
     [result],
   );
+
+  // Films that arrive in a developing reel get their posters early, so the finished reel
+  // opens with them. Like every lookup, this is best effort.
+  const draftLookups = useRef(new Set<string>());
+  const draftFilms = useMemo(() => [...(jobDraft?.recommendations ?? []), ...(jobDraft?.recommendation ? [jobDraft.recommendation] : [])], [jobDraft]);
+  useEffect(() => {
+    const pending = draftFilms.filter(film => {
+      const key = movieKey(film.title, film.year);
+      return !metadataByKey[key] && !draftLookups.current.has(key);
+    }).slice(0, 5);
+    if (!pending.length) return;
+    pending.forEach(film => draftLookups.current.add(movieKey(film.title, film.year)));
+    void fetchFilmEnrichment({ recommendations: pending })
+      .then(records => setMetadataByKey(current => ({ ...current, ...persistableEnrichment(records) })))
+      .catch(() => { /* The finished reel looks its films up again. */ });
+  }, [draftFilms, metadataByKey]);
+  const draftPoster = useCallback((film: { title: string; year: string }) => {
+    const record = metadataByKey[movieKey(film.title, film.year)];
+    return record?.status === 'matched' ? record.posterUrl ?? null : null;
+  }, [metadataByKey]);
 
   useEffect(() => {
     if (!result || !recommendationIdentity) return;
@@ -1070,7 +1096,7 @@ export default function Home() {
           <ChartingRoom variant={replacementJob ? 'replacement' : 'reel'} message={replacementJob ? 'Finding one new film' : leaderMessage}
             detail={result ? 'Your previous reel is still here. You can browse it while you wait.' : 'You can refresh this page; your accepted reel will resume.'}
             elapsed={jobStartedAt !== null ? `${Math.floor(elapsedSeconds / 60)}:${String(elapsedSeconds % 60).padStart(2, '0')}` : null}
-            sources={chartingSources} />
+            sources={chartingSources} draft={jobDraft} posterFor={draftPoster} />
         ) : null}
 
         {connection !== 'connected' && connection !== 'checking' ? (

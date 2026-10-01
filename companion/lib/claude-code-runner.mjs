@@ -12,6 +12,10 @@ import { EFFORTS, engineError } from './engine-error.mjs';
 // directory, so it acts only as the model behind the companion's own prompts.
 const STATUS_TTL_MS = 10 * 60 * 1000;
 const MAX_OUTPUT_BYTES = 8 * 1024 * 1024;
+// Partial messages repeat the answer as small events, which takes more room.
+const MAX_STREAMED_OUTPUT_BYTES = 32 * 1024 * 1024;
+// Claude Code delivers a --json-schema answer as the input of this tool.
+const STRUCTURED_OUTPUT_TOOL = 'StructuredOutput';
 const MAX_STDERR_CHARS = 2000;
 const KILL_GRACE_MS = 5000;
 
@@ -121,10 +125,12 @@ export class ClaudeCodeRunner {
     });
   }
 
-  args({ system, format }) {
+  args({ system, format, partial = false }) {
     return [
       '-p',
       '--output-format', 'stream-json', '--verbose',
+      // The answer as it is written, so a developing reel can be shown.
+      ...(partial ? ['--include-partial-messages'] : []),
       '--model', this.model,
       '--effort', this.effort,
       '--system-prompt', system,
@@ -138,11 +144,13 @@ export class ClaudeCodeRunner {
   }
 
   // Returns the answer's JSON text. The request's data goes in on stdin.
-  async complete({ kind, system, content, format, signal }) {
+  // `onPartial`, when given, receives the answer's text so far as it streams.
+  async complete({ kind, system, content, format, signal, onPartial }) {
     if (!this.token) throw engineError('AUTH_REQUIRED', 'No Claude subscription token is configured for the companion.');
     await mkdir(join(this.workdir, 'run'), { recursive: true, mode: 0o700 });
     await mkdir(join(this.workdir, 'config'), { recursive: true, mode: 0o700 });
-    const run = await this.#run({ args: this.args({ system, format }), input: content, signal });
+    const partial = typeof onPartial === 'function';
+    const run = await this.#run({ args: this.args({ system, format, partial }), input: content, signal, onPartial: partial ? onPartial : null });
     const { result, lastError } = run;
 
     if (!result) {
@@ -186,7 +194,7 @@ export class ClaudeCodeRunner {
     return typeof result.result === 'string' ? result.result : '';
   }
 
-  #run({ args, input, signal }) {
+  #run({ args, input, signal, onPartial = null }) {
     return new Promise((resolve, reject) => {
       if (signal.aborted) {
         reject(signal.reason ?? new Error('Aborted.'));
@@ -212,11 +220,31 @@ export class ClaudeCodeRunner {
       let spawnError;
       let settled = false;
       let killTimer;
+      // The structured answer being written: the StructuredOutput tool's input.
+      let answerBlock = null;
+      let answerText = '';
+      const maxBytes = onPartial ? MAX_STREAMED_OUTPUT_BYTES : MAX_OUTPUT_BYTES;
+
+      const stream = (event) => {
+        if (event?.type === 'message_start') {
+          answerBlock = null;
+        } else if (event?.type === 'content_block_start') {
+          const block = event.content_block;
+          answerBlock = block?.type === 'tool_use' && block.name === STRUCTURED_OUTPUT_TOOL ? event.index : null;
+          // A new attempt at the answer starts from nothing.
+          if (answerBlock !== null) answerText = '';
+        } else if (event?.type === 'content_block_delta' && event.index === answerBlock &&
+            event.delta?.type === 'input_json_delta' && typeof event.delta.partial_json === 'string') {
+          answerText += event.delta.partial_json;
+          try { onPartial(answerText); } catch {}
+        }
+      };
 
       const read = (line) => {
         if (!line.trim()) return;
         let message;
         try { message = JSON.parse(line); } catch { return; }
+        if (message.type === 'stream_event' && onPartial && !message.parent_tool_use_id) stream(message.event);
         if (message.type === 'assistant' && typeof message.error === 'string') lastError = message.error;
         if (message.type === 'result') result = message;
       };
@@ -229,7 +257,7 @@ export class ClaudeCodeRunner {
       child.stdout.setEncoding('utf8');
       child.stdout.on('data', (chunk) => {
         received += chunk.length;
-        if (received > MAX_OUTPUT_BYTES) { abort(); return; }
+        if (received > maxBytes) { abort(); return; }
         buffered += chunk;
         let newline;
         while ((newline = buffered.indexOf('\n')) >= 0) {

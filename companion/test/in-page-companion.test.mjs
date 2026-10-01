@@ -89,11 +89,51 @@ test('a reel is developed by Claude with the companion\'s brief and schema, in t
   assert.equal(job.reel.recommendations.length, 5);
 
   assert.equal(calls.length, 1);
-  assert.deepEqual(calls[0].options, { modelTier: 'complex', cache: false });
+  const { onText, ...options } = calls[0].options;
+  assert.deepEqual(options, { modelTier: 'complex', cache: false });
+  assert.equal(typeof onText, 'function');
   assert.ok(calls[0].input.startsWith(REEL_SYSTEM));
   assert.ok(calls[0].input.includes('Paris, Texas'));
   assert.ok(calls[0].input.includes(JSON.stringify(toStructuredSchema(AFTERIMAGE_SCHEMA_V2))));
   assert.equal((await handle('/api/generations/00000000-0000-4000-8000-999999999999')).status, 404);
+});
+
+test('a reel develops on screen while Claude writes it, and the finished reel replaces the draft', async () => {
+  let release;
+  const { sample, calls } = fakeSample([]);
+  const answer = JSON.stringify(reel());
+  sample.json = (input, options) => {
+    calls.push({ input, options });
+    return new Promise((resolve) => {
+      release = (upTo) => {
+        options.onText({ text: answer.slice(0, upTo), delta: '' });
+        if (upTo >= answer.length) resolve(JSON.parse(answer));
+      };
+    });
+  };
+  let clock = 0;
+  const handle = companion(sample, { now: () => clock });
+  const { jobId } = await (await handle('/api/generations', post(request))).json();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const status = async () => parseJobStatus(await (await handle('/api/generations/' + jobId)).json());
+  assert.equal((await status()).draft, undefined);
+
+  // Up to the third film's title and year: persona, palette and two finished films.
+  release(answer.indexOf('"Past Lives"') + '"Past Lives","year":"2000"'.length);
+  const developing = await status();
+  assert.equal(developing.status, 'running');
+  assert.equal(developing.draft.take, 1);
+  assert.equal(developing.draft.persona, 'Patient Longing');
+  assert.equal(developing.draft.palette.length, 5);
+  assert.deepEqual(developing.draft.recommendations.map(film => film.title), ['The Green Ray', 'After Yang', 'Past Lives']);
+  assert.equal(developing.draft.recommendations[2].reason, undefined, 'an unfinished reason is not shown');
+
+  clock += 1000;
+  release(answer.length);
+  await handle.whenIdle();
+  const finished = await (await handle('/api/generations/' + jobId)).json();
+  assert.equal(finished.status, 'complete');
+  assert.equal('draft' in finished, false);
 });
 
 test('an answer that breaks a rule gets one more attempt, with the reason', async () => {

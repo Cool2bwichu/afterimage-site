@@ -144,6 +144,41 @@ test('an answer given as text instead of structured output is still read and val
   });
 });
 
+test('a developing answer streams from the StructuredOutput tool into drafts, and only when asked for', async () => {
+  const json = JSON.stringify(reel());
+  const cut = json.indexOf('"After Yang"') + '"After Yang","year":"1993"'.length;
+  const event = (value) => ({ type: 'stream_event', event: value, parent_tool_use_id: null, session_id: 's' });
+  const lines = [
+    init,
+    event({ type: 'message_start', message: { id: 'm' } }),
+    event({ type: 'content_block_start', index: 0, content_block: { type: 'thinking', thinking: '' } }),
+    event({ type: 'content_block_delta', index: 0, delta: { type: 'thinking_delta', thinking: '{"persona":"Not the answer"}' } }),
+    event({ type: 'content_block_start', index: 1, content_block: { type: 'tool_use', id: 't', name: 'StructuredOutput', input: {} } }),
+    event({ type: 'content_block_delta', index: 1, delta: { type: 'input_json_delta', partial_json: json.slice(0, 40) } }),
+    event({ type: 'content_block_delta', index: 1, delta: { type: 'input_json_delta', partial_json: json.slice(40, cut) } }),
+    // A subagent's stream is never the answer.
+    { type: 'stream_event', event: { type: 'content_block_delta', index: 1, delta: { type: 'input_json_delta', partial_json: 'garbage' } }, parent_tool_use_id: 'toolu_x' },
+    success(reel()),
+  ];
+  let clock = 0;
+  await withRunner([{ lines }], async ({ engine, fake }) => {
+    const drafts = [];
+    const result = await engine.generateReel(request, { onDraft: (draft) => drafts.push(draft) });
+    assert.equal(result.persona, 'Patient Longing');
+    assert.ok(drafts.length >= 1);
+    const last = drafts.at(-1);
+    assert.equal(last.take, 1);
+    assert.equal(last.persona, 'Patient Longing');
+    assert.deepEqual(last.recommendations.map((film) => film.title), ['The Green Ray', 'After Yang']);
+    assert.ok(drafts.every((draft) => draft.persona !== 'Not the answer'), 'thinking is never read as the answer');
+    assert.ok((await fake.records())[0].argv.includes('--include-partial-messages'));
+  }, { engine: { now: () => (clock += 1000) } });
+  await withRunner([{ lines }], async ({ engine, fake }) => {
+    await engine.generateReel(request);
+    assert.equal((await fake.records())[0].argv.includes('--include-partial-messages'), false);
+  });
+});
+
 test('structured-output exhaustion and rule breaks get one more run with the reason', async () => {
   const broken = reel(['Cure', 'After Yang', 'Past Lives', 'The Rider', 'Still Walking']);
   broken.recommendations[0].year = '1997';

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useSyncExternalStore, type CSSProperties } from 'react';
+import type { DraftFilm, JobDraft } from '../lib/generation-state';
 
 const NOTIFY_KEY = 'afterimage:notify:v1';
 const DEVELOPING_TITLE = '✦ Developing your reel · AFTERIMAGE';
@@ -65,12 +66,24 @@ function NotifyControl() {
  * The developing state as an observatory: rings turn, the references you gave orbit the
  * lens, and five dark stars wait at the centre. Motion is ambient only; the only real
  * measures shown are the job's status and the time elapsed.
+ *
+ * Once Claude starts writing, the reel develops in place: the sensibility's name, its
+ * palette, then each film as Claude finishes it. That draft is provisional, and says
+ * so; the finished reel, checked by AFTERIMAGE, replaces it.
  */
-export function ChartingRoom({ message, detail, elapsed, sources, variant = 'reel' }: {
+export function ChartingRoom({ message, detail, elapsed, sources, variant = 'reel', draft = null, posterFor }: {
   message: string; detail: string; elapsed: string | null; sources: string[]; variant?: 'reel' | 'replacement';
+  draft?: JobDraft | null; posterFor?: (film: DraftFilm) => string | null;
 }) {
   const bodies = sources.slice(0, 5);
-  return <section className={`charting-room charting-room--${variant}`} role="status" aria-live="polite">
+  const films = variant === 'replacement' ? (draft?.recommendation ? [draft.recommendation] : []) : draft?.recommendations ?? [];
+  const palette = variant === 'reel' ? draft?.palette ?? [] : [];
+  const persona = variant === 'reel' ? draft?.persona : undefined;
+  const developing = Boolean(persona || films.length || palette.length);
+  const secondTake = (draft?.take ?? 1) > 1;
+  const slots = variant === 'replacement' ? 1 : 5;
+  const style = palette.length ? { '--developing-color': palette[0], '--developing-accent': palette[2] ?? palette.at(-1) } as CSSProperties : undefined;
+  return <section className={`charting-room charting-room--${variant}${developing ? ' is-developing' : ''}`} role="status" aria-live="polite" style={style}>
     <div className="charting-orrery" aria-hidden="true">
       <div className="charting-sweep" />
       <svg viewBox="0 0 320 320" className="charting-rings">
@@ -82,16 +95,32 @@ export function ChartingRoom({ message, detail, elapsed, sources, variant = 'ree
         <g className="charting-ticks">{Array.from({ length: 36 }, (_, index) => <path key={index} d="M160 12v6" transform={`rotate(${index * 10} 160 160)`} />)}</g>
       </svg>
       {bodies.map((source, index) => <span key={`${source}-${index}`} className="charting-orbit" style={{ '--radius': `${38 + index * 9}%`, '--duration': `${26 + index * 9}s`, '--start': `${index * 67}deg` } as CSSProperties}><i /></span>)}
-      <div className="charting-slots">{Array.from({ length: 5 }, (_, index) => <i key={index} style={{ '--i': index } as CSSProperties} />)}</div>
+      <div className="charting-slots">{Array.from({ length: 5 }, (_, index) => <i key={index} className={films[index] ? 'is-lit' : palette[index] ? 'is-tinted' : undefined}
+        style={{ '--i': index, ...(palette[index] ? { '--slot-color': palette[index] } : {}) } as CSSProperties} />)}</div>
     </div>
     <div className="charting-copy">
-      <p className="charting-kicker">Claude is charting your next constellation</p>
-      <h2>{message}</h2>
-      <p>{detail}</p>
-      {bodies.length ? <p className="charting-sources"><span>Following</span>{bodies.map((source, index) => <strong key={`${source}-${index}`}>{source}</strong>)}</p> : null}
+      <p className="charting-kicker">{secondTake ? 'A second take' : developing ? 'Developing · Claude is writing your reel' : 'Claude is charting your next constellation'}</p>
+      {persona ? <h2 key={persona} className="developing-in">{persona}</h2> : <h2>{message}</h2>}
+      <p>{secondTake && !developing ? 'The first answer didn’t pass AFTERIMAGE’s checks, so Claude is writing it again.' : variant === 'reel' && draft?.insight ? draft.insight : detail}</p>
+      {palette.length ? <p className="developing-palette" aria-hidden="true">{palette.map((color, index) => <i key={`${color}-${index}`} style={{ background: color, '--i': index } as CSSProperties} />)}</p> : null}
+      {developing && films.length ? <>
+        <ol className={`developing-reel developing-reel--${variant}`} aria-live="off">
+          {Array.from({ length: slots }, (_, index) => {
+            const film = films[index];
+            if (!film) return <li key={`waiting-${index}`} className="is-waiting" aria-hidden="true"><span className="developing-frame" /><span className="developing-lines"><i /><i /></span></li>;
+            const poster = posterFor?.(film) ?? null;
+            return <li key={`${film.title}|${film.year}`} className="is-arrived" style={{ '--i': index } as CSSProperties}>
+              <span className="developing-frame">{poster ? <img src={poster} alt="" loading="lazy" onError={event => { event.currentTarget.style.visibility = 'hidden'; }} /> : <span aria-hidden="true">{film.title.slice(0, 1)}</span>}</span>
+              <span className="developing-film"><strong>{film.title}</strong> <small>{film.year}</small>{film.reason ? <em>{film.reason}</em> : null}</span>
+            </li>;
+          })}
+        </ol>
+        <p className="sr-only">{variant === 'replacement' ? `${films[0].title} is arriving.` : `${films.length} of 5 films have arrived.`}</p>
+        <p className="developing-note">Still developing. The reel is final once Claude finishes and AFTERIMAGE checks it.</p>
+      </> : bodies.length ? <p className="charting-sources"><span>Following</span>{bodies.map((source, index) => <strong key={`${source}-${index}`}>{source}</strong>)}</p> : null}
       <div className="charting-meta">
         {elapsed ? <time aria-live="off" className="elapsed">{elapsed} elapsed</time> : null}
-        <span>This can take a few minutes.</span>
+        <span>{developing ? 'Films appear as Claude finishes them.' : 'This can take a few minutes.'}</span>
       </div>
       <NotifyControl />
     </div>

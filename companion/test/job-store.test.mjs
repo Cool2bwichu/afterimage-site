@@ -35,6 +35,21 @@ test('public projection exposes only protocol fields', async () => {
   assert.deepEqual(Object.keys(store.toPublic(job)).sort(), ['createdAt', 'jobId', 'status', 'updatedAt']);
 });
 
+test('a running job shows its draft in memory only, and finishing removes it', async () => {
+  const { directory, store } = await fixture();
+  const job = await store.create();
+  assert.equal(store.setDraft(JOB_ID, { take: 1, persona: 'Early' }), false, 'a queued job has no draft yet');
+  await store.markRunning(JOB_ID);
+  assert.equal(store.setDraft(JOB_ID, { take: 1, persona: 'Patient Longing' }), true);
+  assert.deepEqual(store.toPublic(store.get(JOB_ID)).draft, { take: 1, persona: 'Patient Longing' });
+  const saved = JSON.parse(await readFile(join(directory, JOB_ID + '.json'), 'utf8'));
+  assert.equal('draft' in saved, false, 'a draft is never written to disk');
+  await store.complete(JOB_ID, { status: 'complete', recommendations: [] });
+  assert.equal('draft' in store.toPublic(store.get(JOB_ID)), false);
+  assert.equal(store.setDraft(JOB_ID, { take: 1 }), false);
+  assert.equal(store.setDraft(job.id.replace('6e', '7e'), { take: 1 }), false);
+});
+
 test('restores terminal jobs across restart', async () => {
   const { directory, store, now } = await fixture();
   await store.create(); await store.complete(JOB_ID, { status: 'complete', recommendations: [] });

@@ -69,7 +69,7 @@ export class GenerationCoordinator {
   async #run(jobId, validatedInput) {
     try {
       await this.store.markRunning(jobId);
-      const reel = await this.generate(validatedInput);
+      const reel = await this.generate(validatedInput, { onDraft: (draft) => this.store.setDraft?.(jobId, draft) });
       await this.store.complete(jobId, reel);
     } catch (error) {
       // Only failures with a prepared, safe explanation reach the site; anything
