@@ -98,9 +98,12 @@ static page, no secrets                                 /api/* browser routes  â
     so the site stays unlocked after a refresh.
 - **Deploy files:**
   - `.github/workflows/github-pages.yml` tests, builds and publishes on pushes
-    to `claude/observatory-claude`. It is skipped until the repository variable
-    `AFTERIMAGE_COMPANION_URL` is set.
+    to `claude/observatory-claude`. It builds with the companion's Railway
+    address, which the repository variable `AFTERIMAGE_COMPANION_URL` can
+    replace.
   - `railway.json` builds `companion/Dockerfile` from the repository root.
+    Only changes to `companion/`, `app/lib/`, `railway.json` or
+    `.dockerignore` redeploy it.
 
 A Pages site is public even from a private repository. The passphrase is what
 keeps Claude, your plan's allowance and TMDB for you.

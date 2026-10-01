@@ -1,9 +1,7 @@
 name: GitHub Pages (Claude version)
 
 # Builds the static AFTERIMAGE (github-pages/ and vite.pages.config.ts) and
-# publishes it to GitHub Pages. It stays switched off until the repository
-# variable AFTERIMAGE_COMPANION_URL names the companion's HTTPS address; see
-# docs/github-pages.md.
+# publishes it to GitHub Pages. See docs/github-pages.md.
 on:
   push:
     branches: [claude/observatory-claude]
@@ -18,9 +16,13 @@ concurrency:
   group: github-pages
   cancel-in-progress: false
 
+env:
+  # The companion's public address on Railway; it is not a secret. A repository
+  # variable of the same name replaces it.
+  AFTERIMAGE_COMPANION_URL: ${{ vars.AFTERIMAGE_COMPANION_URL || 'https://companion-production-2341.up.railway.app' }}
+
 jobs:
   build:
-    if: ${{ vars.AFTERIMAGE_COMPANION_URL != '' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -36,7 +38,6 @@ jobs:
         uses: actions/configure-pages@v5
       - run: npm run build:pages
         env:
-          AFTERIMAGE_COMPANION_URL: ${{ vars.AFTERIMAGE_COMPANION_URL }}
           AFTERIMAGE_PAGES_BASE: ${{ steps.pages.outputs.base_path }}/
       - uses: actions/upload-pages-artifact@v4
         with:

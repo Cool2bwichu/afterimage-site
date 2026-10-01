@@ -88,16 +88,15 @@ site on another host.
 2. Go to **Settings → Environments → github-pages**. Under *Deployment
    branches and tags*, add `claude/observatory-claude`. By default, only the
    default branch may deploy.
-3. Go to **Settings → Secrets and variables → Actions → Variables**. Add a
-   repository variable:
-   - name: `AFTERIMAGE_COMPANION_URL`
-   - value: `https://<the Railway domain>`
-
-   Use no path and no trailing slash. This is an address, not a secret.
-4. Start the deploy. Pushes to `claude/observatory-claude` run the *GitHub
-   Pages (Claude version)* workflow; until the variable exists, its runs are
-   skipped. To deploy without a new push, open the latest run of that workflow
-   in the *Actions* tab and choose **Re-run all jobs**. The workflow:
+3. The workflow already names the companion's address,
+   `https://companion-production-2341.up.railway.app`. If the companion moves,
+   go to **Settings → Secrets and variables → Actions → Variables** and add a
+   repository variable named `AFTERIMAGE_COMPANION_URL`, set to the new
+   address. Use no path and no trailing slash. It is an address, not a secret.
+4. Start the deploy. Every push to `claude/observatory-claude` runs the
+   *GitHub Pages (Claude version)* workflow. To deploy without a new push, open
+   the latest run of that workflow in the *Actions* tab and choose **Re-run all
+   jobs**. The workflow:
    1. runs the site and companion tests;
    2. builds the static page with the companion's address;
    3. publishes the page.
@@ -113,8 +112,8 @@ for it. Pushes and re-runs start it instead.
   `CLAUDE_CODE_OAUTH_TOKEN` in Railway. Railway redeploys the service.
 - **New passphrase:** replace `AFTERIMAGE_SITE_PASSPHRASE` in Railway. Each
   device then asks for the new one.
-- **New companion address:** update `AFTERIMAGE_COMPANION_URL`, then re-run
-  the workflow.
+- **New companion address:** set the repository variable
+  `AFTERIMAGE_COMPANION_URL`, then re-run the workflow.
 - **Custom domain for the site:** set it in *Settings → Pages*, then change
   `AFTERIMAGE_ALLOWED_ORIGINS` to that origin. The workflow picks up the new
   base path by itself.
