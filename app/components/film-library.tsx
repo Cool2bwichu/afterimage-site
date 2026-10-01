@@ -9,6 +9,7 @@ import { FACET_META } from '../lib/light-table';
 import type { LibraryTab } from '../lib/navigation';
 import { CHANNEL_COLORS } from './afterimage-log';
 import { StarGlyph } from './celestial';
+import { saveFile } from '../lib/save-file';
 
 const INTRO: Record<LibraryTab, string> = {
   watchlist: 'Films to return to. Saving one here does not change your taste profile.',
@@ -34,7 +35,7 @@ export function FilmLibrary({ open, opener, onClose, watchlist, likes, afterimag
   }, [open, opener]);
   function exportBackup() {
     const blob = new Blob([JSON.stringify({ version: 1, exportedAt: new Date().toISOString(), watchlist }, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob); const link = document.createElement('a'); link.href = url; link.download = 'afterimage-watchlist.json'; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+    void saveFile('afterimage-watchlist.json', blob).catch(() => {});
   }
   if (!open) return null;
   const search = query.toLocaleLowerCase();

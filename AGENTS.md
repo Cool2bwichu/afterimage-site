@@ -4,6 +4,18 @@ This repository is the production website source. The companion backend lives
 in `Cool2bwichu/afterimage-subscription-bridge`; do not substitute its prototype
 frontend for this site.
 
+On the Claude branches, `companion/` is the Claude-backed replacement for that
+bridge. It answers the same contract; run its tests with `npm run test:companion`
+and keep `CLAUDE_CODE_OAUTH_TOKEN` and `ANTHROPIC_API_KEY` out of the repository.
+The same branches can build a static GitHub Pages site (`npm run build:pages`)
+whose private calls go to the companion behind a passphrase; see
+`docs/github-pages.md`, and keep the passphrase out of the repository too.
+`npm run build:artifact` builds the claude.ai Artifact edition, which asks
+Claude inside the page instead of through the companion (see `docs/claude.md`).
+`claude/observatory-claude` is also an experimental route for the interface
+(one question, the Eye Test, developing reels, collisions, film verbs); see
+`docs/encounters.md` before changing those experiences.
+
 ## Development
 
 - Use Node.js 22.13 or newer and `npm ci`.

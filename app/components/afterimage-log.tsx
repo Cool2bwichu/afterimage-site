@@ -4,17 +4,20 @@ import { useEffect, useId, useRef, useState, type CSSProperties } from 'react';
 import { MAX_AFTERIMAGE_NOTE, localDate, type AfterimageDraft, type AfterimageEntry } from '../lib/afterimages';
 import { FACET_KEYS, FACET_META, type FacetKey, type FacetMap } from '../lib/light-table';
 import { StarGlyph } from './celestial';
+import { CHANNEL_COLORS, TicketStub, type StubEntry } from './ticket-stub';
 
+export { CHANNEL_COLORS };
 export type AfterimageTarget = { title: string; year: string; tmdbId?: number; facets?: FacetMap };
-export const CHANNEL_COLORS: Record<FacetKey, string> = { whereItLives: '#e8b34a', howItFeels: '#e5a29b', howItLooks: '#99c6b7', howItSpeaks: '#c3b0d1' };
 const CHANNEL_PROMPTS: Record<FacetKey, string> = { whereItLives: 'Its world', howItFeels: 'Its feeling', howItLooks: 'Its images', howItSpeaks: 'Its voice' };
 
 /**
  * After watching: what stayed with you? Four qualities, one night and one line.
  * The journal stays in this browser; only an explicit Like guides future reels.
  */
-export function AfterimageLog({ target, opener, existing, liked, saved, onSave, onRemove, onClose }: {
+export function AfterimageLog({ target, opener, existing, liked, saved, count = 0, onSave, onRemove, onClose }: {
   target: AfterimageTarget | null; opener: HTMLElement | null; existing?: AfterimageEntry; liked: boolean; saved: boolean;
+  /** How many afterimages the journal holds before this one: a new one is the next ticket. */
+  count?: number;
   onSave: (draft: AfterimageDraft, options: { like: boolean; unsave: boolean }) => string | null;
   onRemove: () => void; onClose: () => void;
 }) {
@@ -28,7 +31,11 @@ export function AfterimageLog({ target, opener, existing, liked, saved, onSave, 
   const [like, setLike] = useState(!liked);
   const [unsave, setUnsave] = useState(saved);
   const [error, setError] = useState('');
+  // A new afterimage prints a ticket stub before the dialog closes.
+  const [printed, setPrinted] = useState<{ entry: StubEntry; number: number } | null>(null);
+  const done = useRef<HTMLButtonElement>(null);
   const open = Boolean(target);
+  useEffect(() => { if (printed) done.current?.focus(); }, [printed]);
 
   useEffect(() => {
     if (!open) return;
@@ -45,7 +52,22 @@ export function AfterimageLog({ target, opener, existing, liked, saved, onSave, 
     if (!target) return;
     const labels = Object.fromEntries(stayed.flatMap(channel => { const text = label(channel); return text ? [[channel, text]] : []; })) as Partial<Record<FacetKey, string>>;
     const failure = onSave({ title: target.title, year: target.year, ...(target.tmdbId ? { tmdbId: target.tmdbId } : {}), watchedOn, stayed, ...(Object.keys(labels).length ? { labels } : {}), note }, { like: like && !liked, unsave: unsave && saved });
-    if (failure) setError(failure); else onClose();
+    if (failure) setError(failure);
+    else if (existing) onClose();
+    // Numbered before the journal grows, so the stub reads "your Nth film".
+    else setPrinted({ entry: { title: target.title, year: target.year, watchedOn, stayed, ...(Object.keys(labels).length ? { labels } : {}), note: note.trim() }, number: count + 1 });
+  }
+
+  if (printed) {
+    return <dialog ref={dialog} className="afterimage-log is-printed" aria-labelledby="afterimage-log-title" onCancel={event => { event.preventDefault(); onClose(); }}>
+      <div className="afterimage-printed">
+        <p className="afterimage-log-kicker"><StarGlyph />Kept</p>
+        <h2 id="afterimage-log-title" ref={heading} tabIndex={-1}>Your ticket stub</h2>
+        <div className="ticket-printer"><TicketStub entry={printed.entry} number={printed.number} /></div>
+        <p className="afterimage-printed-note">It joins your sky, beside the star of {printed.entry.title}.</p>
+        <button ref={done} type="button" className="afterimage-log-save" onClick={onClose}>Done <span aria-hidden="true">✦</span></button>
+      </div>
+    </dialog>;
   }
 
   return <dialog ref={dialog} className="afterimage-log" aria-labelledby="afterimage-log-title" onCancel={event => { event.preventDefault(); onClose(); }}>

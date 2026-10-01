@@ -2,6 +2,7 @@
 
 import { hashString, threadFigure } from '../lib/sky';
 import { MARGIN, PRESETS, paintBackdrop } from './night-sky';
+import { saveFile } from '../lib/save-file';
 
 export type StarChartData = {
   seed: string;
@@ -176,7 +177,7 @@ export async function renderStarChart(data: StarChartData): Promise<Blob> {
   const charted = (data.chartedAt ?? new Date()).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' });
   context.fillStyle = MUTED;
   context.font = `500 14px ${sans}`;
-  spaced(context, `FIVE FILMS, A THREAD BETWEEN THEM · CHARTED ${charted.toUpperCase()}`, WIDTH / 2, HEIGHT - 76, 2.6);
+  spaced(context, `FIVE FILMS, A THREAD BETWEEN THEM · CHARTED BY CLAUDE · ${charted.toUpperCase()}`, WIDTH / 2, HEIGHT - 76, 2.6);
 
   return new Promise((resolve, reject) => canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('The star chart could not be drawn.')), 'image/png'));
 }
@@ -190,11 +191,5 @@ export async function saveStarChart(data: StarChartData): Promise<'shared' | 'do
     try { await navigator.share({ files: [file], title: `${data.persona} · AFTERIMAGE` }); return 'shared'; }
     catch (reason) { if (reason instanceof DOMException && reason.name === 'AbortError') return 'cancelled'; }
   }
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = name;
-  link.click();
-  window.setTimeout(() => URL.revokeObjectURL(url), 1500);
-  return 'downloaded';
+  return saveFile(name, blob);
 }

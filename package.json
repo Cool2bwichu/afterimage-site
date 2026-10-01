@@ -9,8 +9,14 @@
     "dev": "vinext dev",
     "build": "vinext build",
     "start": "vinext start",
-    "lint": "eslint . --ignore-pattern dist --ignore-pattern .next --ignore-pattern .worktrees",
-    "test": "node --experimental-strip-types --test tests/*.test.ts"
+    "lint": "eslint . --ignore-pattern dist --ignore-pattern dist-pages --ignore-pattern dist-artifact --ignore-pattern .next --ignore-pattern .worktrees",
+    "test": "node --experimental-strip-types --test tests/*.test.ts",
+    "companion": "npm --prefix companion run dev",
+    "test:companion": "npm --prefix companion test",
+    "build:pages": "vite build --config vite.pages.config.ts",
+    "dev:pages": "vite --config vite.pages.config.ts",
+    "preview:pages": "vite preview --config vite.pages.config.ts",
+    "build:artifact": "vite build --config vite.artifact.config.ts"
   },
   "dependencies": {
     "next": "16.3.3",

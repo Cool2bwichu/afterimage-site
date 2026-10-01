@@ -8,6 +8,7 @@ import './projection-room.css';
 import './celestial.css';
 import './collections.css';
 import './observatory.css';
+import './encounters.css';
 import { CelestialProvider } from './components/celestial';
 
 const display = Cormorant_Garamond({

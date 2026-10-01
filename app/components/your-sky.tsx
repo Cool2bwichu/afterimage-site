@@ -1,20 +1,22 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react';
 import { buildSky, hashString, nearestStarInDirection, parseSkyRegistry, serializeSkyRegistry, skyReadingOrder, updateSkyRegistry, SKY_REGISTRY_KEY, type SkyConstellation, type SkyMap, type SkyStar } from '../lib/sky';
 import { reelCaption, type SavedReel } from '../lib/reel-history';
+import { apiFetch } from '../lib/api';
 import { getRecommendationIdentity } from '../lib/reel-state';
 import type { AtlasStop } from '../lib/atlas-trail';
 import type { AfterimageEntry } from '../lib/afterimages';
 import type { SavedFilm } from '../lib/library';
 import type { LikedFilm } from '../lib/taste-profile';
-import { FACET_META, type FacetKey } from '../lib/light-table';
+import type { FacetKey } from '../lib/light-table';
 import { parseEnrichmentResponse, type FilmEnrichment } from '../lib/movie-metadata';
 import { ATLAS_ARTWORK_KEY, readAtlasArtwork } from '../lib/atlas-artwork';
 import { MotionToggle, OrbitMark, StarGlyph, useCelestialMotion } from './celestial';
 import { NightSky } from './night-sky';
 import { LikeButton } from './like-button';
 import { CHANNEL_COLORS } from './afterimage-log';
+import { TicketStub } from './ticket-stub';
 
 type Filter = 'all' | 'liked' | 'saved' | 'afterimages';
 type View = { x: number; y: number; k: number };
@@ -63,7 +65,7 @@ function shortDate(value: string) {
 }
 
 export function YourSky({ open, opener, onClose, reels, atlases, likes, watchlist, afterimages, metadataByKey, likedKeys, savedKeys, canExplore,
-  onLike, onSave, onLogAfterimage, onNavigate, onExplore, onBegin }: {
+  onLike, onSave, onLogAfterimage, onNavigate, onExplore, onBegin, onCollide }: {
   open: boolean; opener: HTMLElement | null; onClose: () => void;
   reels: SavedReel[]; atlases: AtlasStop[]; likes: LikedFilm[]; watchlist: SavedFilm[]; afterimages: AfterimageEntry[];
   metadataByKey: Record<string, FilmEnrichment>; likedKeys: Set<string>; savedKeys: Set<string>; canExplore: boolean;
@@ -71,6 +73,8 @@ export function YourSky({ open, opener, onClose, reels, atlases, likes, watchlis
   onLogAfterimage: (film: { title: string; year: string; tmdbId?: number }, opener: HTMLElement) => void;
   onNavigate: (hash: string, opener: HTMLElement) => void; onExplore: (film: { title: string; year: string; tmdbId?: number }, opener: HTMLElement) => void;
   onBegin: () => void;
+  /** Collide this star with another film to find the one between them. */
+  onCollide?: (film: { title: string; year: string; tmdbId?: number }, opener: HTMLElement) => void;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -535,7 +539,7 @@ export function YourSky({ open, opener, onClose, reels, atlases, likes, watchlis
     const controller = new AbortController();
     const timer = window.setTimeout(async () => {
       try {
-        const response = await fetch('/api/films/enrich', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ films: [{ title: selectedStar.title, year: selectedStar.year }] }), signal: controller.signal });
+        const response = await apiFetch('/api/films/enrich', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ films: [{ title: selectedStar.title, year: selectedStar.year }] }), signal: controller.signal });
         if (!response.ok) return;
         const records = parseEnrichmentResponse(await response.json());
         if (!controller.signal.aborted) setArtwork(current => ({ ...current, ...Object.fromEntries(records.map(record => [record.key, record])) }));
@@ -600,8 +604,7 @@ export function YourSky({ open, opener, onClose, reels, atlases, likes, watchlis
         <h3>{selectedStar.title} <span>{selectedStar.year}</span></h3>
         {matched?.directors.length ? <p className="your-sky-credit">{matched.directors.join(', ')}{matched.runtime ? ` · ${matched.runtime} min` : ''}</p> : null}
         {journal ? <div className="your-sky-journal">
-          <p><span>Watched {shortDate(`${journal.watchedOn}T12:00:00`)}</span>{journal.stayed.length ? journal.stayed.map(channel => <em key={channel} style={{ '--channel': CHANNEL_COLORS[channel] } as CSSProperties}>{journal.labels?.[channel] ?? FACET_META[channel].label}</em>) : <em>The whole film</em>}</p>
-          {journal.note ? <blockquote>{journal.note}</blockquote> : null}
+          <TicketStub entry={journal} number={afterimages.indexOf(journal) + 1} />
         </div> : null}
         <div className="your-sky-actions">
           <LikeButton film={film} liked={likedKeys.has(selectedStar.key)} onToggle={() => onLike(film)} />
@@ -617,6 +620,7 @@ export function YourSky({ open, opener, onClose, reels, atlases, likes, watchlis
             <span><strong>{constellation.name}</strong><small>{constellation.kind === 'reel' ? `Reel · ${reel ? reelCaption(reel) : constellation.caption}` : 'Atlas · the films around it'}</small></span><span aria-hidden="true">↗</span></a></li>;
         })}</ul></div> : <p className="your-sky-field-note">This film shines on its own: you {selectedStar.liked ? 'loved' : selectedStar.afterimage ? 'remembered' : 'saved'} it outside a reel or Atlas.</p>}
         <button type="button" className="your-sky-explore" disabled={!canExplore} onClick={event => onExplore(film, event.currentTarget)}>Explore its Atlas <span aria-hidden="true">↗</span></button>
+        {onCollide ? <button type="button" className="your-sky-explore your-sky-collide" onClick={event => onCollide(film, event.currentTarget)}>Collide it with another film <span aria-hidden="true">✕</span></button> : null}
         {!canExplore ? <p className="your-sky-field-note">Connect the film service, or let the current discovery finish, to explore a new Atlas.</p> : null}
       </article> : null}
 

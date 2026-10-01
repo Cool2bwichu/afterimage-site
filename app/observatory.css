@@ -118,6 +118,36 @@
 .charting-room--replacement { grid-template-columns: 180px minmax(0, 1fr); padding-block: 22px; }
 .charting-room--replacement .charting-copy h2 { font-size: clamp(28px, 2.6vw, 40px); }
 
+/* The reel developing in place: its colours reach the room, then each film resolves
+   from a bright blur, like a print in the tray. */
+.charting-room.is-developing { background: radial-gradient(ellipse at 18% 50%, color-mix(in srgb, var(--developing-color, #182634) 34%, #101a24ee), #0b121bee 64%), radial-gradient(ellipse 60% 80% at 90% 10%, color-mix(in srgb, var(--developing-accent, #dec6a0) 14%, transparent), transparent 70%); transition: background 1.2s; }
+.charting-slots i.is-tinted { background: var(--slot-color); box-shadow: 0 0 12px 3px color-mix(in srgb, var(--slot-color) 55%, transparent); opacity: .45; }
+.charting-slots i.is-lit { width: 10px; height: 10px; margin: -5px 0 0 -5px; background: #fffaf0; box-shadow: 0 0 14px 5px color-mix(in srgb, var(--slot-color, var(--starlight)) 70%, white); opacity: 1; animation: slot-lit 900ms cubic-bezier(.2, .8, .2, 1) both; }
+.developing-in { animation: develop-in 1400ms cubic-bezier(.2, .7, .2, 1) both; }
+.developing-palette { display: flex; gap: 6px; margin: 16px 0 0; }
+.developing-palette i { width: 26px; height: 8px; border-radius: 4px; box-shadow: 0 0 0 1px #ffffff1c, 0 0 14px color-mix(in srgb, currentColor 30%, transparent); animation: develop-in 900ms ease both; animation-delay: calc(var(--i) * 120ms); }
+.developing-reel { display: grid; gap: 8px; margin: 18px 0 0; padding: 0; list-style: none; counter-reset: reel; }
+.developing-reel li { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 12px; align-items: center; min-height: 60px; counter-increment: reel; }
+.developing-frame { position: relative; display: grid; place-items: center; width: 40px; height: 60px; overflow: hidden; border: 1px solid #dec6a033; background: linear-gradient(160deg, #1b2732, #0d151e); color: var(--starlight); font: italic 400 20px var(--font-display), Georgia, serif; }
+.developing-frame img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.developing-film { min-width: 0; }
+.developing-film strong { font: 400 20px/1.15 var(--font-display), Georgia, serif; color: var(--white); }
+.developing-film small { color: var(--starlight); font-size: 12px; font-variant-numeric: tabular-nums; }
+.developing-film em { display: -webkit-box; margin-top: 3px; overflow: hidden; color: #b9c0c4; font: normal 13px/1.45 var(--font-sans), sans-serif; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.developing-reel li.is-arrived { animation: develop-in 1400ms cubic-bezier(.2, .7, .2, 1) both; }
+.developing-reel li.is-arrived .developing-frame { animation: frame-expose 1800ms ease-out both; }
+.developing-reel li.is-waiting .developing-frame { border-style: dashed; background: #0d151e88; }
+.developing-lines { display: grid; gap: 7px; }
+.developing-lines i { display: block; height: 9px; width: 62%; border-radius: 5px; background: linear-gradient(90deg, #a7b6c50f, #a7b6c526, #a7b6c50f); background-size: 200% 100%; animation: wait-shimmer 2.4s ease-in-out infinite; }
+.developing-lines i + i { width: 38%; opacity: .6; }
+.developing-note { margin: 14px 0 0; color: var(--muted); font-size: 12px; }
+.developing-reel--replacement li { grid-template-columns: 34px minmax(0, 1fr); }
+.developing-reel--replacement .developing-frame { width: 34px; height: 51px; }
+@keyframes develop-in { from { opacity: 0; filter: blur(9px) brightness(1.9) contrast(.55); transform: translateY(4px); } 60% { opacity: 1; filter: blur(1px) brightness(1.15) contrast(.9); } to { opacity: 1; filter: none; transform: none; } }
+@keyframes frame-expose { from { filter: brightness(2.4) saturate(0) blur(4px); } 45% { filter: brightness(1.5) saturate(.3) blur(1px); } to { filter: none; } }
+@keyframes slot-lit { from { transform: scale(2.6); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+@keyframes wait-shimmer { 0%, 100% { background-position: 100% 0; } 50% { background-position: 0 0; } }
+
 /* ——— The screening stage and dossier gain an afterimage action ——— */
 .screening-actions button.screening-afterimage { display: inline-flex; align-items: center; gap: 8px; border-color: #dec6a066; }
 .screening-actions button.screening-afterimage span { color: var(--starlight); }
@@ -351,12 +381,13 @@
 @keyframes iris-open { from { clip-path: circle(0% at 50% 50%); filter: brightness(1.8) saturate(.4); } 55% { filter: brightness(1.15) saturate(.9); } to { clip-path: circle(72% at 50% 50%); filter: none; } }
 
 /* ——— Motion respects the pause control and the device ——— */
-.celestial-world[data-motion=off] :is(.sky-link .star-glyph, .reel-constellation-glow, .charting-rings, .charting-sweep, .charting-orbit, .charting-slots i, .welcome-aperture-sheen, .welcome-heart .star-glyph, .welcome-sky-star > i, .your-sky-empty .star-glyph, .your-sky-star-image > span .star-glyph, .afterimage-log-kicker .star-glyph, .reel-constellation-kicker .star-glyph) { animation-play-state: paused; }
+.celestial-world[data-motion=off] :is(.developing-lines i, .sky-link .star-glyph, .reel-constellation-glow, .charting-rings, .charting-sweep, .charting-orbit, .charting-slots i, .welcome-aperture-sheen, .welcome-heart .star-glyph, .welcome-sky-star > i, .your-sky-empty .star-glyph, .your-sky-star-image > span .star-glyph, .afterimage-log-kicker .star-glyph, .reel-constellation-kicker .star-glyph) { animation-play-state: paused; }
 .celestial-world[data-motion=off] .reel-constellation-reticle::before { animation-play-state: paused; }
 @media (prefers-reduced-motion: reduce) {
   .reel-constellation-thread line, .welcome-sky line { animation: none; stroke-dashoffset: 0; }
   .reel-constellation-star, .welcome-sky-star > i, .your-sky-panel, .afterimage-log, .welcome-aperture-layer.is-entering, .your-sky-star-image img { animation: none; }
   .charting-rings, .charting-sweep, .charting-orbit, .charting-slots i, .welcome-aperture-sheen, .reel-constellation-glow, .reel-constellation-reticle::before, .star-glyph { animation: none !important; }
+  .developing-in, .developing-palette i, .developing-reel li.is-arrived, .developing-reel li.is-arrived .developing-frame, .developing-lines i { animation: none; }
   .charting-slots i { opacity: .5; }
 }
 
@@ -404,6 +435,8 @@
   .charting-orrery { max-width: 220px; margin: 0 auto; }
   .charting-room--replacement { grid-template-columns: 90px 1fr; }
   .charting-room--replacement .charting-orrery { max-width: 90px; margin: 0; }
+  .charting-room.is-developing .charting-orrery { max-width: 150px; }
+  .developing-film strong { font-size: 18px; }
   .welcome-chapters { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 14px; }
   .welcome-chapters button { font-size: 20px; min-height: 56px; }
   .welcome-planet { width: 15%; }

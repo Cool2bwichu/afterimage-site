@@ -44,14 +44,19 @@ export function createTmdbClient({
 }: TmdbOptions) {
   const credential = token.trim();
   if (!credential) throw new Error('TMDB is not configured.');
+  // TMDB issues two credentials: the API Read Access Token, sent as a bearer
+  // token, and the shorter v3 API key, which TMDB accepts only as `api_key`.
+  const apiKey = /^[0-9a-f]{32}$/i.test(credential);
 
   async function requestJson(url: URL): Promise<unknown> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
+    const target = new URL(url);
+    if (apiKey) target.searchParams.set('api_key', credential);
     try {
-      const response = await fetchImpl(url, {
+      const response = await fetchImpl(target, {
         method: 'GET',
-        headers: { Authorization: `Bearer ${credential}`, Accept: 'application/json' },
+        headers: apiKey ? { Accept: 'application/json' } : { Authorization: `Bearer ${credential}`, Accept: 'application/json' },
         cache: 'no-store',
         signal: controller.signal,
       });

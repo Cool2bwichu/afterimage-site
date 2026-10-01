@@ -5,6 +5,13 @@ import { FilmDossier } from './components/film-dossier';
 import { AtlasWorkspace } from './components/atlas';
 import { parseFilmSearchResults, type FilmSearchResult } from './lib/film-search';
 import { Landing, nextWelcomeFilm, type WelcomeFilm } from './components/landing';
+import { EyeTest } from './components/eye-test';
+import { CollisionChamber, useCollision } from './components/collision-chamber';
+import { CollidePicker, type PartnerGroup } from './components/collide-picker';
+import { FilmVerbs, useHold, type FilmVerb, type VerbFilm, type VerbMenu } from './components/film-verbs';
+import type { CollisionFilm } from './lib/collision';
+import { ROOM_DEFAULT, filmLight } from './lib/film-light';
+import { zoomTransition } from './components/zoom';
 import { ATLAS_STORAGE_KEY, buildAtlasInput, parseAtlasInputRequest, type AtlasInput } from './lib/atlas';
 import { ATLAS_TRAIL_STORAGE_KEY, parseAtlasTrail, activeAtlasStop, emptyAtlasTrail, type AtlasTrail } from './lib/atlas-trail';
 import { CollectionMenu } from './components/collection-menu';
@@ -31,6 +38,9 @@ import { movieKey } from './lib/movie-metadata';
 import { MAX_LIKED_FILMS, TASTE_STORAGE_KEY, parseLikedFilms, toggleLikedFilm, type LikedFilm } from './lib/taste-profile';
 import type { AfterimageResultV2, ExcludedFilm, DevelopInput, Experience } from './lib/reel-state';
 import { GenerationPollError, pollGeneration } from './lib/generation-poller';
+import type { JobDraft } from './lib/generation-state';
+import { statusModelLabel } from './lib/claude';
+import { answersInPage, apiFetch, savePassphrase, usesRemoteCompanion } from './lib/api';
 import {
   isGenerationJobId,
   parseJobStart,
@@ -50,12 +60,17 @@ import {
 } from './lib/reel-state';
 
 const STORAGE_KEY = 'afterimage:mobile-state';
-type ConnectionState = 'checking' | 'connected' | 'disconnected' | 'unreachable';
-type AuthFlow = { verificationUrl: string; userCode: string } | null;
+type ConnectionState = 'checking' | 'connected' | 'disconnected' | 'unreachable' | 'locked';
 type JobStatus = 'queued' | 'running' | 'reconnecting' | 'failed' | null;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+// The GitHub Pages build reaches the companion directly; it answers 401 with this
+// code until the owner's passphrase is entered in this browser.
+function lockedOut(value: unknown): boolean {
+  return isRecord(value) && (value.code === 'PASSPHRASE_REQUIRED' || value.code === 'PASSPHRASE_THROTTLED');
 }
 
 function responseMessage(value: unknown, fallback: string): string {
@@ -128,10 +143,14 @@ export default function Home() {
   const [facetUndo, setFacetUndo] = useState<{ facets: SelectedFacets; identity: string } | null>(null);
   const [error, setError] = useState('');
   const [connection, setConnection] = useState<ConnectionState>('checking');
-  const [authFlow, setAuthFlow] = useState<AuthFlow>(null);
+  const [claudeModel, setClaudeModel] = useState<string | null>(null);
+  const [connectionNote, setConnectionNote] = useState('');
+  const [passphraseDraft, setPassphraseDraft] = useState('');
   const [connecting, setConnecting] = useState(false);
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [jobStatus, setJobStatus] = useState<JobStatus>(null);
+  // What the running job has developed so far; provisional and never saved.
+  const [jobDraft, setJobDraft] = useState<JobDraft | null>(null);
   const [starting, setStarting] = useState(false);
   const [pollRevision, setPollRevision] = useState(0);
   const [composerOpen, setComposerOpen] = useState(false);
@@ -154,21 +173,49 @@ export default function Home() {
     ? acceptedInputForResumedJob(activeJobId, acceptedInputJobId || undefined, acceptedInput)
     : undefined;
 
-  const refreshConnection = useCallback(async (silent = false) => {
+  const refreshConnection = useCallback(async (silent = false): Promise<ConnectionState> => {
     if (!silent) setConnection('checking');
+    let next: ConnectionState;
     try {
-      const response = await fetch('/api/status', { cache: 'no-store' });
+      const response = await apiFetch('/api/status', { cache: 'no-store' });
       const payload = await response.json();
+      if (response.ok) setClaudeModel(statusModelLabel(payload));
       if (response.ok && isRecord(payload) && payload.authenticated) {
-        setConnection('connected');
-        setAuthFlow(null);
+        next = 'connected';
+        setConnectionNote('');
+      } else if (lockedOut(payload)) {
+        next = 'locked';
+        if (response.status === 429) setConnectionNote(responseMessage(payload, 'Too many wrong attempts. Try again in a few minutes.'));
       } else {
-        setConnection(response.status === 503 || response.status === 502 ? 'unreachable' : 'disconnected');
+        next = response.status === 503 || response.status === 502 ? 'unreachable' : 'disconnected';
       }
     } catch {
-      setConnection('unreachable');
+      next = 'unreachable';
     }
+    setConnection(next);
+    return next;
   }, []);
+
+  async function unlockCompanion(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const passphrase = passphraseDraft.trim();
+    if (!passphrase) return;
+    setConnecting(true);
+    setConnectionNote('');
+    if (!savePassphrase(passphrase)) {
+      setConnectionNote('This browser would not keep the passphrase. Allow site storage, then try again.');
+      setConnecting(false);
+      return;
+    }
+    const next = await refreshConnection();
+    if (next === 'locked') {
+      savePassphrase('');
+      setConnectionNote((current) => current || 'That passphrase did not unlock the companion.');
+    } else {
+      setPassphraseDraft('');
+    }
+    setConnecting(false);
+  }
 
   useEffect(() => {
     const hydration = window.setTimeout(() => {
@@ -349,7 +396,10 @@ export default function Home() {
     setCollectionOpener(opener); setLibraryOpener(opener); setAtlasOpener(opener); setSkyOpener(opener);
     const url = new URL(location.href); url.hash = hash;
     if (location.hash !== hash) history.pushState({ afterimageOverlay: true }, '', url);
-    window.dispatchEvent(new PopStateEvent('popstate'));
+    // Your sky is the widest view: opening it zooms out, and a reel or Atlas chosen in it zooms in.
+    const reveal = () => window.dispatchEvent(new PopStateEvent('popstate'));
+    const direction = hash === '#sky' ? 'out' : /^#(reel|atlas)=/.test(hash) ? 'in' : null;
+    if (direction) zoomTransition(opener, direction, reveal); else reveal();
   }
   function closeCollection() {
     if (history.state?.afterimageOverlay) history.back();
@@ -464,12 +514,6 @@ export default function Home() {
   }, [refreshConnection]);
 
   useEffect(() => {
-    if (!authFlow || connection === 'connected') return;
-    const timer = window.setInterval(() => void refreshConnection(true), 2200);
-    return () => window.clearInterval(timer);
-  }, [authFlow, connection, refreshConnection]);
-
-  useEffect(() => {
     if (!hydrated || !activeJobId || connection !== 'connected') return;
 
     const controller = new AbortController();
@@ -479,7 +523,7 @@ export default function Home() {
         const terminal = await pollGeneration({
           signal: controller.signal,
           fetchStatus: async (signal) => {
-            const response = await fetch(`/api/generations/${encodeURIComponent(activeJobId)}`, {
+            const response = await apiFetch(`/api/generations/${encodeURIComponent(activeJobId)}`, {
               cache: 'no-store',
               signal,
             });
@@ -502,6 +546,9 @@ export default function Home() {
             if (job.status === 'queued' || job.status === 'running') {
               setJobStatus(job.status);
               setJobStartedAt(Date.parse(job.createdAt));
+              setJobDraft(job.status === 'running' && job.draft ? job.draft : null);
+            } else {
+              setJobDraft(null);
             }
           },
           onTransientError: () => {
@@ -574,7 +621,7 @@ export default function Home() {
       }
     })();
 
-    return () => controller.abort();
+    return () => { controller.abort(); setJobDraft(null); };
   // Result and displayed input remain stable while this accepted job is running.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeJobId, connection, hydrated, pollRevision, experience, lightTableEnabled, selectedFacets, selectedReelIdentity, acceptedInput, acceptedInputJobId, replacementJob]);
@@ -586,10 +633,40 @@ export default function Home() {
     return () => window.clearInterval(timer);
   }, [developing, jobStartedAt]);
 
+  useEffect(() => {
+    if (connection !== 'connected' || !pendingAnswer.current || developing || activeJobId) return;
+    const input = pendingAnswer.current;
+    pendingAnswer.current = null;
+    setComposerOpen(false);
+    void developReel(false, [], input);
+    // Only a newly working connection releases an answer given while locked.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connection]);
+
   const recommendationIdentity = useMemo(
     () => getRecommendationIdentity(result),
     [result],
   );
+
+  // Films that arrive in a developing reel get their posters early, so the finished reel
+  // opens with them. Like every lookup, this is best effort.
+  const draftLookups = useRef(new Set<string>());
+  const draftFilms = useMemo(() => [...(jobDraft?.recommendations ?? []), ...(jobDraft?.recommendation ? [jobDraft.recommendation] : [])], [jobDraft]);
+  useEffect(() => {
+    const pending = draftFilms.filter(film => {
+      const key = movieKey(film.title, film.year);
+      return !metadataByKey[key] && !draftLookups.current.has(key);
+    }).slice(0, 5);
+    if (!pending.length) return;
+    pending.forEach(film => draftLookups.current.add(movieKey(film.title, film.year)));
+    void fetchFilmEnrichment({ recommendations: pending })
+      .then(records => setMetadataByKey(current => ({ ...current, ...persistableEnrichment(records) })))
+      .catch(() => { /* The finished reel looks its films up again. */ });
+  }, [draftFilms, metadataByKey]);
+  const draftPoster = useCallback((film: { title: string; year: string }) => {
+    const record = metadataByKey[movieKey(film.title, film.year)];
+    return record?.status === 'matched' ? record.posterUrl ?? null : null;
+  }, [metadataByKey]);
 
   useEffect(() => {
     if (!result || !recommendationIdentity) return;
@@ -663,9 +740,12 @@ export default function Home() {
     setAtlasChoices([]);
     setNotice('');
     try {
-      const response = await fetch(`/api/films/search?q=${encodeURIComponent(query)}`, { signal: AbortSignal.timeout(10000) });
-      if (!response.ok) throw new Error('Film search could not connect. Try again.');
-      const payload = await response.json();
+      const response = await apiFetch(`/api/films/search?q=${encodeURIComponent(query)}`, { signal: AbortSignal.timeout(10000) });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        setNotice(responseMessage(payload, 'Film search could not connect. Try again.'));
+        return;
+      }
       if (!isRecord(payload) || !Array.isArray(payload.films)) throw new Error('Film search could not connect. Try again.');
       const matches = parseFilmSearchResults(payload.films);
       const exact = matches.filter(film => [film.title, `${film.title} (${film.year})`, `${film.title} ${film.year}`]
@@ -688,21 +768,22 @@ export default function Home() {
     setSelectedRecommendation(null);
   }
 
+  // Claude runs on the companion's Anthropic key, so there is no sign-in to start:
+  // the companion re-checks the key and says plainly what is missing.
   async function startConnection() {
     setConnecting(true);
     setError('');
     try {
-      const response = await fetch('/api/connect', { method: 'POST' });
+      const response = await apiFetch('/api/connect', { method: 'POST' });
       const payload = await response.json();
-      if (!response.ok || !isRecord(payload)) throw new Error(responseMessage(payload, 'ChatGPT sign-in could not start.'));
-      if (payload.alreadyAuthenticated) {
+      if (response.ok && isRecord(payload) && payload.alreadyAuthenticated) {
         await refreshConnection();
-      } else if (typeof payload.verificationUrl === 'string' && typeof payload.userCode === 'string') {
-        setAuthFlow({ verificationUrl: payload.verificationUrl, userCode: payload.userCode });
-        setConnection('disconnected');
-      } else throw new Error('ChatGPT sign-in could not start.');
-    } catch (connectionError) {
-      setError(connectionError instanceof Error ? connectionError.message : 'ChatGPT sign-in could not start.');
+        return;
+      }
+      setConnection(isRecord(payload) && payload.code === 'CLAUDE_NOT_CONNECTED' ? 'disconnected' : 'unreachable');
+      setConnectionNote(responseMessage(payload, 'Claude could not be reached.'));
+    } catch {
+      setConnectionNote('Claude could not be reached.');
       setConnection('unreachable');
     } finally {
       setConnecting(false);
@@ -738,7 +819,7 @@ export default function Home() {
     setError('');
     setNotice('');
     try {
-      const response = await fetch('/api/generations', {
+      const response = await apiFetch('/api/generations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(input),
@@ -757,6 +838,11 @@ export default function Home() {
         payload.code === 'ACTIVE_GENERATION' &&
         isGenerationJobId(payload.jobId)
       ) {
+        // A collision holds the slot for a moment; it is not a reel to resume.
+        if (payload.jobId === collision.state?.jobId) {
+          setNotice('A collision is developing. Your reel can start as soon as it lands.');
+          return;
+        }
         const resumed = transitionLightTableJob({
           activeJobId,
           selectedFacets,
@@ -774,7 +860,7 @@ export default function Home() {
         return;
       }
 
-      if (response.status === 401) setConnection('disconnected');
+      if (response.status === 401) setConnection(lockedOut(payload) ? 'locked' : 'disconnected');
       if (response.status !== 202) {
         throw new Error(responseMessage(payload, 'The reel could not enter the gate.'));
       }
@@ -855,7 +941,7 @@ export default function Home() {
     setElapsedSeconds(0); setJobStartedAt(null);
     try {
       const request = withCurrentExclusions({ ...displayedInput, likedFilms }, excludedFilms);
-      const response = await fetch('/api/replacements/generations', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request, reel: result, replaceIndex: index }) });
+      const response = await apiFetch('/api/replacements/generations', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request, reel: result, replaceIndex: index }) });
       const payload: unknown = await response.json();
       if (response.status !== 202) throw new Error(responseMessage(payload, response.status === 409 ? 'Another discovery is still developing. Your reel is unchanged.' : 'This film could not be replaced. Your reel is unchanged.'));
       const job = parseJobStart(payload);
@@ -964,7 +1050,8 @@ export default function Home() {
     const input = buildAtlasInput(identity, request, excludedFilms, likedFilms);
     lastAtlasTarget.current = input;
     if (location.hash !== '#atlas') { const url = new URL(location.href); url.hash = 'atlas'; history.pushState({ afterimageOverlay: true }, '', url); }
-    setAtlasTarget(input);
+    // From a film into its neighbourhood: the view zooms toward the film you chose.
+    zoomTransition(opener, 'in', () => setAtlasTarget(input));
     setSelectedRecommendation(null);
   }
 
@@ -986,6 +1073,106 @@ export default function Home() {
       else filmInputRef.current?.focus({ preventScroll: true });
     });
   }
+  // The claude.ai Artifact edition answers in the page and cannot reach the film catalogue.
+  const catalogueReachable = connection === 'connected' && !answersInPage;
+
+  // Collisions: two films, and the one film between them.
+  const [collidePick, setCollidePick] = useState<{ film: CollisionFilm; opener: HTMLElement | null } | null>(null);
+  const [collisionOpener, setCollisionOpener] = useState<HTMLElement | null>(null);
+  const recheckConnection = useCallback(() => { void refreshConnection(true); }, [refreshConnection]);
+  const collisionFound = useCallback((found: { films: [CollisionFilm, CollisionFilm]; film: CollisionFilm }) => {
+    setNotice(`Between ${found.films[0].title} and ${found.films[1].title}: ${found.film.title}.`);
+  }, []);
+  const collision = useCollision({ onLocked: recheckConnection, onFound: collisionFound });
+  function startCollision(first: CollisionFilm, second: CollisionFilm, opener: HTMLElement | null) {
+    setCollidePick(null);
+    if (collision.state && (collision.state.status === 'starting' || collision.state.status === 'developing')) {
+      collision.reopen();
+      setNotice('One collision at a time. This one is still developing.');
+      return;
+    }
+    const identity = (film: CollisionFilm): CollisionFilm => {
+      const record = metadataByKey[movieKey(film.title, film.year)];
+      const tmdbId = film.tmdbId ?? (record?.status === 'matched' ? record.tmdbId : undefined);
+      return { title: film.title, year: film.year, ...(tmdbId ? { tmdbId } : {}) };
+    };
+    setCollisionOpener(opener);
+    void collision.start(identity(first), identity(second), {
+      excludedFilms, likedFilms, creativeBrief: displayedInput?.creativeBrief ?? '',
+      reelFilms: result?.recommendations.map(({ title, year }) => ({ title, year })) ?? [],
+    });
+  }
+  function partnerGroups(): PartnerGroup[] {
+    return [
+      { label: 'In this reel', films: result?.recommendations.map(({ title, year }) => ({ title, year })) ?? [] },
+      { label: 'Films you liked', films: [...likedFilms].reverse() },
+      { label: 'Saved for later', films: [...watchlist].reverse() },
+      { label: 'Films you watched', films: [...afterimages].reverse().map(({ title, year, tmdbId }) => ({ title, year, ...(tmdbId ? { tmdbId } : {}) })) },
+    ];
+  }
+
+  // A film's verbs, under a long press, a right-click or the menu key.
+  const [verbMenu, setVerbMenu] = useState<VerbMenu | null>(null);
+  const closeVerbs = useCallback(() => setVerbMenu(null), []);
+  function openVerbs(film: VerbFilm, element: HTMLElement, point: { x: number; y: number }, index?: number) {
+    const key = movieKey(film.title, film.year);
+    const reelFilm = index !== undefined ? result?.recommendations[index] : undefined;
+    const inReel = Boolean(reelFilm && movieKey(reelFilm.title, reelFilm.year) === key);
+    const online = connection === 'connected';
+    const verbs: FilmVerb[] = [
+      { id: 'collide', label: 'Collide with…', detail: 'Find the film between two', disabled: !online, run: opener => setCollidePick({ film, opener }) },
+      { id: 'atlas', label: 'Explore its connections', detail: 'Open its Atlas', disabled: !online || reelLocked,
+        run: opener => { if (inReel && reelFilm) openAtlas(reelFilm, opener); else openAtlas(film, opener, false, true); } },
+      ...(inReel && index !== undefined && lightTableEnabled && reelFilm?.facets ? [{
+        id: 'borrow', label: 'Borrow its qualities', detail: 'Carry them into your next reel', disabled: reelLocked,
+        run: () => {
+          setScreeningIndex(index);
+          window.setTimeout(() => {
+            const qualities = document.querySelector<HTMLElement>('.screening-qualities');
+            qualities?.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth', block: 'center' });
+            qualities?.querySelector<HTMLButtonElement>('button')?.focus({ preventScroll: true });
+          }, 60);
+        },
+      }] : []),
+      { id: 'watched', label: afterimageKeys.has(key) ? 'Your ticket stub' : 'Watched it?', detail: afterimageKeys.has(key) ? 'Revisit what stayed' : 'Keep what stayed, and a ticket stub', run: opener => openAfterimage(film, opener) },
+      { id: 'like', label: likedKeys.has(key) ? 'Unlike' : 'Like', run: () => toggleLike({ title: film.title, year: film.year }) },
+      { id: 'save', label: savedKeys.has(key) ? 'Remove from watchlist' : 'Save for later', run: () => toggleSave(film) },
+      ...(inReel && index !== undefined && displayedInput && online ? [{ id: 'replace', label: 'Replace this film', disabled: reelLocked, run: () => void replaceFilm(index) }] : []),
+    ];
+    setVerbMenu({ film, verbs, x: point.x, y: point.y, opener: element });
+  }
+  const holdFilm = useHold<{ film: VerbFilm; index?: number }>((payload, element, point) => openVerbs(payload.film, element, point, payload.index));
+
+  // The entrance's one question: the answer becomes the request and develops at once,
+  // or right after the companion is unlocked.
+  const pendingAnswer = useRef<DevelopInput | null>(null);
+  const [eyeTest, setEyeTest] = useState<{ opener: HTMLElement | null; sitting: number } | null>(null);
+  function openEyeTest() {
+    setEyeTest({ opener: document.activeElement instanceof HTMLElement ? document.activeElement : null, sitting: Date.now() });
+  }
+  function answerQuestion(request: { films: string[]; creativeBrief: string }) {
+    leaveWelcomePreview();
+    const lightTableDefault = new URLSearchParams(location.search).get('experience') !== 'standard';
+    const useLightTable = hasSession ? lightTableEnabled : lightTableDefault;
+    if (!hasSession && lightTableDefault) setExperience(LIGHT_TABLE_EXPERIENCE);
+    setFilms(request.films);
+    setCreativeBrief(request.creativeBrief);
+    setDraft('');
+    clearFacetSelections();
+    setLandingOpen(false);
+    const input: DevelopInput = {
+      ...buildDevelopPayload(request.films, request.creativeBrief, normalizeExcludedFilms(excludedFilms)),
+      ...(useLightTable ? { experience: LIGHT_TABLE_EXPERIENCE } : {}),
+    };
+    requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: 'instant' }));
+    if (connection === 'connected') {
+      setComposerOpen(false);
+      void developReel(false, [], input);
+    } else {
+      pendingAnswer.current = input;
+      setComposerOpen(true);
+    }
+  }
   function goHome() {
     leaveWelcomePreview();
     if (result) setComposerOpen(false);
@@ -993,18 +1180,23 @@ export default function Home() {
     requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: 'instant' }));
   }
 
+  // The room takes the light of the film on screen, and warms for a film you love.
+  const screenFilm = result?.recommendations[screeningIndex];
+  const roomLight = result ? filmLight(result.palette, screeningIndex) : ROOM_DEFAULT;
+  const roomLoved = Boolean(screenFilm && likedKeys.has(movieKey(screenFilm.title, screenFilm.year)));
+
   const collectionMenu = <CollectionMenu atlasCount={atlasTrail.maps.length} reelCount={reels.length} savedCount={watchlist.length} likedCount={likedFilms.length} starCount={starCount} afterimageCount={afterimages.length} recentAtlas={activeAtlasStop(atlasTrail) ?? undefined} onNavigate={navigateCollection} />;
   const skyLink = <a className={`sky-link${hydrated && !starCount ? ' is-empty' : ''}`} href="#sky" onClick={event => { if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); navigateCollection('#sky', event.currentTarget); }}>
     <StarGlyph /><span>Your sky</span>{hydrated && starCount ? <small>{starCount}</small> : null}</a>;
 
   return (
-    <main data-ready={hydrated} className={`site-shell projection-room${lightTableEnabled ? ' has-light-table' : ''}${result ? ' has-reel' : ''}${showLanding ? ' is-landing' : ''}`}
-      style={{ '--reel-color': result?.palette[2] || '#254438' } as CSSProperties}>
+    <main data-ready={hydrated} className={`site-shell projection-room${lightTableEnabled ? ' has-light-table' : ''}${result ? ' has-reel' : ''}${showLanding ? ' is-landing' : ''}${roomLoved ? ' is-loved' : ''}`}
+      style={{ '--reel-color': roomLight } as CSSProperties}>
       {!showLanding ? <CelestialSky variant="page" /> : null}
       <div className="wrap">
         <header className="masthead">
           <h1 className="title"><button type="button" aria-label="Afterimage home" onClick={goHome}><OrbitMark />AFTERIMAGE</button></h1>
-          {showLanding ? <nav className="welcome-home-nav" aria-label="Welcome navigation"><MotionToggle /><a href="#discover-afterimage">How it works</a>{skyLink}{collectionMenu}</nav> : <div className="masthead-actions">
+          {showLanding ? <nav className="welcome-home-nav" aria-label="Welcome navigation"><MotionToggle />{skyLink}{collectionMenu}</nav> : <div className="masthead-actions">
             <MotionToggle />
             <span className={`privacy-mark ${connection === 'connected' ? 'is-connected' : ''}`}>
               <i aria-hidden="true" />{connection === 'connected' ? 'Connected' : connection === 'checking' ? 'Connecting…' : 'Not connected'}
@@ -1017,7 +1209,8 @@ export default function Home() {
             {collectionMenu}
           </div>}
         </header>
-        {showLanding ? <Landing featuredFilm={featuredFilm} onStart={enterReel} hasDraft={hasSession} hasReel={Boolean(result)} /> : null}
+        {showLanding ? <Landing featuredFilm={featuredFilm} onStart={() => enterReel()} onAnswer={answerQuestion} onEyeTest={() => openEyeTest()}
+          canSearch={catalogueReachable} hasDraft={hasSession} hasReel={Boolean(result)} /> : null}
         <div className="reel-workspace" hidden={showLanding}>
         {!hydrated ? <p className="opening" role="status">Opening your reel…</p> : null}
         {!result ? <div className="arrival">
@@ -1035,33 +1228,39 @@ export default function Home() {
           <ChartingRoom variant={replacementJob ? 'replacement' : 'reel'} message={replacementJob ? 'Finding one new film' : leaderMessage}
             detail={result ? 'Your previous reel is still here. You can browse it while you wait.' : 'You can refresh this page; your accepted reel will resume.'}
             elapsed={jobStartedAt !== null ? `${Math.floor(elapsedSeconds / 60)}:${String(elapsedSeconds % 60).padStart(2, '0')}` : null}
-            sources={chartingSources} />
+            sources={chartingSources} draft={jobDraft} posterFor={draftPoster} />
         ) : null}
 
         {connection !== 'connected' && connection !== 'checking' ? (
           <section className="connection-panel" aria-live="polite">
             <div>
-              <div className="connection-kicker">Private Intelligence</div>
-              <h2>Connect your ChatGPT account</h2>
+              <div className="connection-kicker">Private intelligence · Claude</div>
+              <h2>{connection === 'locked' ? 'Unlock AFTERIMAGE' : connection === 'unreachable' ? 'Claude is out of reach' : 'Connect Claude'}</h2>
               <p>
-                {connection === 'unreachable'
-                  ? 'The reel service is unavailable. Your films and saved reel remain on this device.'
-                  : 'Connect to develop recommendations. Your existing reel stays available while you reconnect.'}
+                {connection === 'locked'
+                  ? 'This copy of AFTERIMAGE talks to your private Claude companion. Enter its passphrase to continue; it stays in this browser.'
+                  : connection === 'unreachable'
+                    ? usesRemoteCompanion
+                      ? 'The companion is unavailable. Your films and saved reel remain on this device.'
+                      : 'The reel service is unavailable. Your films and saved reel remain on this device.'
+                    : answersInPage
+                      ? 'This copy of AFTERIMAGE asks Claude from inside claude.ai, on your own Claude account. Open it from your Artifacts in claude.ai, then check again. Your existing reel stays available.'
+                      : 'AFTERIMAGE is programmed by Claude through its private companion. Connect the companion to your Claude subscription, then check again. Your existing reel stays available.'}
               </p>
+              {connectionNote ? <p className="connection-note" role="status">{connectionNote}</p> : null}
             </div>
-            {!authFlow ? (
+            {connection === 'locked' ? (
+              <form className="connection-unlock" onSubmit={unlockCompanion}>
+                <label htmlFor="companion-passphrase" className="sr-only">Passphrase</label>
+                <input id="companion-passphrase" type="password" autoComplete="current-password" placeholder="Passphrase"
+                  value={passphraseDraft} onChange={(event) => setPassphraseDraft(event.target.value)} />
+                <button type="submit" disabled={connecting || !passphraseDraft.trim()}>{connecting ? 'Unlocking…' : 'Unlock'}</button>
+              </form>
+            ) : (
               <button type="button" onClick={startConnection} disabled={connecting}>
-                {connecting ? 'Starting…' : 'Connect ChatGPT'}
+                {connecting ? 'Checking…' : 'Check connection'}
               </button>
-            ) : null}
-            {authFlow ? (
-              <div className="device-flow">
-                <span>ONE-TIME CODE</span>
-                <strong>{authFlow.userCode}</strong>
-                <a href={authFlow.verificationUrl} target="_blank" rel="noreferrer">Open secure sign-in ↗</a>
-                <small>Return here after approving it. This page will reconnect automatically.</small>
-              </div>
-            ) : null}
+            )}
           </section>
         ) : null}
 
@@ -1156,7 +1355,7 @@ export default function Home() {
           <span>Light Table is on. Develop a new reel to reveal qualities you can borrow.</span>
           <button type="button" onClick={() => setComposerOpen(true)} disabled={reelLocked}>Open inputs</button>
         </div> : null}
-        {notice ? <div className="notice" role="status">{notice}{replacementUndo && !reelLocked ? <button type="button" onClick={() => { setResult(replacementUndo.result); setDisplayedInput(replacementUndo.input); setScreeningIndex(replacementUndo.index); setReplacementUndo(null); setNotice('Your previous film is back in the reel.'); }}>Undo replacement</button> : null}{facetUndo && !reelLocked ? <button type="button" onClick={() => { setSelectedFacets(facetUndo.facets); setSelectedReelIdentity(facetUndo.identity); setFacetUndo(null); setNotice('Previous blend restored.'); }}>Undo</button> : null}</div> : null}
+        {notice ? <div className="notice" role="status">{notice}{replacementUndo && !reelLocked ? <button type="button" onClick={() => { setResult(replacementUndo.result); setDisplayedInput(replacementUndo.input); setScreeningIndex(replacementUndo.index); setReplacementUndo(null); setNotice('Your previous film is back in the reel.'); }}>Undo replacement</button> : null}{facetUndo && !reelLocked ? <button type="button" onClick={() => { setSelectedFacets(facetUndo.facets); setSelectedReelIdentity(facetUndo.identity); setFacetUndo(null); setNotice('Previous blend restored.'); }}>Undo</button> : null}{collision.state && !collision.open ? <button type="button" onClick={collision.reopen}>{collision.state.status === 'complete' ? 'See the collision' : 'Back to the collision'}</button> : null}</div> : null}
         {error ? (
           <div className="error-banner" role="alert">
             <p>{error}</p>
@@ -1196,7 +1395,8 @@ export default function Home() {
 
             <ReelConstellation key={`constellation-${recommendationIdentity}`} seed={recommendationIdentity} name={result.persona} insight={result.insight} palette={result.palette}
               films={result.recommendations} selected={screeningIndex} onSelect={setScreeningIndex} onNotice={setNotice}
-              onOpenSky={opener => navigateCollection('#sky', opener)} />
+              onOpenSky={opener => navigateCollection('#sky', opener)} hold={holdFilm}
+              onCollide={connection === 'connected' ? (first, second, opener) => startCollision(result.recommendations[first], result.recommendations[second], opener) : undefined} />
             <ScreeningReel key={recommendationIdentity} films={result.recommendations} metadata={metadataByKey}
               selected={screeningIndex} onSelect={setScreeningIndex} onCompare={openComparison} onReplace={displayedInput && connection === 'connected' ? index => void replaceFilm(index) : undefined} pending={enrichmentPending} locked={reelLocked}
               likedKeys={likedKeys} savedKeys={savedKeys} afterimageKeys={afterimageKeys} onLike={toggleLike} onSave={toggleSave} onResolve={resolveFilm}
@@ -1204,7 +1404,7 @@ export default function Home() {
               selectedFacets={selectedFacets} onBorrow={lightTableEnabled ? handleSelectFacet : undefined}
               lightTable={selectedRecommendation === null && !atlasTarget ? lightTable : null}
               onOpen={(index, event) => openDossier(index, event.currentTarget)}
-              onExplore={(index, event) => openAtlas(result.recommendations[index], event.currentTarget)} />
+              onExplore={(index, event) => openAtlas(result.recommendations[index], event.currentTarget)} hold={holdFilm} />
             {lightTableEnabled && result.fingerprint ? <details className="reel-fingerprint"><summary>The qualities behind this reel <span>+</span></summary><SearchFingerprint fingerprint={result.fingerprint} insight={result.insight} /></details> : null}
 
             <section className="atlas-entry"><div><h3>Atlas</h3><p>Films are never alone. Explore the connections around a film, and find what carries through.</p></div><button type="button" disabled={developing} onClick={event => openAtlas(result.recommendations[screeningIndex] || result.recommendations[0], event.currentTarget)}>Explore connections ↗</button></section>
@@ -1293,7 +1493,7 @@ export default function Home() {
             </div>
           </details>
         </section>
-        <footer className="site-footer"><span>AFTERIMAGE · reasoned live, frame by frame</span>
+        <footer className="site-footer"><span>AFTERIMAGE · reasoned live by {claudeModel ?? 'Claude'}</span>
           <span className="ai-mode-note">{lightTableEnabled ? <a href="?experience=standard">Use standard reel</a> : <a href="?experience=light-table-v1">Enable Light Table</a>}</span>
         </footer>
         {result ? <ReelComparison first={comparison ? { recommendation: result.recommendations[comparison.first], metadata: metadataByKey[movieKey(result.recommendations[comparison.first].title, result.recommendations[comparison.first].year)], index: comparison.first } : null} second={comparison ? { recommendation: result.recommendations[comparison.second], metadata: metadataByKey[movieKey(result.recommendations[comparison.second].title, result.recommendations[comparison.second].year)], index: comparison.second } : null} opener={comparison?.opener ?? null} onClose={closeComparison} onSelect={index => { setScreeningIndex(index); closeComparison(); }} onBorrow={lightTableEnabled ? handleSelectFacet : undefined} selectedFacets={selectedFacets} facetDisabled={reelLocked} /> : null}
@@ -1307,13 +1507,25 @@ export default function Home() {
         <YourSky open={skyOpen} opener={skyOpener} onClose={closeSky} reels={reels} atlases={atlasTrail.maps} likes={likedFilms} watchlist={watchlist} afterimages={afterimages}
           metadataByKey={metadataByKey} likedKeys={likedKeys} savedKeys={savedKeys} canExplore={connection === 'connected' && !reelLocked}
           onLike={toggleLike} onSave={toggleSave} onLogAfterimage={(film, opener) => openAfterimage(film, opener)} onNavigate={navigateCollection}
+          onCollide={connection === 'connected' ? (film, opener) => setCollidePick({ film, opener }) : undefined}
           onExplore={(film, opener) => { setSkyOpen(false); openAtlas(film, skyOpener || opener, false, true); }}
           onBegin={() => { setSkyOpen(false); enterReel(); }} />
         <AfterimageLog key={afterimageTarget ? `afterimage:${movieKey(afterimageTarget.film.title, afterimageTarget.film.year)}` : 'afterimage-closed'} target={afterimageTarget?.film ?? null} opener={afterimageTarget?.opener ?? null}
           existing={afterimageTarget ? findAfterimage(afterimages, afterimageTarget.film) : undefined}
           liked={afterimageTarget ? likedKeys.has(movieKey(afterimageTarget.film.title, afterimageTarget.film.year)) : false}
-          saved={afterimageTarget ? savedKeys.has(movieKey(afterimageTarget.film.title, afterimageTarget.film.year)) : false}
+          saved={afterimageTarget ? savedKeys.has(movieKey(afterimageTarget.film.title, afterimageTarget.film.year)) : false} count={afterimages.length}
           onSave={saveAfterimage} onRemove={() => { if (afterimageTarget) forgetAfterimage(afterimageTarget.film); }} onClose={() => setAfterimageTarget(null)} />
+        <FilmVerbs menu={verbMenu} onClose={closeVerbs} />
+        {collidePick ? <CollidePicker film={collidePick.film} opener={collidePick.opener} groups={partnerGroups()} canSearch={catalogueReachable}
+          onClose={() => setCollidePick(null)} onChoose={partner => startCollision(collidePick.film, partner, collidePick.opener)} /> : null}
+        <CollisionChamber state={collision.state} open={collision.open} opener={collisionOpener} metadata={metadataByKey}
+          likedKeys={likedKeys} savedKeys={savedKeys} connected={connection === 'connected'}
+          onClose={collision.close} onLike={film => toggleLike({ title: film.title, year: film.year })} onSave={film => toggleSave(film)}
+          onRetry={() => { if (collision.state) { const [first, second] = collision.state.films; collision.clear(); startCollision(first, second, collisionOpener); } }}
+          onExplore={(film, opener) => { collision.close(); openAtlas(film, opener, false, true); }}
+          onCollideAgain={(film, opener) => { collision.clear(); setCollidePick({ film, opener }); }} />
+        {eyeTest ? <EyeTest key={eyeTest.sitting} opener={eyeTest.opener} canLookUp={catalogueReachable}
+          onClose={() => setEyeTest(null)} onFinish={request => { setEyeTest(null); answerQuestion(request); }} /> : null}
         <AtlasWorkspace target={atlasTarget} opener={atlasOpener} onClose={closeAtlas} onBusy={setAtlasBusy} preferSaved={atlasResume}
           requestedMapId={atlasMapId} onTrailChange={rememberAtlasTrail} onMapChange={updateAtlasAddress} navigation={collectionMenu}
           connected={connection === 'connected'} metadataByKey={metadataByKey} likedKeys={likedKeys} onLike={toggleLike} savedKeys={savedKeys} onSave={toggleSave}
