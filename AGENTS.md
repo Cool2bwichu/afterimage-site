@@ -12,6 +12,9 @@ whose private calls go to the companion behind a passphrase; see
 `docs/github-pages.md`, and keep the passphrase out of the repository too.
 `npm run build:artifact` builds the claude.ai Artifact edition, which asks
 Claude inside the page instead of through the companion (see `docs/claude.md`).
+`claude/observatory-claude` is also an experimental route for the interface
+(one question, the Eye Test, developing reels, collisions, film verbs); see
+`docs/encounters.md` before changing those experiences.
 
 ## Development
 

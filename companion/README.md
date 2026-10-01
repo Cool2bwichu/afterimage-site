@@ -4,6 +4,10 @@ The private service that programs AFTERIMAGE with Claude. It answers the same
 authenticated HTTP contract as `afterimage-subscription-bridge`, so the site's
 server routes (`/api/status`, `/api/connect`, `/api/generations`,
 `/api/atlas/generations`, `/api/replacements/generations`) talk to it unchanged.
+It adds two things the bridge does not have: collisions
+(`/v2/collisions/generations`, the one film between two), and a provisional
+`draft` on running jobs, so the site can show an answer as Claude writes it. See
+[../docs/encounters.md](../docs/encounters.md).
 
 It can also serve the browser directly, for the static GitHub Pages build of the
 site, which has no server of its own. In that case it answers the site's
@@ -121,7 +125,19 @@ Subscription mode needs the `claude` command on the companion's `PATH`, or
    none of them a reference, liked or excluded film. Light Table facets, Atlas
    lenses and catalogue identities are checked too. An answer that breaks a rule
    gets one more attempt, with the reason attached.
-6. Jobs are stored durably, so a refresh resumes the reel. A failed job carries
+6. **While it runs**, the answer streams. In subscription mode Claude Code runs
+   with `--include-partial-messages`; in API mode the Messages stream is read. A
+   tolerant partial-JSON reader turns the text so far into a draft of finished,
+   bounded display fields (`lib/drafts.mjs`). The draft is kept in memory on the
+   running job, appears as `draft` when the job is polled, and is never written
+   to disk. The validators still decide the finished answer; a second take
+   starts a new draft.
+7. **Collisions** use their own brief (`COLLISION_SYSTEM`) and contract
+   (`lib/collision-contract.mjs`). The film between the two may not be either
+   of them, a film already in the viewer's reel, an excluded film or a liked
+   one, and it is checked in the film catalogue. A collision thinks at medium
+   effort, or at the configured effort when that is lower.
+8. Jobs are stored durably, so a refresh resumes the reel. A failed job carries
    only a prepared explanation, never a raw error:
    - `AUTH_REQUIRED`
    - `CLAUDE_USAGE_LIMIT`
@@ -173,9 +189,10 @@ Then connect the site in one of two ways:
 
 `lib/in-page-companion.mjs` answers the same browser routes inside a claude.ai
 Artifact, where there is no server. It asks Claude through the Artifact's
-`sample` capability with the same brief, schemas and validators. Film search
-and film details answer `METADATA_NOT_CONFIGURED`, because an Artifact cannot
-reach TMDB. See `../docs/claude.md`.
+`sample` capability with the same brief, schemas and validators, streams drafts
+from `sample`'s `onText`, and answers collisions under the same content rules.
+Film search and film details answer `METADATA_NOT_CONFIGURED`, because an
+Artifact cannot reach TMDB. See `../docs/claude.md`.
 
 ## Tests
 
@@ -195,6 +212,10 @@ reach TMDB. See `../docs/claude.md`.
   - in-process film verification.
 - A contract test that parses the companion's jobs with the site's own
   `generation-state.ts`.
+- Streaming: the partial-JSON reader on every prefix of an answer, drafts in
+  the job store, Claude Code's stream events (thinking and subagent events are
+  never read as the answer) and the API stream with a fallback.
+- Collisions: the contract, prompt, effort cap, routes and in-page answers.
 
 ## Provenance
 

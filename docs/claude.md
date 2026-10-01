@@ -66,6 +66,13 @@ Browser ──> site server routes ──(bearer secret)──> companion/ ─�
 No browser storage key, request shape, job shape or route changed. Saved reels,
 Atlases, Likes, the watchlist and afterimages carry over between the two versions.
 
+Since 1 October this branch is also an experimental route for the interface:
+one question at the entrance, the Eye Test, reels and Atlases that develop on
+screen, collisions, a film's verbs under a long press, the room taking each
+film's light, ticket stubs and zooming through one sky. Running jobs gained an
+optional, provisional `draft`, and the companion gained a collision route; the
+rest of the contract is unchanged. See [encounters.md](encounters.md).
+
 ## GitHub Pages
 
 This version can also run as a static site on GitHub Pages, with the companion
