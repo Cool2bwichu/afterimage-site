@@ -10,6 +10,7 @@ import '../app/projection-room.css';
 import '../app/celestial.css';
 import '../app/collections.css';
 import '../app/observatory.css';
+import '../app/encounters.css';
 import './fonts.css';
 import { CelestialProvider } from '../app/components/celestial';
 import Home from '../app/page';

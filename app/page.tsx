@@ -5,6 +5,7 @@ import { FilmDossier } from './components/film-dossier';
 import { AtlasWorkspace } from './components/atlas';
 import { parseFilmSearchResults, type FilmSearchResult } from './lib/film-search';
 import { Landing, nextWelcomeFilm, type WelcomeFilm } from './components/landing';
+import { EyeTest } from './components/eye-test';
 import { ATLAS_STORAGE_KEY, buildAtlasInput, parseAtlasInputRequest, type AtlasInput } from './lib/atlas';
 import { ATLAS_TRAIL_STORAGE_KEY, parseAtlasTrail, activeAtlasStop, emptyAtlasTrail, type AtlasTrail } from './lib/atlas-trail';
 import { CollectionMenu } from './components/collection-menu';
@@ -623,6 +624,16 @@ export default function Home() {
     return () => window.clearInterval(timer);
   }, [developing, jobStartedAt]);
 
+  useEffect(() => {
+    if (connection !== 'connected' || !pendingAnswer.current || developing || activeJobId) return;
+    const input = pendingAnswer.current;
+    pendingAnswer.current = null;
+    setComposerOpen(false);
+    void developReel(false, [], input);
+    // Only a newly working connection releases an answer given while locked.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connection]);
+
   const recommendationIdentity = useMemo(
     () => getRecommendationIdentity(result),
     [result],
@@ -1047,6 +1058,36 @@ export default function Home() {
       else filmInputRef.current?.focus({ preventScroll: true });
     });
   }
+  // The entrance's one question: the answer becomes the request and develops at once,
+  // or right after the companion is unlocked.
+  const pendingAnswer = useRef<DevelopInput | null>(null);
+  const [eyeTest, setEyeTest] = useState<{ opener: HTMLElement | null; sitting: number } | null>(null);
+  function openEyeTest() {
+    setEyeTest({ opener: document.activeElement instanceof HTMLElement ? document.activeElement : null, sitting: Date.now() });
+  }
+  function answerQuestion(request: { films: string[]; creativeBrief: string }) {
+    leaveWelcomePreview();
+    const lightTableDefault = new URLSearchParams(location.search).get('experience') !== 'standard';
+    const useLightTable = hasSession ? lightTableEnabled : lightTableDefault;
+    if (!hasSession && lightTableDefault) setExperience(LIGHT_TABLE_EXPERIENCE);
+    setFilms(request.films);
+    setCreativeBrief(request.creativeBrief);
+    setDraft('');
+    clearFacetSelections();
+    setLandingOpen(false);
+    const input: DevelopInput = {
+      ...buildDevelopPayload(request.films, request.creativeBrief, normalizeExcludedFilms(excludedFilms)),
+      ...(useLightTable ? { experience: LIGHT_TABLE_EXPERIENCE } : {}),
+    };
+    requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: 'instant' }));
+    if (connection === 'connected') {
+      setComposerOpen(false);
+      void developReel(false, [], input);
+    } else {
+      pendingAnswer.current = input;
+      setComposerOpen(true);
+    }
+  }
   function goHome() {
     leaveWelcomePreview();
     if (result) setComposerOpen(false);
@@ -1065,7 +1106,7 @@ export default function Home() {
       <div className="wrap">
         <header className="masthead">
           <h1 className="title"><button type="button" aria-label="Afterimage home" onClick={goHome}><OrbitMark />AFTERIMAGE</button></h1>
-          {showLanding ? <nav className="welcome-home-nav" aria-label="Welcome navigation"><MotionToggle /><a href="#discover-afterimage">How it works</a>{skyLink}{collectionMenu}</nav> : <div className="masthead-actions">
+          {showLanding ? <nav className="welcome-home-nav" aria-label="Welcome navigation"><MotionToggle />{skyLink}{collectionMenu}</nav> : <div className="masthead-actions">
             <MotionToggle />
             <span className={`privacy-mark ${connection === 'connected' ? 'is-connected' : ''}`}>
               <i aria-hidden="true" />{connection === 'connected' ? 'Connected' : connection === 'checking' ? 'Connecting…' : 'Not connected'}
@@ -1078,7 +1119,8 @@ export default function Home() {
             {collectionMenu}
           </div>}
         </header>
-        {showLanding ? <Landing featuredFilm={featuredFilm} onStart={enterReel} hasDraft={hasSession} hasReel={Boolean(result)} /> : null}
+        {showLanding ? <Landing featuredFilm={featuredFilm} onStart={() => enterReel()} onAnswer={answerQuestion} onEyeTest={() => openEyeTest()}
+          canSearch={connection === 'connected'} hasDraft={hasSession} hasReel={Boolean(result)} /> : null}
         <div className="reel-workspace" hidden={showLanding}>
         {!hydrated ? <p className="opening" role="status">Opening your reel…</p> : null}
         {!result ? <div className="arrival">
@@ -1381,6 +1423,8 @@ export default function Home() {
           liked={afterimageTarget ? likedKeys.has(movieKey(afterimageTarget.film.title, afterimageTarget.film.year)) : false}
           saved={afterimageTarget ? savedKeys.has(movieKey(afterimageTarget.film.title, afterimageTarget.film.year)) : false}
           onSave={saveAfterimage} onRemove={() => { if (afterimageTarget) forgetAfterimage(afterimageTarget.film); }} onClose={() => setAfterimageTarget(null)} />
+        {eyeTest ? <EyeTest key={eyeTest.sitting} opener={eyeTest.opener} canLookUp={connection === 'connected'}
+          onClose={() => setEyeTest(null)} onFinish={request => { setEyeTest(null); answerQuestion(request); }} /> : null}
         <AtlasWorkspace target={atlasTarget} opener={atlasOpener} onClose={closeAtlas} onBusy={setAtlasBusy} preferSaved={atlasResume}
           requestedMapId={atlasMapId} onTrailChange={rememberAtlasTrail} onMapChange={updateAtlasAddress} navigation={collectionMenu}
           connected={connection === 'connected'} metadataByKey={metadataByKey} likedKeys={likedKeys} onLike={toggleLike} savedKeys={savedKeys} onSave={toggleSave}

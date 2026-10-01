@@ -1,0 +1,72 @@
+/* AFTERIMAGE · Encounters
+   The ways in that start from a film rather than a form: the Eye Test, collisions
+   between two films, a film's verbs under a long press, and the ticket stub a
+   watched film leaves. One large motion moment per screen; none without consent
+   from the device's reduced-motion setting. */
+
+/* ——— The Eye Test ——— */
+.eye-test { width: min(1180px, calc(100vw - 32px)); max-width: none; max-height: calc(100dvh - 32px); margin: auto; padding: 0; border: 1px solid #dec6a033; background: radial-gradient(ellipse at 50% 0%, #182433, #080d14 70%); color: var(--white); box-shadow: 0 40px 120px #000c; overflow: auto; }
+.eye-test::backdrop { background: #03060acc; backdrop-filter: blur(6px); }
+.eye-test-head { position: sticky; top: 0; z-index: 2; display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 6px 18px; padding: 20px 24px 14px; background: linear-gradient(#0b121bf2, #0b121bcc 70%, transparent); }
+.eye-test-kicker { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; margin: 0; color: var(--starlight); font: 500 10px var(--font-sans), sans-serif; letter-spacing: .16em; text-transform: uppercase; }
+.eye-test-head h2 { margin: 0; font: 400 clamp(30px, 3vw, 44px)/1.05 var(--font-display), Georgia, serif; }
+.eye-test-head h2:focus { outline: none; }
+.eye-test-progress { display: flex; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.eye-test-progress li { width: 22px; height: 3px; border-radius: 2px; background: #a7b6c533; transition: background .4s; }
+.eye-test-progress li.is-done { background: var(--starlight); }
+.eye-test-progress li.is-current { background: #dec6a088; }
+.eye-test-close { width: 44px; height: 44px; border: 0; background: none; color: var(--muted); font-size: 26px; cursor: pointer; }
+.eye-test-pair { padding: 0 24px 8px; animation: celestial-arrive 420ms both; }
+.eye-test-ask { margin: 0 0 14px; color: #c6ccd0; font-size: 15px; }
+.eye-test-ask span { color: var(--muted); font-size: 12px; margin-left: 8px; }
+.eye-test-frames { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.eye-test-choice { position: relative; display: grid; gap: 8px; padding: 0; border: 0; background: none; color: inherit; text-align: left; cursor: pointer; transition: transform .6s cubic-bezier(.2, .8, .2, 1), opacity .6s, filter .6s; }
+.eye-test-choice:disabled { cursor: default; }
+.eye-test-choice:hover:not(:disabled) .eye-frame { box-shadow: 0 0 0 1px var(--starlight), 0 24px 60px #000a; }
+.eye-test-choice:focus-visible { outline: 2px solid var(--starlight); outline-offset: 4px; }
+.eye-test-choice.is-chosen { transform: scale(1.025); }
+.eye-test-choice.is-chosen .eye-frame { box-shadow: 0 0 0 2px var(--starlight), 0 0 60px #dec6a044; }
+.eye-test-choice.is-passed { opacity: .38; filter: saturate(.3); transform: scale(.97); }
+.eye-test-pole { min-height: 20px; color: var(--starlight); font: italic 400 18px var(--font-display), Georgia, serif; }
+.eye-frame { position: relative; display: block; aspect-ratio: 16 / 9; overflow: hidden; background: #0b121b; box-shadow: 0 0 0 1px #a7b6c51f, 0 20px 50px #0008; transition: box-shadow .4s; }
+.eye-frame img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; animation: frame-expose 1600ms ease-out both; }
+.eye-frame::after { content: ''; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(180deg, transparent 55%, #05080ccc); }
+.eye-frame-paint { position: absolute; inset: 0; background: linear-gradient(170deg, var(--c), var(--a) 55%, var(--b)); }
+.eye-frame-paint i { position: absolute; border-radius: 50%; filter: blur(28px); opacity: .75; }
+.eye-frame-paint i:nth-child(1) { width: 60%; height: 70%; left: -8%; top: 20%; background: var(--b); }
+.eye-frame-paint i:nth-child(2) { width: 40%; height: 50%; right: 4%; top: 6%; background: var(--a); mix-blend-mode: screen; }
+.eye-frame-paint i:nth-child(3) { width: 120%; height: 30%; left: -10%; bottom: -12%; background: var(--c); }
+.eye-frame-look { position: absolute; z-index: 1; left: 16px; right: 16px; top: 14px; color: #fffaf0; font: italic 400 clamp(18px, 1.8vw, 24px)/1.25 var(--font-display), Georgia, serif; text-shadow: 0 2px 14px #000c; }
+.eye-frame-title { position: absolute; z-index: 1; left: 16px; right: 16px; bottom: 12px; opacity: 0; transform: translateY(6px); transition: opacity .5s, transform .5s; text-shadow: 0 2px 12px #000; }
+.eye-frame-title.is-shown { opacity: 1; transform: none; }
+.eye-frame-title strong { font: 400 clamp(20px, 2vw, 28px)/1.1 var(--font-display), Georgia, serif; }
+.eye-frame-title small { color: var(--starlight); font-size: 12px; }
+.eye-test-result { padding: 0 24px 8px; animation: celestial-arrive 420ms both; }
+.eye-test-result > p { margin: 0 0 16px; color: #c6ccd0; font-size: 15px; max-width: 60ch; }
+.eye-test-strip { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; margin: 0; padding: 0; list-style: none; }
+.eye-test-strip li { display: grid; gap: 8px; animation: develop-in 1200ms cubic-bezier(.2, .7, .2, 1) both; animation-delay: calc(var(--i) * 140ms); }
+.eye-test-strip .eye-frame { aspect-ratio: 4 / 5; }
+.eye-test-strip .eye-frame-look { font-size: 15px; }
+.eye-test-strip .eye-frame-title strong { font-size: 17px; }
+.eye-test-strip li > span { color: var(--starlight); font: italic 400 16px/1.2 var(--font-display), Georgia, serif; }
+.eye-test-actions { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: center; margin-top: 22px; }
+.eye-test-develop { display: inline-flex; align-items: center; gap: 26px; min-height: 52px; padding: 12px 20px; border: 1px solid var(--gold); background: var(--gold); color: #171d24; font: 500 14px var(--font-sans), sans-serif; cursor: pointer; }
+.eye-test-again { min-height: 44px; border: 0; background: none; color: #a9b6bf; font: 13px var(--font-sans), sans-serif; cursor: pointer; }
+.eye-test-note { margin: 0; padding: 14px 24px 20px; color: var(--muted); font-size: 11px; }
+
+@media (max-width: 760px) {
+  .eye-test { width: 100vw; max-height: 100dvh; height: 100dvh; border: 0; }
+  .eye-test-head { padding: 16px 16px 10px; }
+  .eye-test-pair, .eye-test-result { padding: 0 16px 8px; }
+  .eye-test-frames { grid-template-columns: 1fr; gap: 10px; }
+  .eye-test-frames .eye-frame { aspect-ratio: 16 / 8.2; }
+  .eye-test-ask span { display: block; margin: 2px 0 0; }
+  .eye-test-strip { grid-template-columns: repeat(5, minmax(120px, 1fr)); overflow-x: auto; padding-bottom: 6px; }
+  .eye-test-note { padding: 12px 16px 18px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .eye-test-pair, .eye-test-result, .eye-test-strip li, .eye-frame img { animation: none; }
+  .eye-test-choice, .eye-frame-title { transition: none; }
+  .eye-test-choice.is-chosen, .eye-test-choice.is-passed { transform: none; }
+}
