@@ -84,7 +84,7 @@ Subscription mode needs the `claude` command on the companion's `PATH`, or
 | `AFTERIMAGE_BRIDGE_SECRET` | `afterimage-local-development` outside production | Shared with a site that has server routes. At least 24 characters in production. Production needs this, the passphrase, or both. |
 | `AFTERIMAGE_SITE_PASSPHRASE` | none (browser routes closed) | Opens the browser routes for the GitHub Pages site. At least 16 characters in production. |
 | `AFTERIMAGE_ALLOWED_ORIGINS` | none | Comma-separated site origins allowed to call the browser routes, such as `https://cool2bwichu.github.io`. Required in production with a passphrase. |
-| `TMDB_READ_TOKEN` | none | TMDB read access token for the browser routes' film search and details. Without `AFTERIMAGE_FILM_METADATA_URL`, it also verifies Atlas and replacement films in-process. |
+| `TMDB_READ_TOKEN` | none | TMDB API Read Access Token or v3 API key, for the browser routes' film search and details. Without `AFTERIMAGE_FILM_METADATA_URL`, it also verifies Atlas and replacement films in-process. |
 | `TMDB_API_BASE` | TMDB's API | Only for tests against a stand-in. |
 | `AFTERIMAGE_FILM_METADATA_URL` | none | A site's `/api/films/enrich`, used to verify Atlas and replacement films when the site has server routes; HTTPS, or HTTP to `localhost`. |
 | `AFTERIMAGE_JOB_DIR` | `companion/data/generation-jobs` | Durable job files. Required in production; mount persistent storage. |

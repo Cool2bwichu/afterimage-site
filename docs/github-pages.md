@@ -61,7 +61,7 @@ Keep the token private. You will paste it into Railway only.
    | --- | --- |
    | `CLAUDE_CODE_OAUTH_TOKEN` | The token from step 1. |
    | `AFTERIMAGE_SITE_PASSPHRASE` | A passphrase of your choice, at least 16 characters. A few unrelated words work well. |
-   | `TMDB_READ_TOKEN` | Your TMDB API read access token, the same one the site uses. It is listed on themoviedb.org under *Settings → API*. |
+   | `TMDB_READ_TOKEN` | Your TMDB credential from themoviedb.org under *Settings → API*: either the API Read Access Token or the shorter v3 API key. |
 
    The image already sets:
    - `NODE_ENV=production`;

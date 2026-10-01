@@ -30,6 +30,28 @@ test('TMDB enrichment keeps the token in headers and safely projects one exact m
   assert.equal(JSON.stringify(result).includes(token), false);
 });
 
+test('a TMDB v3 API key is sent as api_key, never as a bearer token, and never returned', async () => {
+  const calls: Array<{ url: string; init?: RequestInit }> = [];
+  const key = '0123456789abcdef0123456789abcdef';
+  const fetchImpl = (async (input: string | URL | Request, init?: RequestInit) => {
+    calls.push({ url: String(input), init });
+    if (String(input).includes('/search/movie')) {
+      return Response.json({ results: [{ id: 843, title: 'In the Mood for Love', original_title: '花樣年華', release_date: '2000-09-29', adult: false }] });
+    }
+    return Response.json({ id: 843, title: 'In the Mood for Love', original_title: '花樣年華', adult: false, release_date: '2000-09-29',
+      poster_path: '/poster.jpg', overview: '', runtime: 98, genres: [], production_countries: [], credits: { crew: [] }, external_ids: {} });
+  }) as typeof fetch;
+
+  const result = await createTmdbClient({ token: key, fetchImpl }).enrichOne({ title: 'In the Mood for Love', year: '2000', key: 'in the mood for love|2000' });
+  assert.equal(result.status, 'matched');
+  for (const call of calls) {
+    assert.equal(new URL(call.url).searchParams.get('api_key'), key);
+    assert.equal(new Headers(call.init?.headers).get('authorization'), null);
+  }
+  assert.equal(new URL(calls[0].url).searchParams.get('query'), 'In the Mood for Love');
+  assert.equal(JSON.stringify(result).includes(key), false);
+});
+
 test('nearby catalog release year needs corroborating release-date evidence', async () => {
   const calls: string[] = [];
   const fetchImpl = (async (input: string | URL | Request) => {
