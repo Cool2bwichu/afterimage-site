@@ -1073,6 +1073,9 @@ export default function Home() {
       else filmInputRef.current?.focus({ preventScroll: true });
     });
   }
+  // The claude.ai Artifact edition answers in the page and cannot reach the film catalogue.
+  const catalogueReachable = connection === 'connected' && !answersInPage;
+
   // Collisions: two films, and the one film between them.
   const [collidePick, setCollidePick] = useState<{ film: CollisionFilm; opener: HTMLElement | null } | null>(null);
   const [collisionOpener, setCollisionOpener] = useState<HTMLElement | null>(null);
@@ -1207,7 +1210,7 @@ export default function Home() {
           </div>}
         </header>
         {showLanding ? <Landing featuredFilm={featuredFilm} onStart={() => enterReel()} onAnswer={answerQuestion} onEyeTest={() => openEyeTest()}
-          canSearch={connection === 'connected'} hasDraft={hasSession} hasReel={Boolean(result)} /> : null}
+          canSearch={catalogueReachable} hasDraft={hasSession} hasReel={Boolean(result)} /> : null}
         <div className="reel-workspace" hidden={showLanding}>
         {!hydrated ? <p className="opening" role="status">Opening your reel…</p> : null}
         {!result ? <div className="arrival">
@@ -1513,7 +1516,7 @@ export default function Home() {
           saved={afterimageTarget ? savedKeys.has(movieKey(afterimageTarget.film.title, afterimageTarget.film.year)) : false} count={afterimages.length}
           onSave={saveAfterimage} onRemove={() => { if (afterimageTarget) forgetAfterimage(afterimageTarget.film); }} onClose={() => setAfterimageTarget(null)} />
         <FilmVerbs menu={verbMenu} onClose={closeVerbs} />
-        {collidePick ? <CollidePicker film={collidePick.film} opener={collidePick.opener} groups={partnerGroups()} canSearch={connection === 'connected'}
+        {collidePick ? <CollidePicker film={collidePick.film} opener={collidePick.opener} groups={partnerGroups()} canSearch={catalogueReachable}
           onClose={() => setCollidePick(null)} onChoose={partner => startCollision(collidePick.film, partner, collidePick.opener)} /> : null}
         <CollisionChamber state={collision.state} open={collision.open} opener={collisionOpener} metadata={metadataByKey}
           likedKeys={likedKeys} savedKeys={savedKeys} connected={connection === 'connected'}
@@ -1521,7 +1524,7 @@ export default function Home() {
           onRetry={() => { if (collision.state) { const [first, second] = collision.state.films; collision.clear(); startCollision(first, second, collisionOpener); } }}
           onExplore={(film, opener) => { collision.close(); openAtlas(film, opener, false, true); }}
           onCollideAgain={(film, opener) => { collision.clear(); setCollidePick({ film, opener }); }} />
-        {eyeTest ? <EyeTest key={eyeTest.sitting} opener={eyeTest.opener} canLookUp={connection === 'connected'}
+        {eyeTest ? <EyeTest key={eyeTest.sitting} opener={eyeTest.opener} canLookUp={catalogueReachable}
           onClose={() => setEyeTest(null)} onFinish={request => { setEyeTest(null); answerQuestion(request); }} /> : null}
         <AtlasWorkspace target={atlasTarget} opener={atlasOpener} onClose={closeAtlas} onBusy={setAtlasBusy} preferSaved={atlasResume}
           requestedMapId={atlasMapId} onTrailChange={rememberAtlasTrail} onMapChange={updateAtlasAddress} navigation={collectionMenu}
