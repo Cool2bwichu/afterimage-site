@@ -243,3 +243,15 @@
   .site-shell.has-reel, .screening-stage { transition: none; }
 }
 @media (max-width: 760px) { .screening-projector { display: none; } .screening-stage { box-shadow: none; } }
+
+/* ——— One sky: zooming between its depths ——— */
+html[data-zoom]::view-transition-old(root), html[data-zoom]::view-transition-new(root) { transform-origin: var(--zoom-x, 50%) var(--zoom-y, 50%); mix-blend-mode: normal; }
+html[data-zoom=in]::view-transition-old(root) { animation: zoom-past 560ms cubic-bezier(.55, 0, .2, 1) both; }
+html[data-zoom=in]::view-transition-new(root) { animation: zoom-arrive 560ms cubic-bezier(.2, .75, .2, 1) both; }
+html[data-zoom=out]::view-transition-old(root) { animation: zoom-recede 560ms cubic-bezier(.55, 0, .2, 1) both; }
+html[data-zoom=out]::view-transition-new(root) { animation: zoom-reveal 560ms cubic-bezier(.2, .75, .2, 1) both; }
+@keyframes zoom-past { to { transform: scale(2.2); opacity: 0; filter: blur(4px); } }
+@keyframes zoom-arrive { from { transform: scale(.55); opacity: 0; } }
+@keyframes zoom-recede { to { transform: scale(.5); opacity: 0; } }
+@keyframes zoom-reveal { from { transform: scale(1.6); opacity: 0; filter: blur(3px); } }
+@media (prefers-reduced-motion: reduce) { html[data-zoom]::view-transition-old(root), html[data-zoom]::view-transition-new(root) { animation: none; } }

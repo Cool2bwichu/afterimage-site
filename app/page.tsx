@@ -11,6 +11,7 @@ import { CollidePicker, type PartnerGroup } from './components/collide-picker';
 import { FilmVerbs, useHold, type FilmVerb, type VerbFilm, type VerbMenu } from './components/film-verbs';
 import type { CollisionFilm } from './lib/collision';
 import { ROOM_DEFAULT, filmLight } from './lib/film-light';
+import { zoomTransition } from './components/zoom';
 import { ATLAS_STORAGE_KEY, buildAtlasInput, parseAtlasInputRequest, type AtlasInput } from './lib/atlas';
 import { ATLAS_TRAIL_STORAGE_KEY, parseAtlasTrail, activeAtlasStop, emptyAtlasTrail, type AtlasTrail } from './lib/atlas-trail';
 import { CollectionMenu } from './components/collection-menu';
@@ -395,7 +396,10 @@ export default function Home() {
     setCollectionOpener(opener); setLibraryOpener(opener); setAtlasOpener(opener); setSkyOpener(opener);
     const url = new URL(location.href); url.hash = hash;
     if (location.hash !== hash) history.pushState({ afterimageOverlay: true }, '', url);
-    window.dispatchEvent(new PopStateEvent('popstate'));
+    // Your sky is the widest view: opening it zooms out, and a reel or Atlas chosen in it zooms in.
+    const reveal = () => window.dispatchEvent(new PopStateEvent('popstate'));
+    const direction = hash === '#sky' ? 'out' : /^#(reel|atlas)=/.test(hash) ? 'in' : null;
+    if (direction) zoomTransition(opener, direction, reveal); else reveal();
   }
   function closeCollection() {
     if (history.state?.afterimageOverlay) history.back();
@@ -1046,7 +1050,8 @@ export default function Home() {
     const input = buildAtlasInput(identity, request, excludedFilms, likedFilms);
     lastAtlasTarget.current = input;
     if (location.hash !== '#atlas') { const url = new URL(location.href); url.hash = 'atlas'; history.pushState({ afterimageOverlay: true }, '', url); }
-    setAtlasTarget(input);
+    // From a film into its neighbourhood: the view zooms toward the film you chose.
+    zoomTransition(opener, 'in', () => setAtlasTarget(input));
     setSelectedRecommendation(null);
   }
 
