@@ -13,6 +13,16 @@ until click. Other pointer targets, keyboard focus, and touch scrolling keep
 their existing behavior. This does not start generation on mouse-down or change
 the selected release's canonical ID.
 
+Sites version 30 published this follow-up from
+`03316ef14922467030f0fbfc6d17a61853ac197b`. After reloading the live release,
+a native Safari click selected Paris, Texas (1984): the query changed to its
+canonical title, the status read "Ready to explore Paris, Texas (1984)", and
+Develop Atlas became enabled. The existing Midsommar map, saved Atlas URL,
+and nine-map trail remained intact. Generation was not started in this check.
+Seven focused lookup/Atlas tests, TypeScript, focused lint (one existing image
+advisory), and the production build passed. No physical touch-device test was
+performed for this follow-up.
+
 ## Original repair and checks
 
 The search form previously dismissed its results on every blur outside the form,
