@@ -188,3 +188,58 @@
   .collision-newborn, .collision-between, .collision-film, .collision-reason, .collision-inheritance, .film-verbs { animation: none; }
 }
 .celestial-world[data-motion=off] :is(.collision-orbit, .collision-orb, .collision-core > i) { animation-play-state: paused; }
+
+/* ——— Ticket stubs ——— */
+.ticket-stub { --paper: #efe6d2; --ink: #1d1a16; position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto; margin: 0; color: var(--ink); background: var(--paper); filter: drop-shadow(0 14px 26px #0009);
+  -webkit-mask: radial-gradient(circle 9px at 0 50%, #0000 98%, #000) left / 51% 100% no-repeat, radial-gradient(circle 9px at 100% 50%, #0000 98%, #000) right / 51% 100% no-repeat;
+  mask: radial-gradient(circle 9px at 0 50%, #0000 98%, #000) left / 51% 100% no-repeat, radial-gradient(circle 9px at 100% 50%, #0000 98%, #000) right / 51% 100% no-repeat; }
+.ticket-stub::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 7px; background: linear-gradient(var(--stub-a), var(--stub-b)); }
+.ticket-main { padding: 16px 18px 16px 24px; min-width: 0; background: repeating-linear-gradient(0deg, #0000 0 3px, #00000006 3px 4px); }
+.ticket-admit { margin: 0; color: #6b6153; font: 600 9px var(--font-sans), sans-serif; letter-spacing: .24em; text-transform: uppercase; }
+.ticket-title { margin: 6px 0 0; font: 500 clamp(24px, 3vw, 30px)/1.05 var(--font-display), Georgia, serif; color: var(--ink); overflow-wrap: anywhere; }
+.ticket-title span { color: #6b6153; font: 13px var(--font-sans), sans-serif; }
+.ticket-stayed { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 0; }
+.ticket-stayed em { padding: 2px 8px; border: 1px solid color-mix(in srgb, var(--channel, #8a7a62) 70%, #000); border-radius: 999px; color: color-mix(in srgb, var(--channel, #8a7a62) 55%, #000); font: normal 11px var(--font-sans), sans-serif; }
+.ticket-main blockquote { margin: 10px 0 0; padding: 0; color: #3b352d; font: italic 400 16px/1.4 var(--font-display), Georgia, serif; }
+.ticket-end { display: grid; align-content: center; justify-items: center; gap: 6px; min-width: 112px; padding: 14px 14px 14px 18px; border-left: 2px dashed #b9ad97; text-align: center; font: 600 10px var(--font-sans), sans-serif; letter-spacing: .14em; text-transform: uppercase; color: #6b6153; }
+.ticket-serial { font-variant-numeric: tabular-nums; color: var(--ink); }
+.ticket-date { color: var(--ink); font-size: 12px; letter-spacing: .08em; }
+.ticket-count { max-width: 9ch; line-height: 1.35; color: color-mix(in srgb, var(--stub-a) 50%, #3a2f1c); }
+.ticket-stub.is-compact .ticket-main { padding: 12px 14px 12px 20px; }
+.ticket-stub.is-compact .ticket-title { font-size: 21px; }
+.ticket-stub.is-compact .ticket-end { min-width: 92px; padding: 10px 10px 10px 14px; }
+.afterimage-printed { display: grid; gap: 14px; padding: clamp(22px, 4vw, 36px); }
+.afterimage-printed h2 { margin: 0; font: 400 clamp(30px, 3vw, 40px)/1.05 var(--font-display), Georgia, serif; }
+.afterimage-printed h2:focus { outline: none; }
+.afterimage-printed .afterimage-log-kicker { margin: 0; }
+.ticket-printer { position: relative; padding: 0 0 6px; overflow: hidden; }
+.ticket-printer::before { content: ''; position: absolute; z-index: 1; left: -4px; right: -4px; top: 0; height: 6px; border-radius: 3px; background: linear-gradient(#05080c, #1b2632); box-shadow: 0 2px 6px #000; }
+.ticket-printer .ticket-stub { animation: ticket-print 1500ms cubic-bezier(.3, .7, .2, 1) 150ms both; }
+.afterimage-printed-note { margin: 0; color: var(--muted); font-size: 13px; }
+.afterimage-printed .afterimage-log-save { justify-self: start; }
+.your-sky-journal .ticket-stub { margin-top: 2px; }
+@keyframes ticket-print { 0% { transform: translateY(-104%); } 70% { transform: translateY(3%); } 85% { transform: translateY(-1%) rotate(-.4deg); } 100% { transform: none; } }
+@media (max-width: 760px) {
+  .ticket-end { min-width: 88px; padding: 12px 10px 12px 14px; }
+  .ticket-title { font-size: 22px; }
+}
+@media (prefers-reduced-motion: reduce) { .ticket-printer .ticket-stub { animation: none; } }
+
+/* ——— The room takes the film's light ——— */
+@property --reel-color { syntax: '<color>'; inherits: true; initial-value: #254438; }
+.site-shell.has-reel { transition: --reel-color 1.4s ease; background: radial-gradient(ellipse at 75% 0, color-mix(in srgb, var(--reel-color) 16%, transparent), transparent 62%), radial-gradient(ellipse at 10% 100%, color-mix(in srgb, var(--reel-color) 8%, transparent), transparent 55%); }
+.site-shell.has-reel.is-loved { background: radial-gradient(ellipse at 75% 0, color-mix(in srgb, var(--reel-color) 16%, transparent), transparent 62%), radial-gradient(ellipse at 50% 110%, #e8b34a1c, transparent 58%), radial-gradient(ellipse at 10% 100%, color-mix(in srgb, var(--reel-color) 8%, transparent), transparent 55%); }
+.screening-stage { box-shadow: 0 22px 70px #0005, 0 0 90px color-mix(in srgb, var(--reel-color) 14%, transparent); transition: box-shadow 1.4s ease; }
+/* A projector throws the film onto the stage: a soft beam and a little grain. */
+.screening-projector { position: absolute; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; mix-blend-mode: screen; -webkit-mask: linear-gradient(90deg, transparent 18%, #000 62%); mask: linear-gradient(90deg, transparent 18%, #000 62%); }
+.screening-beam { position: absolute; right: -10%; top: -30%; width: 90%; height: 160%; background: conic-gradient(from 214deg at 88% 6%, transparent 0deg, color-mix(in srgb, var(--reel-color) 30%, #fff4dc) 10deg, transparent 34deg); opacity: .09; filter: blur(18px); animation: projector-flicker 5.2s steps(1, end) infinite; }
+.screening-grain { position: absolute; inset: -40px; opacity: .07; background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 .55 0'/></filter><rect width='160' height='160' filter='url(%23n)'/></svg>"); animation: projector-grain 1.2s steps(6) infinite; }
+.screening-stage.no-artwork .screening-projector { display: none; }
+@keyframes projector-flicker { 0%, 100% { opacity: .09; } 7% { opacity: .07; } 9% { opacity: .1; } 41% { opacity: .085; } 44% { opacity: .11; } 73% { opacity: .08; } }
+@keyframes projector-grain { 0% { transform: translate(0, 0); } 20% { transform: translate(-14px, 9px); } 40% { transform: translate(11px, -16px); } 60% { transform: translate(-7px, 13px); } 80% { transform: translate(16px, 6px); } 100% { transform: translate(0, 0); } }
+.celestial-world[data-motion=off] :is(.screening-beam, .screening-grain) { animation-play-state: paused; }
+@media (prefers-reduced-motion: reduce) {
+  .screening-beam, .screening-grain { animation: none; }
+  .site-shell.has-reel, .screening-stage { transition: none; }
+}
+@media (max-width: 760px) { .screening-projector { display: none; } .screening-stage { box-shadow: none; } }

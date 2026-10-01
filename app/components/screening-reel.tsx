@@ -57,6 +57,7 @@ export function ScreeningReel({ films, metadata, selected, onSelect, onOpen, onE
           sizes={still ? '(max-width: 760px) 100vw, 75vw' : undefined}
           alt={`${film.title} ${still ? 'film still' : 'poster'}`} fetchPriority="high" decoding="async"
           onError={() => setFailed(current => [...current, artwork])} /> : <div className="screening-artwork-fallback" aria-hidden="true"><CelestialSky variant="reel" /><div className="screening-empty-aperture"><OrbitMark /></div><p>{pending ? 'Finding the film image' : 'An image yet to come into focus'}</p></div>}
+        <span className="screening-projector" aria-hidden="true"><i className="screening-beam" /><i className="screening-grain" /></span>
         <div className="screening-frame" aria-hidden="true"><span>{String(index + 1).padStart(2, '0')} / {String(films.length).padStart(2, '0')}</span><i /><span>AFTERIMAGE · YOUR REEL</span></div>
         <div className="screening-caption" key={key}>
           <p className="screening-position">{index === 0 ? 'Closest to your request' : 'Another way into your reel'}</p>

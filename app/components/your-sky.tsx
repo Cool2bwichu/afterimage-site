@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react';
 import { buildSky, hashString, nearestStarInDirection, parseSkyRegistry, serializeSkyRegistry, skyReadingOrder, updateSkyRegistry, SKY_REGISTRY_KEY, type SkyConstellation, type SkyMap, type SkyStar } from '../lib/sky';
 import { reelCaption, type SavedReel } from '../lib/reel-history';
 import { apiFetch } from '../lib/api';
@@ -9,13 +9,14 @@ import type { AtlasStop } from '../lib/atlas-trail';
 import type { AfterimageEntry } from '../lib/afterimages';
 import type { SavedFilm } from '../lib/library';
 import type { LikedFilm } from '../lib/taste-profile';
-import { FACET_META, type FacetKey } from '../lib/light-table';
+import type { FacetKey } from '../lib/light-table';
 import { parseEnrichmentResponse, type FilmEnrichment } from '../lib/movie-metadata';
 import { ATLAS_ARTWORK_KEY, readAtlasArtwork } from '../lib/atlas-artwork';
 import { MotionToggle, OrbitMark, StarGlyph, useCelestialMotion } from './celestial';
 import { NightSky } from './night-sky';
 import { LikeButton } from './like-button';
 import { CHANNEL_COLORS } from './afterimage-log';
+import { TicketStub } from './ticket-stub';
 
 type Filter = 'all' | 'liked' | 'saved' | 'afterimages';
 type View = { x: number; y: number; k: number };
@@ -603,8 +604,7 @@ export function YourSky({ open, opener, onClose, reels, atlases, likes, watchlis
         <h3>{selectedStar.title} <span>{selectedStar.year}</span></h3>
         {matched?.directors.length ? <p className="your-sky-credit">{matched.directors.join(', ')}{matched.runtime ? ` · ${matched.runtime} min` : ''}</p> : null}
         {journal ? <div className="your-sky-journal">
-          <p><span>Watched {shortDate(`${journal.watchedOn}T12:00:00`)}</span>{journal.stayed.length ? journal.stayed.map(channel => <em key={channel} style={{ '--channel': CHANNEL_COLORS[channel] } as CSSProperties}>{journal.labels?.[channel] ?? FACET_META[channel].label}</em>) : <em>The whole film</em>}</p>
-          {journal.note ? <blockquote>{journal.note}</blockquote> : null}
+          <TicketStub entry={journal} number={afterimages.indexOf(journal) + 1} />
         </div> : null}
         <div className="your-sky-actions">
           <LikeButton film={film} liked={likedKeys.has(selectedStar.key)} onToggle={() => onLike(film)} />

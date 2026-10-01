@@ -10,6 +10,7 @@ import { CollisionChamber, useCollision } from './components/collision-chamber';
 import { CollidePicker, type PartnerGroup } from './components/collide-picker';
 import { FilmVerbs, useHold, type FilmVerb, type VerbFilm, type VerbMenu } from './components/film-verbs';
 import type { CollisionFilm } from './lib/collision';
+import { ROOM_DEFAULT, filmLight } from './lib/film-light';
 import { ATLAS_STORAGE_KEY, buildAtlasInput, parseAtlasInputRequest, type AtlasInput } from './lib/atlas';
 import { ATLAS_TRAIL_STORAGE_KEY, parseAtlasTrail, activeAtlasStop, emptyAtlasTrail, type AtlasTrail } from './lib/atlas-trail';
 import { CollectionMenu } from './components/collection-menu';
@@ -1171,13 +1172,18 @@ export default function Home() {
     requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: 'instant' }));
   }
 
+  // The room takes the light of the film on screen, and warms for a film you love.
+  const screenFilm = result?.recommendations[screeningIndex];
+  const roomLight = result ? filmLight(result.palette, screeningIndex) : ROOM_DEFAULT;
+  const roomLoved = Boolean(screenFilm && likedKeys.has(movieKey(screenFilm.title, screenFilm.year)));
+
   const collectionMenu = <CollectionMenu atlasCount={atlasTrail.maps.length} reelCount={reels.length} savedCount={watchlist.length} likedCount={likedFilms.length} starCount={starCount} afterimageCount={afterimages.length} recentAtlas={activeAtlasStop(atlasTrail) ?? undefined} onNavigate={navigateCollection} />;
   const skyLink = <a className={`sky-link${hydrated && !starCount ? ' is-empty' : ''}`} href="#sky" onClick={event => { if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); navigateCollection('#sky', event.currentTarget); }}>
     <StarGlyph /><span>Your sky</span>{hydrated && starCount ? <small>{starCount}</small> : null}</a>;
 
   return (
-    <main data-ready={hydrated} className={`site-shell projection-room${lightTableEnabled ? ' has-light-table' : ''}${result ? ' has-reel' : ''}${showLanding ? ' is-landing' : ''}`}
-      style={{ '--reel-color': result?.palette[2] || '#254438' } as CSSProperties}>
+    <main data-ready={hydrated} className={`site-shell projection-room${lightTableEnabled ? ' has-light-table' : ''}${result ? ' has-reel' : ''}${showLanding ? ' is-landing' : ''}${roomLoved ? ' is-loved' : ''}`}
+      style={{ '--reel-color': roomLight } as CSSProperties}>
       {!showLanding ? <CelestialSky variant="page" /> : null}
       <div className="wrap">
         <header className="masthead">
@@ -1499,7 +1505,7 @@ export default function Home() {
         <AfterimageLog key={afterimageTarget ? `afterimage:${movieKey(afterimageTarget.film.title, afterimageTarget.film.year)}` : 'afterimage-closed'} target={afterimageTarget?.film ?? null} opener={afterimageTarget?.opener ?? null}
           existing={afterimageTarget ? findAfterimage(afterimages, afterimageTarget.film) : undefined}
           liked={afterimageTarget ? likedKeys.has(movieKey(afterimageTarget.film.title, afterimageTarget.film.year)) : false}
-          saved={afterimageTarget ? savedKeys.has(movieKey(afterimageTarget.film.title, afterimageTarget.film.year)) : false}
+          saved={afterimageTarget ? savedKeys.has(movieKey(afterimageTarget.film.title, afterimageTarget.film.year)) : false} count={afterimages.length}
           onSave={saveAfterimage} onRemove={() => { if (afterimageTarget) forgetAfterimage(afterimageTarget.film); }} onClose={() => setAfterimageTarget(null)} />
         <FilmVerbs menu={verbMenu} onClose={closeVerbs} />
         {collidePick ? <CollidePicker film={collidePick.film} opener={collidePick.opener} groups={partnerGroups()} canSearch={connection === 'connected'}
