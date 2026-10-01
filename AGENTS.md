@@ -10,6 +10,8 @@ and keep `CLAUDE_CODE_OAUTH_TOKEN` and `ANTHROPIC_API_KEY` out of the repository
 The same branches can build a static GitHub Pages site (`npm run build:pages`)
 whose private calls go to the companion behind a passphrase; see
 `docs/github-pages.md`, and keep the passphrase out of the repository too.
+`npm run build:artifact` builds the claude.ai Artifact edition, which asks
+Claude inside the page instead of through the companion (see `docs/claude.md`).
 
 ## Development
 

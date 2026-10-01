@@ -169,6 +169,14 @@ Then connect the site in one of two ways:
 - **A site with server routes:** set `AFTERIMAGE_BRIDGE_SECRET`, and point the
   site's `AFTERIMAGE_BRIDGE_URL` at the companion with the same secret.
 
+## The Artifact edition
+
+`lib/in-page-companion.mjs` answers the same browser routes inside a claude.ai
+Artifact, where there is no server. It asks Claude through the Artifact's
+`sample` capability with the same brief, schemas and validators. Film search
+and film details answer `METADATA_NOT_CONFIGURED`, because an Artifact cannot
+reach TMDB. See `../docs/claude.md`.
+
 ## Tests
 
 `npm test` runs without network access or credentials:
@@ -178,6 +186,7 @@ Then connect the site in one of two ways:
 - The Claude Code runner against a stand-in `claude` executable that records its
   arguments, environment and input.
 - The HTTP routes and job lifecycle.
+- The in-page edition against a stand-in for the Artifact's `sample`.
 - The browser routes:
   - the passphrase, allowed origins and preflight;
   - the throttle;

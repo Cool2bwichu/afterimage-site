@@ -57,6 +57,21 @@ test('the GitHub Pages build calls the companion directly with the stored passph
   assert.equal(storage.values.has(PASSPHRASE_KEY), false);
 });
 
+test('the claude.ai Artifact build answers every private call inside the page', async () => {
+  const { calls, fetchImpl } = recorder();
+  const answered: string[] = [];
+  const storage = memoryStorage({ [PASSPHRASE_KEY]: 'never-sent' });
+  const api = createApi({
+    base: 'https://companion.example', fetchImpl, storage: () => storage,
+    inPage: async (path) => { answered.push(path); return Response.json({ authenticated: true }); },
+  });
+  assert.equal(api.answersInPage, true);
+  assert.equal(api.remote, false);
+  assert.deepEqual(await (await api.apiFetch('/api/status')).json(), { authenticated: true });
+  assert.deepEqual(answered, ['/api/status']);
+  assert.equal(calls.length, 0);
+});
+
 test('blocked browser storage is reported rather than pretending the passphrase was kept', () => {
   const api = createApi({ base: 'https://companion.example', storage: () => { throw new Error('blocked'); } });
   assert.equal(api.savePassphrase('a-long-private-passphrase'), false);

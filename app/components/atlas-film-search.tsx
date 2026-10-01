@@ -27,7 +27,13 @@ export function AtlasFilmSearch({ busy, connected, onDevelop }: Props) {
       setLookup({ query: term, status: 'loading', films: [] });
       try {
         const response = await apiFetch(`/api/films/search?q=${encodeURIComponent(term)}`, { signal: AbortSignal.any([controller.signal, AbortSignal.timeout(10000)]) });
-        if (!response.ok) throw new Error('Film search could not connect. Try again.');
+        if (!response.ok) {
+          // The service's own explanation, such as a catalogue this copy cannot reach.
+          const failure: unknown = await response.json().catch(() => null);
+          const reason = failure && typeof failure === 'object' && 'error' in failure && typeof failure.error === 'string' ? failure.error.trim().slice(0, 300) : '';
+          if (!controller.signal.aborted) setLookup({ query: term, status: 'error', films: [], error: reason || 'Film search could not connect. Try again.' });
+          return;
+        }
         const raw = await response.json();
         if (!raw || typeof raw !== 'object' || !('films' in raw) || !Array.isArray(raw.films)) throw new Error('Film search returned an incomplete response. Try again.');
         if (!controller.signal.aborted) setLookup({ query: term, status: 'ready', films: parseFilmSearchResults(raw.films) });

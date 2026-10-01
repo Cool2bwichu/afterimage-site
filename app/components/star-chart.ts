@@ -2,6 +2,7 @@
 
 import { hashString, threadFigure } from '../lib/sky';
 import { MARGIN, PRESETS, paintBackdrop } from './night-sky';
+import { saveFile } from '../lib/save-file';
 
 export type StarChartData = {
   seed: string;
@@ -190,11 +191,5 @@ export async function saveStarChart(data: StarChartData): Promise<'shared' | 'do
     try { await navigator.share({ files: [file], title: `${data.persona} · AFTERIMAGE` }); return 'shared'; }
     catch (reason) { if (reason instanceof DOMException && reason.name === 'AbortError') return 'cancelled'; }
   }
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = name;
-  link.click();
-  window.setTimeout(() => URL.revokeObjectURL(url), 1500);
-  return 'downloaded';
+  return saveFile(name, blob);
 }

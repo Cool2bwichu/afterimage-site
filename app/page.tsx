@@ -32,7 +32,7 @@ import { MAX_LIKED_FILMS, TASTE_STORAGE_KEY, parseLikedFilms, toggleLikedFilm, t
 import type { AfterimageResultV2, ExcludedFilm, DevelopInput, Experience } from './lib/reel-state';
 import { GenerationPollError, pollGeneration } from './lib/generation-poller';
 import { statusModelLabel } from './lib/claude';
-import { apiFetch, savePassphrase, usesRemoteCompanion } from './lib/api';
+import { answersInPage, apiFetch, savePassphrase, usesRemoteCompanion } from './lib/api';
 import {
   isGenerationJobId,
   parseJobStart,
@@ -695,8 +695,11 @@ export default function Home() {
     setNotice('');
     try {
       const response = await apiFetch(`/api/films/search?q=${encodeURIComponent(query)}`, { signal: AbortSignal.timeout(10000) });
-      if (!response.ok) throw new Error('Film search could not connect. Try again.');
-      const payload = await response.json();
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        setNotice(responseMessage(payload, 'Film search could not connect. Try again.'));
+        return;
+      }
       if (!isRecord(payload) || !Array.isArray(payload.films)) throw new Error('Film search could not connect. Try again.');
       const matches = parseFilmSearchResults(payload.films);
       const exact = matches.filter(film => [film.title, `${film.title} (${film.year})`, `${film.title} ${film.year}`]
@@ -1082,7 +1085,9 @@ export default function Home() {
                     ? usesRemoteCompanion
                       ? 'The companion is unavailable. Your films and saved reel remain on this device.'
                       : 'The reel service is unavailable. Your films and saved reel remain on this device.'
-                    : 'AFTERIMAGE is programmed by Claude through its private companion. Connect the companion to your Claude subscription, then check again. Your existing reel stays available.'}
+                    : answersInPage
+                      ? 'This copy of AFTERIMAGE asks Claude from inside claude.ai, on your own Claude account. Open it from your Artifacts in claude.ai, then check again. Your existing reel stays available.'
+                      : 'AFTERIMAGE is programmed by Claude through its private companion. Connect the companion to your Claude subscription, then check again. Your existing reel stays available.'}
               </p>
               {connectionNote ? <p className="connection-note" role="status">{connectionNote}</p> : null}
             </div>

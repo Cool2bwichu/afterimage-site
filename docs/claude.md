@@ -108,6 +108,41 @@ static page, no secrets                                 /api/* browser routes  �
 A Pages site is public even from a private repository. The passphrase is what
 keeps Claude, your plan's allowance and TMDB for you.
 
+## claude.ai Artifact
+
+The same site also runs as a claude.ai Artifact, with no companion, token or
+passphrase. Inside claude.ai, a page can ask Claude itself through the
+Artifact's `sample` capability, on the viewer's own Claude account. So the
+Artifact edition answers AFTERIMAGE's private routes in the page itself.
+
+- **Same rules as the companion.** `companion/lib/in-page-companion.mjs` uses
+  the companion's brief, structured-output schemas and validators. An answer
+  that breaks a rule gets one more attempt. Claude's refusals and limits become
+  prepared explanations: not allowed in this view, usage limit, declined,
+  unavailable.
+- **Most capable tier.** Each reel, replacement and Atlas is one call on the
+  `complex` tier, uncached. The first call in a view asks the viewer to allow
+  it, as claude.ai does for any Artifact that uses Claude.
+- **No TMDB.** An Artifact cannot reach other sites.
+  - Posters and film details are not shown; the page falls back to its drawn
+    artwork.
+  - Film search says that it needs the TMDB catalogue.
+  - Atlas and replacement films are held to the content rules only, since
+    there is no catalogue to check them against. Reels are not
+    catalogue-checked in either edition.
+- **Saving.** The star chart and the watchlist export are saved through the
+  viewer's save dialog (the `downloads` capability), because an Artifact cannot
+  start a download itself.
+- **Outside claude.ai** the page says to open it from your Artifacts there,
+  rather than pretending to connect.
+- **Building it.** `npm run build:artifact` builds one self-contained page,
+  `dist-artifact/afterimage.html`, with its script and styles inline
+  (`vite.artifact.config.ts`, entry `github-pages/artifact.html`). It is
+  published with the Artifact tool, declaring the `sample` and `downloads`
+  capabilities.
+- **Separate storage.** Browser storage belongs to each Artifact, so its saved
+  reels, Likes and afterimages are separate from the GitHub Pages copy's.
+
 ## Model settings
 
 Claude Opus 5.5 at `high` effort with adaptive thinking, in both modes. Model
@@ -174,6 +209,17 @@ plan that can't be used, and a model the plan doesn't include.
   - This environment blocks Debian's package mirror, so the test build copied
     in a CA bundle in place of the `ca-certificates` install.
   - Railway builds the Dockerfile unchanged.
+
+- The Artifact edition, in Chromium, wrapped the way claude.ai wraps an
+  Artifact, against a stand-in for its Claude access, with every other host
+  blocked:
+  - the reel, a replacement and an Atlas complete, each with one call on the
+    `complex` tier that starts with AFTERIMAGE's brief;
+  - the star chart goes through the save dialog;
+  - film search explains that TMDB is out of reach;
+  - outside claude.ai the page asks to be opened there;
+  - a declined permission is explained;
+  - no page errors at 1440×900 or 390×844.
 
 ## Not verified
 
