@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 
 import { ClaudeEngine } from '../lib/claude-engine.mjs';
-import { FailureThrottle, clientKey, createCompanionServer, createEngine, createFilmRoutes, createGenerationProtocol, parseAllowedOrigins } from '../server.mjs';
+import { FailureThrottle, clientKey, createCompanionServer, createEngine, createFilmRoutes, createGenerationProtocol, parseAllowedOrigins, tokenShape } from '../server.mjs';
 import { answer, fakeClaude } from './fake-anthropic.mjs';
 import { withServer } from './http-helpers.mjs';
 
@@ -214,4 +214,12 @@ test('without a metadata URL, Atlas and replacement films are verified in-proces
   const external = createEngine({ auth: 'api', model: 'claude-opus-5-5', effort: 'high', fallbacks: true },
     { env: { TMDB_READ_TOKEN: 'tmdb-token', AFTERIMAGE_FILM_METADATA_URL: 'https://site.example/api/films/enrich' }, films, log: () => {} });
   assert.equal(external.metadataProvider, undefined);
+});
+
+test('the token shape shows a mangled paste without revealing the token', () => {
+  const token = 'sk-ant-oat01-' + 'a'.repeat(117);
+  assert.deepEqual(tokenShape(token + '\n'), { present: true, length: 130, expectedPrefix: true, onlyTokenCharacters: true, surroundingWhitespace: true });
+  assert.deepEqual(tokenShape('"' + token.slice(0, 60)), { present: true, length: 61, expectedPrefix: false, onlyTokenCharacters: false, surroundingWhitespace: false });
+  assert.equal(JSON.stringify(tokenShape(token)).includes('aaaa'), false);
+  assert.deepEqual(tokenShape(undefined), { present: false, length: 0, expectedPrefix: false, onlyTokenCharacters: true, surroundingWhitespace: false });
 });

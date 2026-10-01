@@ -138,6 +138,20 @@ export function clientKey(request) {
   return forwarded || request.socket?.remoteAddress || 'unknown';
 }
 
+// What a configured subscription token looks like, without any of its secret
+// part: enough to tell a partial or mangled paste from a token Claude rejects.
+// `claude setup-token` prints the token on one line, starting sk-ant-oat01-.
+export function tokenShape(value = '') {
+  const token = String(value).trim();
+  return {
+    present: token.length > 0,
+    length: token.length,
+    expectedPrefix: token.startsWith('sk-ant-oat01-'),
+    onlyTokenCharacters: /^[A-Za-z0-9_-]*$/.test(token),
+    surroundingWhitespace: String(value).length !== token.length,
+  };
+}
+
 export function parseAllowedOrigins(value = '') {
   return value.split(',').map((origin) => origin.trim().replace(/\/$/, '')).filter(Boolean);
 }
@@ -352,6 +366,7 @@ export async function startCompanionServer(options = {}) {
   };
   const described = engine.describe();
   log(`AFTERIMAGE Claude companion listening on port ${port} (${described.model}, ${described.reasoningEffort} effort, ${described.auth === 'subscription' ? 'Claude subscription through Claude Code' : 'Anthropic API key'})`);
+  if (described.auth === 'subscription') record({ code: 'CLAUDE_TOKEN_SHAPE', ...tokenShape(process.env.CLAUDE_CODE_OAUTH_TOKEN) });
   return server;
 }
 
