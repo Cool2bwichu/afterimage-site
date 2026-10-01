@@ -33,6 +33,12 @@ const FAILURES = {
   max_output_tokens: ['CLAUDE_INCOMPLETE', 'Claude ran out of room before finishing.'],
 };
 
+// The first line of Claude Code's error text, bounded, with anything shaped like a credential removed.
+function errorText(value) {
+  if (typeof value !== 'string') return null;
+  return value.split('\n')[0].replace(/sk-ant-[A-Za-z0-9_-]+/g, '[credential]').slice(0, 200) || null;
+}
+
 function failureFromStatus(status) {
   if (status === 401 || status === 403) return FAILURES.authentication_failed;
   if (status === 429) return FAILURES.rate_limit;
@@ -54,7 +60,8 @@ export class ClaudeCodeRunner {
   }) {
     if (!EFFORTS.has(effort)) throw new Error('Unsupported Claude effort level.');
     this.binary = binary;
-    this.token = token;
+    // A pasted token can carry a stray space or line break, which Claude would reject.
+    this.token = String(token).trim();
     this.model = model;
     this.effort = effort;
     this.workdir = workdir;
@@ -159,11 +166,16 @@ export class ClaudeCodeRunner {
         throw new Error('Claude could not produce an answer in the required structure.');
       }
       const failure = FAILURES[lastError] || failureFromStatus(result.api_error_status);
+      // Claude Code's own error category and short explanation, never request
+      // content, so a failed reel can be diagnosed from the logs.
+      this.log({
+        code: 'CLAUDE_CODE_FAILED', kind, failure: failure?.[0] ?? 'CLAUDE_CODE_FAILED', subtype: result.subtype ?? null,
+        error: lastError ?? null, apiStatus: result.api_error_status ?? null, reason: errorText(result.result),
+      });
       if (failure) {
         if (failure[0] === 'AUTH_REQUIRED') this.rejected = true;
         throw engineError(failure[0], failure[1]);
       }
-      this.log({ code: 'CLAUDE_CODE_FAILED', kind, subtype: result.subtype ?? null, error: lastError ?? null });
       throw engineError('CLAUDE_CODE_FAILED', 'Claude Code could not complete the request.');
     }
     this.rejected = false;

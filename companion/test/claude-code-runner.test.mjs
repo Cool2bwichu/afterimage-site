@@ -162,6 +162,15 @@ test('structured-output exhaustion and rule breaks get one more run with the rea
   });
 });
 
+test('a failed turn logs Claude Code\'s reason without credentials', async () => {
+  const lines = failure('authentication_failed', { api_error_status: 401, result: 'Invalid bearer token sk-ant-oat01-not-a-real-token\nPlease run /login' });
+  await withRunner([{ lines }], async ({ engine, logged }) => {
+    await assert.rejects(engine.generateReel(request), { code: 'AUTH_REQUIRED' });
+    const entry = logged.find((item) => item.code === 'CLAUDE_CODE_FAILED');
+    assert.deepEqual(entry, { code: 'CLAUDE_CODE_FAILED', kind: 'reel', failure: 'AUTH_REQUIRED', subtype: 'success', error: 'authentication_failed', apiStatus: 401, reason: 'Invalid bearer token [credential]' });
+  });
+});
+
 test('Claude Code failures become the prepared explanations, and a rejected token shows as disconnected', async () => {
   const cases = [
     [failure('authentication_failed', { api_error_status: 401 }), 'AUTH_REQUIRED'],
@@ -174,8 +183,9 @@ test('Claude Code failures become the prepared explanations, and a rejected toke
     [[init, { type: 'result', subtype: 'error_during_execution', is_error: true, usage: {}, modelUsage: {}, session_id: 's' }], 'CLAUDE_CODE_FAILED'],
   ];
   for (const [lines, code] of cases) {
-    await withRunner([{ lines }], async ({ engine, runner, fake }) => {
+    await withRunner([{ lines }], async ({ engine, runner, fake, logged }) => {
       await assert.rejects(engine.generateReel(request), { code });
+      if (code !== 'CLAUDE_DECLINED') assert.ok(logged.some((entry) => entry.code === 'CLAUDE_CODE_FAILED' && entry.failure === code), code + ' is logged');
       assert.equal((await fake.records()).length, 1, code + ' is not retried by the companion');
       const status = await runner.status();
       assert.deepEqual(status, code === 'AUTH_REQUIRED' ? { connected: false, reason: 'rejected' } : { connected: true, reason: null }, code);
