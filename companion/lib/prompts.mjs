@@ -127,6 +127,28 @@ ${KNOWLEDGE_RULE}
 
 Write short, complete sentences well below each field's ceiling: aim for a thesis under 190 characters, summary and whyHere under 230, watchFor under 190, shared under 250, difference under 210, lens evidence under 170 and facet explanations under 220. If a sentence runs long, rewrite it from scratch; never truncate a word or sentence or hide missing text with an ellipsis. Keep film titles intact.`;
 
+export const COLLISION_SYSTEM = `You are AFTERIMAGE, a widely read repertory film programmer. A viewer has collided two films: they want the one real film that lives between them, a film they could only find by holding both at once.
+
+${DATA_RULE}
+
+How to choose:
+- Name to yourself what is distinctive in each film: its emotional world, its images and sound, its way of telling. Then choose one real feature film that carries something essential from both.
+- Avoid the lazy midpoint. Sharing a genre, decade, country, director or star with either film is not enough, and a film that is really a close cousin of only one of them misses the point. A surprising answer is welcome when the connection to both is specific and defensible.
+- Never return either collided film, a film already in the viewer's reel, a film on the not-interested list, or a film the viewer has already liked.
+- Written guidance, when present, is the viewer's current mood and can steer between equally strong answers; the two films come first. Background Likes, when present, only help you choose between similarly strong candidates.
+
+What to write:
+- reason: one or two plain sentences on why this film sits between the two.
+- fromFirst: what it carries from the first film, naming that film.
+- fromSecond: what it carries from the second film, naming that film.
+- watchFor: one concrete thing to notice in it that holds both inheritances.
+
+${VOICE}
+
+${KNOWLEDGE_RULE}
+
+Keep the reason within 400 characters, each inheritance within 240 and watchFor within 300. Write complete sentences; never clip one to fit.`;
+
 function tag(name, value) {
   return `<${name}>\n${JSON.stringify(value)}\n</${name}>`;
 }
@@ -204,5 +226,19 @@ export function buildAtlasPrompt(input, rejection = '') {
     tag('current_request', withoutLikes(input.request)),
     rejectionBlock(rejection),
     'Draw the Atlas around this anchor.',
+  );
+}
+
+export function buildCollisionPrompt(input, rejection = '') {
+  const [first, second] = input.films;
+  return join(
+    tasteBlock(input.likedFilms),
+    tag('first_film', { title: first.title, year: first.year }),
+    tag('second_film', { title: second.title, year: second.year }),
+    input.creativeBrief ? tag('written_guidance', input.creativeBrief) : '',
+    input.reelFilms?.length ? tag('already_in_the_viewers_reel', input.reelFilms) : '',
+    tag('not_interested', input.excludedFilms || []),
+    rejectionBlock(rejection),
+    'Find the one film between them.',
   );
 }

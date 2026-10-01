@@ -7,6 +7,7 @@ import { createEnrichmentPost } from '../app/lib/enrichment-route.ts';
 import { createFilmSearchGet } from '../app/lib/film-search-route.ts';
 import { createTmdbClient } from '../app/lib/tmdb.server.ts';
 import { validateAtlasInput } from './lib/atlas-contract.mjs';
+import { validateCollisionInput } from './lib/collision-contract.mjs';
 import { ClaudeCodeRunner } from './lib/claude-code-runner.mjs';
 import { ClaudeEngine, resolveClaudeConfig } from './lib/claude-engine.mjs';
 import { createFilmMetadataProvider } from './lib/film-metadata.mjs';
@@ -39,8 +40,10 @@ const AUTH_MODES = { subscription: 'claude-subscription', api: 'anthropic-api' }
 const OPERATIONS = {
   'GET /v1/auth/status': 'status', 'POST /v1/auth/start': 'connect',
   'POST /v2/generations': 'reel', 'POST /v2/atlas/generations': 'atlas', 'POST /v2/replacements/generations': 'replacement',
+  'POST /v2/collisions/generations': 'collision',
   'GET /api/status': 'status', 'POST /api/connect': 'connect',
   'POST /api/generations': 'reel', 'POST /api/atlas/generations': 'atlas', 'POST /api/replacements/generations': 'replacement',
+  'POST /api/collisions/generations': 'collision',
   'GET /api/films/search': 'filmSearch', 'POST /api/films/enrich': 'filmDetails',
 };
 const JOB_PATH = /^\/(?:v2|api)\/generations\/([^/]+)$/;
@@ -274,11 +277,12 @@ export function createCompanionServer({
         return;
       }
 
-      if (operation === 'reel' || operation === 'atlas' || operation === 'replacement') {
+      if (operation === 'reel' || operation === 'atlas' || operation === 'replacement' || operation === 'collision') {
         const body = await readJson(request);
         const input = operation === 'atlas' ? { atlasRequest: validateAtlasInput(body) }
           : operation === 'replacement' ? { replacementRequest: validateReplacementInput(body) }
-            : validateV2Input(body);
+            : operation === 'collision' ? { collisionRequest: validateCollisionInput(body) }
+              : validateV2Input(body);
         const job = await generationCoordinator.start(input);
         send(202, { jobId: job.jobId, status: job.status });
         return;
@@ -334,6 +338,7 @@ export async function createGenerationProtocol({ engine, directory, log = () => 
     generate: (input, options) => {
       if (input.atlasRequest) return engine.generateAtlas(input.atlasRequest, options);
       if (input.replacementRequest) return engine.generateReplacement(input.replacementRequest, options);
+      if (input.collisionRequest) return engine.generateCollision(input.collisionRequest, options);
       return engine.generateReel(input, options);
     },
   });

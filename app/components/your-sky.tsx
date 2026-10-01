@@ -64,7 +64,7 @@ function shortDate(value: string) {
 }
 
 export function YourSky({ open, opener, onClose, reels, atlases, likes, watchlist, afterimages, metadataByKey, likedKeys, savedKeys, canExplore,
-  onLike, onSave, onLogAfterimage, onNavigate, onExplore, onBegin }: {
+  onLike, onSave, onLogAfterimage, onNavigate, onExplore, onBegin, onCollide }: {
   open: boolean; opener: HTMLElement | null; onClose: () => void;
   reels: SavedReel[]; atlases: AtlasStop[]; likes: LikedFilm[]; watchlist: SavedFilm[]; afterimages: AfterimageEntry[];
   metadataByKey: Record<string, FilmEnrichment>; likedKeys: Set<string>; savedKeys: Set<string>; canExplore: boolean;
@@ -72,6 +72,8 @@ export function YourSky({ open, opener, onClose, reels, atlases, likes, watchlis
   onLogAfterimage: (film: { title: string; year: string; tmdbId?: number }, opener: HTMLElement) => void;
   onNavigate: (hash: string, opener: HTMLElement) => void; onExplore: (film: { title: string; year: string; tmdbId?: number }, opener: HTMLElement) => void;
   onBegin: () => void;
+  /** Collide this star with another film to find the one between them. */
+  onCollide?: (film: { title: string; year: string; tmdbId?: number }, opener: HTMLElement) => void;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -618,6 +620,7 @@ export function YourSky({ open, opener, onClose, reels, atlases, likes, watchlis
             <span><strong>{constellation.name}</strong><small>{constellation.kind === 'reel' ? `Reel · ${reel ? reelCaption(reel) : constellation.caption}` : 'Atlas · the films around it'}</small></span><span aria-hidden="true">↗</span></a></li>;
         })}</ul></div> : <p className="your-sky-field-note">This film shines on its own: you {selectedStar.liked ? 'loved' : selectedStar.afterimage ? 'remembered' : 'saved'} it outside a reel or Atlas.</p>}
         <button type="button" className="your-sky-explore" disabled={!canExplore} onClick={event => onExplore(film, event.currentTarget)}>Explore its Atlas <span aria-hidden="true">↗</span></button>
+        {onCollide ? <button type="button" className="your-sky-explore your-sky-collide" onClick={event => onCollide(film, event.currentTarget)}>Collide it with another film <span aria-hidden="true">✕</span></button> : null}
         {!canExplore ? <p className="your-sky-field-note">Connect the film service, or let the current discovery finish, to explore a new Atlas.</p> : null}
       </article> : null}
 

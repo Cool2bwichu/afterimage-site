@@ -125,14 +125,14 @@ export class ClaudeCodeRunner {
     });
   }
 
-  args({ system, format, partial = false }) {
+  args({ system, format, partial = false, effort = this.effort }) {
     return [
       '-p',
       '--output-format', 'stream-json', '--verbose',
       // The answer as it is written, so a developing reel can be shown.
       ...(partial ? ['--include-partial-messages'] : []),
       '--model', this.model,
-      '--effort', this.effort,
+      '--effort', EFFORTS.has(effort) ? effort : this.effort,
       '--system-prompt', system,
       '--json-schema', JSON.stringify(format),
       '--tools', '',
@@ -145,12 +145,12 @@ export class ClaudeCodeRunner {
 
   // Returns the answer's JSON text. The request's data goes in on stdin.
   // `onPartial`, when given, receives the answer's text so far as it streams.
-  async complete({ kind, system, content, format, signal, onPartial }) {
+  async complete({ kind, system, content, format, signal, onPartial, effort }) {
     if (!this.token) throw engineError('AUTH_REQUIRED', 'No Claude subscription token is configured for the companion.');
     await mkdir(join(this.workdir, 'run'), { recursive: true, mode: 0o700 });
     await mkdir(join(this.workdir, 'config'), { recursive: true, mode: 0o700 });
     const partial = typeof onPartial === 'function';
-    const run = await this.#run({ args: this.args({ system, format, partial }), input: content, signal, onPartial: partial ? onPartial : null });
+    const run = await this.#run({ args: this.args({ system, format, partial, ...(effort ? { effort } : {}) }), input: content, signal, onPartial: partial ? onPartial : null });
     const { result, lastError } = run;
 
     if (!result) {

@@ -8,12 +8,15 @@
 // token does, and Atlas and replacement films are held to the content rules
 // only, not checked against the catalogue.
 import { ATLAS_CANDIDATE_SCHEMA, normalizeAtlasResult, validateAtlasInput } from './atlas-contract.mjs';
+import { COLLISION_SCHEMA, normalizeCollision, validateCollisionInput } from './collision-contract.mjs';
 import {
   ATLAS_SYSTEM,
+  COLLISION_SYSTEM,
   LIGHT_TABLE_SYSTEM,
   REEL_SYSTEM,
   REPLACEMENT_SYSTEM,
   buildAtlasPrompt,
+  buildCollisionPrompt,
   buildReelPrompt,
   buildReplacementPrompt,
   isLightTable,
@@ -130,6 +133,17 @@ export function createInPageCompanion({
         finish: (raw) => completeReplacement(raw, input),
       });
     },
+    // As with replacements here, the content rules apply but the catalogue cannot be asked.
+    collision(input, onDraft) {
+      return generate({
+        kind: 'collision',
+        onDraft,
+        system: COLLISION_SYSTEM,
+        prompt: (rejection) => buildCollisionPrompt(input, rejection),
+        schema: COLLISION_SCHEMA,
+        finish: (raw) => normalizeCollision(raw, input),
+      });
+    },
     atlas(input, onDraft) {
       return generate({
         kind: 'atlas',
@@ -147,7 +161,7 @@ export function createInPageCompanion({
     },
   };
 
-  const validators = { reel: validateV2Input, replacement: validateReplacementInput, atlas: validateAtlasInput };
+  const validators = { reel: validateV2Input, replacement: validateReplacementInput, atlas: validateAtlasInput, collision: validateCollisionInput };
 
   function publicJob(job) {
     const payload = { jobId: job.id, status: job.status, createdAt: job.createdAt, updatedAt: job.updatedAt };
@@ -203,6 +217,7 @@ export function createInPageCompanion({
     'POST /api/generations': 'reel',
     'POST /api/atlas/generations': 'atlas',
     'POST /api/replacements/generations': 'replacement',
+    'POST /api/collisions/generations': 'collision',
   };
 
   async function handle(path, init = {}) {

@@ -1,14 +1,17 @@
 import Anthropic from '@anthropic-ai/sdk';
 
 import { normalizeAtlasResult, validateAtlasInput, verifyAtlas, ATLAS_CANDIDATE_SCHEMA } from './atlas-contract.mjs';
+import { COLLISION_SCHEMA, normalizeCollision, validateCollisionInput, verifyCollision } from './collision-contract.mjs';
 import { createDraftReporter } from './drafts.mjs';
 import { createFilmMetadataProvider } from './film-metadata.mjs';
 import {
   ATLAS_SYSTEM,
+  COLLISION_SYSTEM,
   LIGHT_TABLE_SYSTEM,
   REEL_SYSTEM,
   REPLACEMENT_SYSTEM,
   buildAtlasPrompt,
+  buildCollisionPrompt,
   buildReelPrompt,
   buildReplacementPrompt,
   isLightTable,
@@ -24,7 +27,14 @@ export const DEFAULT_EFFORT = 'high';
 
 // Bounded wall-clock time for one operation, including a validation retry. The
 // resumable job keeps the site's polling independent of these deadlines.
-export const DEADLINES = Object.freeze({ reel: 300000, replacement: 240000, atlas: 420000 });
+export const DEADLINES = Object.freeze({ reel: 300000, replacement: 240000, atlas: 420000, collision: 180000 });
+
+// A collision is one film and a few sentences: it thinks at medium effort, or at
+// the configured effort when that is lower, so it answers quickly.
+const EFFORT_ORDER = ['low', 'medium', 'high', 'xhigh', 'max'];
+export function cappedEffort(configured, cap) {
+  return EFFORT_ORDER.indexOf(configured) <= EFFORT_ORDER.indexOf(cap) ? configured : cap;
+}
 
 // How the companion reaches Claude: `subscription` runs Claude Code signed in
 // with the owner's Claude plan (CLAUDE_CODE_OAUTH_TOKEN from `claude setup-token`);
@@ -141,6 +151,22 @@ export class ClaudeEngine {
     });
   }
 
+  async generateCollision(requestInput, { onDraft } = {}) {
+    const input = validateCollisionInput(requestInput);
+    const metadata = this.#metadata();
+    return this.#generate({
+      kind: 'collision',
+      onDraft,
+      effort: cappedEffort(this.runner.effort ?? DEFAULT_EFFORT, 'medium'),
+      system: COLLISION_SYSTEM,
+      prompt: (rejection) => buildCollisionPrompt(input, rejection),
+      schema: COLLISION_SCHEMA,
+      maxCharacters: 8000,
+      deadlineMs: this.deadlines.collision ?? DEADLINES.collision,
+      finish: async (raw) => verifyCollision(normalizeCollision(raw, input), metadata),
+    });
+  }
+
   // Resolved before generating, so a missing catalogue never costs a model call.
   #metadata() {
     if (this.metadataProvider) return this.metadataProvider;
@@ -151,7 +177,7 @@ export class ClaudeEngine {
     return this.metadataProvider;
   }
 
-  async #generate({ kind, system, prompt, schema, maxCharacters, deadlineMs, finish, onDraft }) {
+  async #generate({ kind, system, prompt, schema, maxCharacters, deadlineMs, finish, onDraft, effort }) {
     const controller = new AbortController();
     const deadline = setTimeout(() => controller.abort(), deadlineMs);
     const format = toStructuredSchema(schema);
@@ -161,7 +187,7 @@ export class ClaudeEngine {
     try {
       for (let attempt = 1; ; attempt += 1) {
         try {
-          const text = await this.runner.complete({ kind, system, content: prompt(rejection), format, signal: controller.signal, onPartial });
+          const text = await this.runner.complete({ kind, system, content: prompt(rejection), format, signal: controller.signal, onPartial, ...(effort ? { effort } : {}) });
           return await finish(extractJson(text, maxCharacters));
         } catch (error) {
           if (attempt >= 2 || !isContentProblem(error)) throw error;

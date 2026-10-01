@@ -76,7 +76,7 @@ export class MessagesRunner {
     return value;
   }
 
-  #params({ system, content, format, optional }) {
+  #params({ system, content, format, optional, effort = this.effort }) {
     const reasoning = supportsReasoningControls(this.model);
     return {
       model: this.model,
@@ -87,7 +87,7 @@ export class MessagesRunner {
         content: optional ? content : content + '\n\n<response_format>\nRespond with only a JSON object that satisfies this JSON schema, with no other text:\n' +
           JSON.stringify(format) + '\n</response_format>',
       }],
-      output_config: { ...(optional ? { format: { type: 'json_schema', schema: format } } : {}), ...(reasoning ? { effort: this.effort } : {}) },
+      output_config: { ...(optional ? { format: { type: 'json_schema', schema: format } } : {}), ...(reasoning ? { effort: EFFORTS.has(effort) ? effort : this.effort } : {}) },
       ...(reasoning ? { thinking: { type: 'adaptive' } } : {}),
       ...(optional && this.fallbacks ? { betas: [FALLBACK_BETA], fallbacks: 'default' } : {}),
     };
@@ -95,9 +95,9 @@ export class MessagesRunner {
 
   // Returns the answer's JSON text. `onPartial`, when given, receives the
   // answer's text so far as it streams.
-  async complete({ kind, system, content, format, signal, onPartial }) {
+  async complete({ kind, system, content, format, signal, onPartial, effort }) {
     const send = (optional) => {
-      const stream = this.client.beta.messages.stream(this.#params({ system, content, format, optional }), { signal });
+      const stream = this.client.beta.messages.stream(this.#params({ system, content, format, optional, ...(effort ? { effort } : {}) }), { signal });
       if (typeof onPartial === 'function' && typeof stream.on === 'function') {
         let answerText = '';
         stream.on('streamEvent', (event) => {

@@ -6,6 +6,10 @@ import { AtlasWorkspace } from './components/atlas';
 import { parseFilmSearchResults, type FilmSearchResult } from './lib/film-search';
 import { Landing, nextWelcomeFilm, type WelcomeFilm } from './components/landing';
 import { EyeTest } from './components/eye-test';
+import { CollisionChamber, useCollision } from './components/collision-chamber';
+import { CollidePicker, type PartnerGroup } from './components/collide-picker';
+import { FilmVerbs, useHold, type FilmVerb, type VerbFilm, type VerbMenu } from './components/film-verbs';
+import type { CollisionFilm } from './lib/collision';
 import { ATLAS_STORAGE_KEY, buildAtlasInput, parseAtlasInputRequest, type AtlasInput } from './lib/atlas';
 import { ATLAS_TRAIL_STORAGE_KEY, parseAtlasTrail, activeAtlasStop, emptyAtlasTrail, type AtlasTrail } from './lib/atlas-trail';
 import { CollectionMenu } from './components/collection-menu';
@@ -829,6 +833,11 @@ export default function Home() {
         payload.code === 'ACTIVE_GENERATION' &&
         isGenerationJobId(payload.jobId)
       ) {
+        // A collision holds the slot for a moment; it is not a reel to resume.
+        if (payload.jobId === collision.state?.jobId) {
+          setNotice('A collision is developing. Your reel can start as soon as it lands.');
+          return;
+        }
         const resumed = transitionLightTableJob({
           activeJobId,
           selectedFacets,
@@ -1058,6 +1067,73 @@ export default function Home() {
       else filmInputRef.current?.focus({ preventScroll: true });
     });
   }
+  // Collisions: two films, and the one film between them.
+  const [collidePick, setCollidePick] = useState<{ film: CollisionFilm; opener: HTMLElement | null } | null>(null);
+  const [collisionOpener, setCollisionOpener] = useState<HTMLElement | null>(null);
+  const recheckConnection = useCallback(() => { void refreshConnection(true); }, [refreshConnection]);
+  const collisionFound = useCallback((found: { films: [CollisionFilm, CollisionFilm]; film: CollisionFilm }) => {
+    setNotice(`Between ${found.films[0].title} and ${found.films[1].title}: ${found.film.title}.`);
+  }, []);
+  const collision = useCollision({ onLocked: recheckConnection, onFound: collisionFound });
+  function startCollision(first: CollisionFilm, second: CollisionFilm, opener: HTMLElement | null) {
+    setCollidePick(null);
+    if (collision.state && (collision.state.status === 'starting' || collision.state.status === 'developing')) {
+      collision.reopen();
+      setNotice('One collision at a time. This one is still developing.');
+      return;
+    }
+    const identity = (film: CollisionFilm): CollisionFilm => {
+      const record = metadataByKey[movieKey(film.title, film.year)];
+      const tmdbId = film.tmdbId ?? (record?.status === 'matched' ? record.tmdbId : undefined);
+      return { title: film.title, year: film.year, ...(tmdbId ? { tmdbId } : {}) };
+    };
+    setCollisionOpener(opener);
+    void collision.start(identity(first), identity(second), {
+      excludedFilms, likedFilms, creativeBrief: displayedInput?.creativeBrief ?? '',
+      reelFilms: result?.recommendations.map(({ title, year }) => ({ title, year })) ?? [],
+    });
+  }
+  function partnerGroups(): PartnerGroup[] {
+    return [
+      { label: 'In this reel', films: result?.recommendations.map(({ title, year }) => ({ title, year })) ?? [] },
+      { label: 'Films you liked', films: [...likedFilms].reverse() },
+      { label: 'Saved for later', films: [...watchlist].reverse() },
+      { label: 'Films you watched', films: [...afterimages].reverse().map(({ title, year, tmdbId }) => ({ title, year, ...(tmdbId ? { tmdbId } : {}) })) },
+    ];
+  }
+
+  // A film's verbs, under a long press, a right-click or the menu key.
+  const [verbMenu, setVerbMenu] = useState<VerbMenu | null>(null);
+  const closeVerbs = useCallback(() => setVerbMenu(null), []);
+  function openVerbs(film: VerbFilm, element: HTMLElement, point: { x: number; y: number }, index?: number) {
+    const key = movieKey(film.title, film.year);
+    const reelFilm = index !== undefined ? result?.recommendations[index] : undefined;
+    const inReel = Boolean(reelFilm && movieKey(reelFilm.title, reelFilm.year) === key);
+    const online = connection === 'connected';
+    const verbs: FilmVerb[] = [
+      { id: 'collide', label: 'Collide with…', detail: 'Find the film between two', disabled: !online, run: opener => setCollidePick({ film, opener }) },
+      { id: 'atlas', label: 'Explore its connections', detail: 'Open its Atlas', disabled: !online || reelLocked,
+        run: opener => { if (inReel && reelFilm) openAtlas(reelFilm, opener); else openAtlas(film, opener, false, true); } },
+      ...(inReel && index !== undefined && lightTableEnabled && reelFilm?.facets ? [{
+        id: 'borrow', label: 'Borrow its qualities', detail: 'Carry them into your next reel', disabled: reelLocked,
+        run: () => {
+          setScreeningIndex(index);
+          window.setTimeout(() => {
+            const qualities = document.querySelector<HTMLElement>('.screening-qualities');
+            qualities?.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth', block: 'center' });
+            qualities?.querySelector<HTMLButtonElement>('button')?.focus({ preventScroll: true });
+          }, 60);
+        },
+      }] : []),
+      { id: 'watched', label: afterimageKeys.has(key) ? 'Your ticket stub' : 'Watched it?', detail: afterimageKeys.has(key) ? 'Revisit what stayed' : 'Keep what stayed, and a ticket stub', run: opener => openAfterimage(film, opener) },
+      { id: 'like', label: likedKeys.has(key) ? 'Unlike' : 'Like', run: () => toggleLike({ title: film.title, year: film.year }) },
+      { id: 'save', label: savedKeys.has(key) ? 'Remove from watchlist' : 'Save for later', run: () => toggleSave(film) },
+      ...(inReel && index !== undefined && displayedInput && online ? [{ id: 'replace', label: 'Replace this film', disabled: reelLocked, run: () => void replaceFilm(index) }] : []),
+    ];
+    setVerbMenu({ film, verbs, x: point.x, y: point.y, opener: element });
+  }
+  const holdFilm = useHold<{ film: VerbFilm; index?: number }>((payload, element, point) => openVerbs(payload.film, element, point, payload.index));
+
   // The entrance's one question: the answer becomes the request and develops at once,
   // or right after the companion is unlocked.
   const pendingAnswer = useRef<DevelopInput | null>(null);
@@ -1265,7 +1341,7 @@ export default function Home() {
           <span>Light Table is on. Develop a new reel to reveal qualities you can borrow.</span>
           <button type="button" onClick={() => setComposerOpen(true)} disabled={reelLocked}>Open inputs</button>
         </div> : null}
-        {notice ? <div className="notice" role="status">{notice}{replacementUndo && !reelLocked ? <button type="button" onClick={() => { setResult(replacementUndo.result); setDisplayedInput(replacementUndo.input); setScreeningIndex(replacementUndo.index); setReplacementUndo(null); setNotice('Your previous film is back in the reel.'); }}>Undo replacement</button> : null}{facetUndo && !reelLocked ? <button type="button" onClick={() => { setSelectedFacets(facetUndo.facets); setSelectedReelIdentity(facetUndo.identity); setFacetUndo(null); setNotice('Previous blend restored.'); }}>Undo</button> : null}</div> : null}
+        {notice ? <div className="notice" role="status">{notice}{replacementUndo && !reelLocked ? <button type="button" onClick={() => { setResult(replacementUndo.result); setDisplayedInput(replacementUndo.input); setScreeningIndex(replacementUndo.index); setReplacementUndo(null); setNotice('Your previous film is back in the reel.'); }}>Undo replacement</button> : null}{facetUndo && !reelLocked ? <button type="button" onClick={() => { setSelectedFacets(facetUndo.facets); setSelectedReelIdentity(facetUndo.identity); setFacetUndo(null); setNotice('Previous blend restored.'); }}>Undo</button> : null}{collision.state && !collision.open ? <button type="button" onClick={collision.reopen}>{collision.state.status === 'complete' ? 'See the collision' : 'Back to the collision'}</button> : null}</div> : null}
         {error ? (
           <div className="error-banner" role="alert">
             <p>{error}</p>
@@ -1305,7 +1381,8 @@ export default function Home() {
 
             <ReelConstellation key={`constellation-${recommendationIdentity}`} seed={recommendationIdentity} name={result.persona} insight={result.insight} palette={result.palette}
               films={result.recommendations} selected={screeningIndex} onSelect={setScreeningIndex} onNotice={setNotice}
-              onOpenSky={opener => navigateCollection('#sky', opener)} />
+              onOpenSky={opener => navigateCollection('#sky', opener)} hold={holdFilm}
+              onCollide={connection === 'connected' ? (first, second, opener) => startCollision(result.recommendations[first], result.recommendations[second], opener) : undefined} />
             <ScreeningReel key={recommendationIdentity} films={result.recommendations} metadata={metadataByKey}
               selected={screeningIndex} onSelect={setScreeningIndex} onCompare={openComparison} onReplace={displayedInput && connection === 'connected' ? index => void replaceFilm(index) : undefined} pending={enrichmentPending} locked={reelLocked}
               likedKeys={likedKeys} savedKeys={savedKeys} afterimageKeys={afterimageKeys} onLike={toggleLike} onSave={toggleSave} onResolve={resolveFilm}
@@ -1313,7 +1390,7 @@ export default function Home() {
               selectedFacets={selectedFacets} onBorrow={lightTableEnabled ? handleSelectFacet : undefined}
               lightTable={selectedRecommendation === null && !atlasTarget ? lightTable : null}
               onOpen={(index, event) => openDossier(index, event.currentTarget)}
-              onExplore={(index, event) => openAtlas(result.recommendations[index], event.currentTarget)} />
+              onExplore={(index, event) => openAtlas(result.recommendations[index], event.currentTarget)} hold={holdFilm} />
             {lightTableEnabled && result.fingerprint ? <details className="reel-fingerprint"><summary>The qualities behind this reel <span>+</span></summary><SearchFingerprint fingerprint={result.fingerprint} insight={result.insight} /></details> : null}
 
             <section className="atlas-entry"><div><h3>Atlas</h3><p>Films are never alone. Explore the connections around a film, and find what carries through.</p></div><button type="button" disabled={developing} onClick={event => openAtlas(result.recommendations[screeningIndex] || result.recommendations[0], event.currentTarget)}>Explore connections ↗</button></section>
@@ -1416,6 +1493,7 @@ export default function Home() {
         <YourSky open={skyOpen} opener={skyOpener} onClose={closeSky} reels={reels} atlases={atlasTrail.maps} likes={likedFilms} watchlist={watchlist} afterimages={afterimages}
           metadataByKey={metadataByKey} likedKeys={likedKeys} savedKeys={savedKeys} canExplore={connection === 'connected' && !reelLocked}
           onLike={toggleLike} onSave={toggleSave} onLogAfterimage={(film, opener) => openAfterimage(film, opener)} onNavigate={navigateCollection}
+          onCollide={connection === 'connected' ? (film, opener) => setCollidePick({ film, opener }) : undefined}
           onExplore={(film, opener) => { setSkyOpen(false); openAtlas(film, skyOpener || opener, false, true); }}
           onBegin={() => { setSkyOpen(false); enterReel(); }} />
         <AfterimageLog key={afterimageTarget ? `afterimage:${movieKey(afterimageTarget.film.title, afterimageTarget.film.year)}` : 'afterimage-closed'} target={afterimageTarget?.film ?? null} opener={afterimageTarget?.opener ?? null}
@@ -1423,6 +1501,15 @@ export default function Home() {
           liked={afterimageTarget ? likedKeys.has(movieKey(afterimageTarget.film.title, afterimageTarget.film.year)) : false}
           saved={afterimageTarget ? savedKeys.has(movieKey(afterimageTarget.film.title, afterimageTarget.film.year)) : false}
           onSave={saveAfterimage} onRemove={() => { if (afterimageTarget) forgetAfterimage(afterimageTarget.film); }} onClose={() => setAfterimageTarget(null)} />
+        <FilmVerbs menu={verbMenu} onClose={closeVerbs} />
+        {collidePick ? <CollidePicker film={collidePick.film} opener={collidePick.opener} groups={partnerGroups()} canSearch={connection === 'connected'}
+          onClose={() => setCollidePick(null)} onChoose={partner => startCollision(collidePick.film, partner, collidePick.opener)} /> : null}
+        <CollisionChamber state={collision.state} open={collision.open} opener={collisionOpener} metadata={metadataByKey}
+          likedKeys={likedKeys} savedKeys={savedKeys} connected={connection === 'connected'}
+          onClose={collision.close} onLike={film => toggleLike({ title: film.title, year: film.year })} onSave={film => toggleSave(film)}
+          onRetry={() => { if (collision.state) { const [first, second] = collision.state.films; collision.clear(); startCollision(first, second, collisionOpener); } }}
+          onExplore={(film, opener) => { collision.close(); openAtlas(film, opener, false, true); }}
+          onCollideAgain={(film, opener) => { collision.clear(); setCollidePick({ film, opener }); }} />
         {eyeTest ? <EyeTest key={eyeTest.sitting} opener={eyeTest.opener} canLookUp={connection === 'connected'}
           onClose={() => setEyeTest(null)} onFinish={request => { setEyeTest(null); answerQuestion(request); }} /> : null}
         <AtlasWorkspace target={atlasTarget} opener={atlasOpener} onClose={closeAtlas} onBusy={setAtlasBusy} preferSaved={atlasResume}

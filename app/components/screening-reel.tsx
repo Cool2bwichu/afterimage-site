@@ -8,9 +8,10 @@ import { FacetTab } from './facet-tab';
 import { FilmIdentity } from './film-identity';
 import { LikeButton } from './like-button';
 import { CelestialSky, OrbitMark } from './celestial';
+import type { HoldProps } from './film-verbs';
 
 export function ScreeningReel({ films, metadata, selected, onSelect, onOpen, onExplore, likedKeys, savedKeys, afterimageKeys, onLike, onSave, onAfterimage,
-  onResolve, selectedFacets, onBorrow, locked, pending, lightTable, onReplace, onCompare }: {
+  onResolve, selectedFacets, onBorrow, locked, pending, lightTable, onReplace, onCompare, hold }: {
   films: RecommendationV2[]; metadata: Record<string, FilmEnrichment>; selected: number;
   onSelect: (index: number) => void; onOpen: (index: number, event: MouseEvent<HTMLButtonElement>) => void;
   onExplore: (index: number, event: MouseEvent<HTMLButtonElement>) => void;
@@ -20,6 +21,8 @@ export function ScreeningReel({ films, metadata, selected, onSelect, onOpen, onE
   onBorrow?: (channel: FacetKey, facet: CinematicFacet, source: FacetSource, trigger: HTMLButtonElement) => void;
   onCompare: (first: number, second: number, opener: HTMLElement) => void;
   locked: boolean; pending: boolean; lightTable: ReactNode; onReplace?: (index: number) => void;
+  /** Press and hold (or right-click) a film for its verbs. */
+  hold?: (payload: { film: RecommendationV2; index: number }) => HoldProps;
 }) {
   const [comparing, setComparing] = useState(false);
   const [compareWith, setCompareWith] = useState(1);
@@ -48,7 +51,7 @@ export function ScreeningReel({ films, metadata, selected, onSelect, onOpen, onE
   }
   return <div className="screening-reel">
     <div className="screening-layout">
-      <article className={`screening-stage${still ? ' has-still' : artwork ? ' has-poster' : ' no-artwork'}`} aria-labelledby="screening-title">
+      <article className={`screening-stage${still ? ' has-still' : artwork ? ' has-poster' : ' no-artwork'}`} aria-labelledby="screening-title" {...hold?.({ film, index })}>
         {artwork ? <img key={artwork} className="screening-artwork" src={artwork}
           srcSet={still ? `${still.replace('/w1280/', '/w780/')} 780w, ${still} 1280w` : undefined}
           sizes={still ? '(max-width: 760px) 100vw, 75vw' : undefined}
@@ -67,9 +70,10 @@ export function ScreeningReel({ films, metadata, selected, onSelect, onOpen, onE
         <header><h3>Your reel</h3><span>Five films, considered together</span></header>
         <ol>{films.map((item, position) => {
           const meta = metadata[movieKey(item.title, item.year)];
+          const held = hold?.({ film: item, index: position });
           return <li key={movieKey(item.title, item.year)}><button ref={element => { buttons.current[position] = element; }} type="button"
             aria-current={index === position ? 'true' : undefined} aria-label={`Select ${item.title}, film ${position + 1} of ${films.length}`}
-            onClick={() => onSelect(position)} onKeyDown={event => move(event, position)}>
+            {...held} onClick={() => onSelect(position)} onKeyDown={event => { held?.onKeyDown(event); if (!event.defaultPrevented) move(event, position); }}>
             <span className="reel-index-number">{String(position + 1).padStart(2, '0')}</span><span><strong>{item.title}</strong><small>{item.year}{meta?.status === 'matched' && meta.runtime ? ` / ${meta.runtime} min` : ''}</small></span><span className="reel-index-mark" aria-hidden="true">{index === position ? '−' : '+'}</span>
           </button></li>;
         })}</ol>
