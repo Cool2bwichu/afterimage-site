@@ -255,3 +255,12 @@ html[data-zoom=out]::view-transition-new(root) { animation: zoom-reveal 560ms cu
 @keyframes zoom-recede { to { transform: scale(.5); opacity: 0; } }
 @keyframes zoom-reveal { from { transform: scale(1.6); opacity: 0; filter: blur(3px); } }
 @media (prefers-reduced-motion: reduce) { html[data-zoom]::view-transition-old(root), html[data-zoom]::view-transition-new(root) { animation: none; } }
+
+/* ——— An Atlas developing: its idea, then its films ——— */
+.atlas-developing { margin-top: 10px; }
+.observatory-progress .atlas-developing-thesis { margin: 0; color: #e3dccd; font: italic 400 18px/1.4 var(--font-display), Georgia, serif; }
+.atlas-developing ol { display: flex; flex-wrap: wrap; gap: 6px 8px; margin: 10px 0 0; padding: 0; list-style: none; }
+.atlas-developing li { display: inline-flex; align-items: baseline; gap: 6px; padding: 5px 10px; border: 1px solid #e0c89c33; background: #0e1822; font-size: 12px; }
+.atlas-developing li strong { font: 400 16px var(--font-display), Georgia, serif; color: var(--white); }
+.atlas-developing li small { color: var(--starlight); }
+.atlas-developing li em { color: var(--muted); font-style: normal; }

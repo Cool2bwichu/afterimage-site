@@ -7,7 +7,8 @@ import { ATLAS_ARTWORK_KEY, readAtlasArtwork, serializeAtlasArtwork } from '../l
 import { ATLAS_TRAIL_STORAGE_KEY, MAX_ATLAS_MAPS, activeAtlasStop, emptyAtlasTrail, finishAtlasMap, moveAtlasTrail, parseAtlasTrail, updateAtlasView, visitAtlasMap, type AtlasTrail } from '../lib/atlas-trail';
 import { FACET_KEYS, FACET_META, type CinematicFacet, type FacetKey, type FacetSource, type SelectedFacets } from '../lib/light-table';
 import { parseEnrichmentResponse, movieKey, imdbUrl, type FilmEnrichment } from '../lib/movie-metadata';
-import { parseJobStart } from '../lib/generation-state';
+import { parseJobDraft, parseJobStart, type JobDraft } from '../lib/generation-state';
+import { DRAFT_POLL_MS } from '../lib/generation-poller';
 import { apiFetch } from '../lib/api';
 import { LikeButton } from './like-button';
 import { FacetTab } from './facet-tab';
@@ -52,6 +53,8 @@ export function AtlasWorkspace(props: Props) {
   const [reading, setReading] = useState<'connection' | 'difference' | 'notes'>('connection');
   const [mapView, setMapView] = useState<'map' | 'list'>('map');
   const [pollRevision, setPollRevision] = useState(0);
+  // The neighbourhood as Claude writes it: provisional until the map is verified.
+  const [draft, setDraft] = useState<JobDraft | null>(null);
   const dialog = useRef<HTMLDialogElement>(null);
   const readingPanel = useRef<HTMLElement>(null);
   const trailNavigation = useRef<HTMLElement>(null);
@@ -152,6 +155,7 @@ export function AtlasWorkspace(props: Props) {
     let timer: ReturnType<typeof setTimeout>;
     let failures = 0;
     const poll = async () => {
+      let delay = 2500;
       try {
         const response = await apiFetch(`/api/generations/${pending.jobId}`, { cache: 'no-store', signal: AbortSignal.any([controller.signal, AbortSignal.timeout(12000)]) });
         if ([404, 401].includes(response.status)) throw Object.assign(new Error(response.status === 404 ? 'This Atlas job has expired. Develop a new map.' : 'Reconnect the film service, then resume the Atlas.'), { terminal: true, expired: response.status === 404 });
@@ -163,11 +167,14 @@ export function AtlasWorkspace(props: Props) {
         if (job.status === 'complete') {
           const result = parseAtlas(job.reel);
           if (!result || movieKey(result.anchor.title, result.anchor.year) !== movieKey(pending.anchor.title, pending.anchor.year)) throw Object.assign(new Error('The Atlas returned incomplete connections. Please try again.'), { terminal: true, expired: true });
-          if (!controller.signal.aborted) { setSaved(current => finishAtlasMap(current, pending.jobId, result)); setError(''); }
+          if (!controller.signal.aborted) { setSaved(current => finishAtlasMap(current, pending.jobId, result)); setError(''); setDraft(null); }
           return;
         }
         if (job.status === 'failed') throw Object.assign(new Error('We could not finish and verify this map. Your previous Atlas and reel are preserved.'), { terminal: true, expired: true });
         if (!['queued', 'running'].includes(String(job.status))) throw new Error('The Atlas status is unavailable.');
+        const developing = job.status === 'running' ? parseJobDraft(job.draft) : undefined;
+        if (!controller.signal.aborted) setDraft(developing ?? null);
+        if (developing) delay = DRAFT_POLL_MS;
         failures = 0;
       } catch (reason) {
         if (controller.signal.aborted) return;
@@ -178,10 +185,10 @@ export function AtlasWorkspace(props: Props) {
           return;
         }
       }
-      if (!controller.signal.aborted) timer = setTimeout(poll, 2500);
+      if (!controller.signal.aborted) timer = setTimeout(poll, delay);
     };
     void poll();
-    return () => { controller.abort(); clearTimeout(timer); };
+    return () => { controller.abort(); clearTimeout(timer); setDraft(null); };
   }, [saved.pending, pollRevision]);
 
   useEffect(() => {
@@ -304,7 +311,11 @@ export function AtlasWorkspace(props: Props) {
       </nav> : null}
 
       {saved.readyId ? <div className="observatory-notice" role="status">A new constellation is ready.<button type="button" onClick={() => revisit(saved.readyId!)}>Open {saved.maps.find(map => map.id === saved.readyId)?.atlas.anchor.title}</button></div> : null}
-      {busy || error ? <div className="observatory-progress" role={error ? 'alert' : 'status'}><span className={error ? '' : 'observatory-progress-mark'} aria-hidden="true" /><div><strong>{error || `Finding the connections around ${saved.pending?.anchor.title || target?.anchor.title}…`}</strong>{!error ? <p>{atlas ? 'Keep exploring this map while the next one develops.' : 'Considering six films and checking their identities. This can take a few minutes.'}</p> : null}</div>{error ? <button type="button" disabled={starting} onClick={() => { setError(''); if (saved.pending) setPollRevision(current => current + 1); else if (inputRef.current) void develop(inputRef.current); }}>{saved.pending ? 'Resume' : 'Try again'}</button> : null}</div> : null}
+      {busy || error ? <div className="observatory-progress" role={error ? 'alert' : 'status'}><span className={error ? '' : 'observatory-progress-mark'} aria-hidden="true" /><div><strong>{error || `Finding the connections around ${saved.pending?.anchor.title || target?.anchor.title}…`}</strong>{!error ? <p>{atlas ? 'Keep exploring this map while the next one develops.' : draft?.neighbors?.length ? 'Films appear as Claude writes them; each is checked before the map is drawn.' : 'Considering six films and checking their identities. This can take a few minutes.'}</p> : null}
+        {!error && draft && (draft.thesis || draft.neighbors?.length) ? <div className="atlas-developing" aria-live="off">
+          {draft.thesis ? <p className="atlas-developing-thesis developing-in" key={draft.thesis}>{draft.thesis}</p> : null}
+          {draft.neighbors?.length ? <ol>{draft.neighbors.map((film, index) => <li key={`${film.title}|${film.year}`} className="developing-in" style={{ '--i': index } as CSSProperties}><strong>{film.title}</strong> <small>{film.year}</small>{film.label ? <em>{film.label}</em> : null}</li>)}</ol> : null}
+        </div> : null}</div>{error ? <button type="button" disabled={starting} onClick={() => { setError(''); if (saved.pending) setPollRevision(current => current + 1); else if (inputRef.current) void develop(inputRef.current); }}>{saved.pending ? 'Resume' : 'Try again'}</button> : null}</div> : null}
 
       {atlas ? <>
         <section className="observatory-heading" aria-label="Current Atlas">
