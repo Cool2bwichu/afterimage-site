@@ -1,5 +1,20 @@
 # Atlas film selection — 2026-10-01
 
+## Safari follow-up
+
+The first repair handled a missing blur destination but did not cover Safari
+moving focus back to the enclosing modal dialog. On a freshly reloaded version
+29, native Safari clicks on Paris, Texas and a Harry Potter release still
+dismissed the results without selecting a film. The search field remained
+unchanged and Develop Atlas stayed disabled.
+
+Primary mouse-down on a result or retry button now preserves the input's focus
+until click. Other pointer targets, keyboard focus, and touch scrolling keep
+their existing behavior. This does not start generation on mouse-down or change
+the selected release's canonical ID.
+
+## Original repair and checks
+
 The search form previously dismissed its results on every blur outside the form,
 including a blur with no focus destination. A browser that does not focus a
 clicked result button can remove that button before its click is delivered.

@@ -77,7 +77,13 @@ export function AtlasFilmSearch({ busy, connected, onDevelop }: Props) {
         <button type="button" className="atlas-search-develop" disabled={!selected || busy || !connected} onClick={event => { if (selected) { setOpen(false); onDevelop({ title: selected.title, year: selected.year, tmdbId: selected.id }, event.currentTarget); } }}>Develop Atlas <span aria-hidden="true">↗</span></button>
       </div>
       <p id="atlas-search-help" className="atlas-search-help" role="status">{busy ? 'An Atlas is developing. You can keep browsing.' : !connected ? 'Reconnect the film service from your reel to develop an Atlas.' : selected ? <>Ready to explore <strong>{selected.title} <span>({selected.year})</span></strong></> : 'Search for a film and select the right release.'}</p>
-      {showResults ? <div className="atlas-search-results" ref={results} aria-label="Matching films">
+      {showResults ? <div className="atlas-search-results" ref={results} aria-label="Matching films"
+        onMouseDown={event => {
+          // Safari can focus the enclosing modal instead of a result button,
+          // dismissing it before click. Keep input focus for primary clicks;
+          // keyboard focus and touch scrolling retain their normal behavior.
+          if (event.button === 0 && event.target instanceof Element && event.target.closest('button')) event.preventDefault();
+        }}>
         {!current || current.status === 'loading' ? <p role="status">Finding films…</p> : current.status === 'error' ? <div role="alert"><p>{current.error}</p><button type="button" className="atlas-search-retry" onClick={() => setRevision(value => value + 1)}>Try again</button></div> : current.films.length ? <>
           <p className="atlas-search-result-label">Choose your film <span>Results from TMDB</span></p>
           <ul>{current.films.map(film => <li key={film.id}><button type="button" aria-label={`Choose ${film.title} (${film.year})`} onClick={() => { setSelected(film); setQuery(film.title); setOpen(false); input.current?.focus(); }}>
