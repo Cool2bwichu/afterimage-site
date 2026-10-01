@@ -26,16 +26,14 @@ test('the connection status names the companion\'s model only when it reports on
   assert.equal(statusModelLabel(null), null);
 });
 
-test('the Claude version has no ChatGPT sign-in and credits Claude where the work shows', () => {
-  assert.doesNotMatch(page, /ChatGPT|verificationUrl|userCode|device-flow/);
-  assert.match(page, /Connect Claude/);
-  assert.match(page, /payload\.code === 'CLAUDE_NOT_CONNECTED'/);
-  // The companion's exact reason is shown inside the connection panel.
-  assert.match(page, /setConnectionNote\(responseMessage\(payload, 'Claude could not be reached\.'\)\)/);
-  assert.match(page, /className="connection-note"/);
-  assert.match(page, /reasoned live by \{claudeModel \?\? 'Claude'\}/);
-  assert.match(manifest, /programmed by Claude/);
-  assert.doesNotMatch(manifest, /ChatGPT/);
-  assert.match(charting, /Claude is charting your next constellation/);
-  assert.match(starChart, /CHARTED BY CLAUDE/);
+test('the shared Observatory keeps model-neutral charts and ChatGPT sign-in', () => {
+  assert.match(page, /parseDeviceSignIn\(payload\)/);
+  assert.match(page, /setAuthFlow\(signIn\)/);
+  assert.match(page, /authFlow\.verificationUrl/);
+  assert.match(page, /authFlow\.userCode/);
+  assert.match(page, /Connect ChatGPT/);
+  assert.match(page, /modelLabel/);
+  assert.doesNotMatch(manifest, /programmed by Claude/);
+  assert.doesNotMatch(charting, /Claude is charting/);
+  assert.match(starChart, /CHARTED BY AFTERIMAGE/);
 });

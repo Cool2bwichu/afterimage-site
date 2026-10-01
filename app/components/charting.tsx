@@ -85,7 +85,7 @@ export function ChartingRoom({ message, detail, elapsed, sources, variant = 'ree
       <div className="charting-slots">{Array.from({ length: 5 }, (_, index) => <i key={index} style={{ '--i': index } as CSSProperties} />)}</div>
     </div>
     <div className="charting-copy">
-      <p className="charting-kicker">Claude is charting your next constellation</p>
+      <p className="charting-kicker">Charting your next constellation</p>
       <h2>{message}</h2>
       <p>{detail}</p>
       {bodies.length ? <p className="charting-sources"><span>Following</span>{bodies.map((source, index) => <strong key={`${source}-${index}`}>{source}</strong>)}</p> : null}

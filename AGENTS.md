@@ -4,6 +4,11 @@ This repository is the production website source. The companion backend lives
 in `Cool2bwichu/afterimage-subscription-bridge`; do not substitute its prototype
 frontend for this site.
 
+`feat/screening-room` combines the Observatory interface from Claude with the
+ChatGPT subscription bridge. Preserve ChatGPT device sign-in, Terra configuration,
+the existing Sites project, and saved reel/Atlas compatibility. `companion/` and
+the static Claude editions are optional; do not switch production to them.
+
 On the Claude branches, `companion/` is the Claude-backed replacement for that
 bridge. It answers the same contract; run its tests with `npm run test:companion`
 and keep `CLAUDE_CODE_OAUTH_TOKEN` and `ANTHROPIC_API_KEY` out of the repository.

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { chmod, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -127,7 +127,8 @@ test('a reel runs Claude Code headless on the subscription token with no tools a
     assert.equal(record.env.CLAUDE_CODE_OAUTH_TOKEN, 'sk-ant-oat01-test');
     assert.equal(record.env.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC, '1');
     assert.equal(record.env.CLAUDE_CONFIG_DIR, join(fake.directory, 'work', 'config'));
-    assert.equal(record.cwd, join(fake.directory, 'work', 'run'));
+    // macOS resolves /var to /private/var in the child process's cwd.
+    assert.equal(record.cwd, await realpath(join(fake.directory, 'work', 'run')));
     for (const key of ['ANTHROPIC_API_KEY', 'AFTERIMAGE_BRIDGE_SECRET', 'UNRELATED']) assert.equal(key in record.env, false, key);
 
     const usage = logged.find((entry) => entry.code === 'CLAUDE_USAGE');

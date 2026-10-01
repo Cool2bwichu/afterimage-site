@@ -31,7 +31,7 @@ import { movieKey } from './lib/movie-metadata';
 import { MAX_LIKED_FILMS, TASTE_STORAGE_KEY, parseLikedFilms, toggleLikedFilm, type LikedFilm } from './lib/taste-profile';
 import type { AfterimageResultV2, ExcludedFilm, DevelopInput, Experience } from './lib/reel-state';
 import { GenerationPollError, pollGeneration } from './lib/generation-poller';
-import { statusModelLabel } from './lib/claude';
+import { parseDeviceSignIn, statusIntelligence, type DeviceSignIn, type IntelligenceProvider } from './lib/intelligence';
 import { answersInPage, apiFetch, savePassphrase, usesRemoteCompanion } from './lib/api';
 import {
   isGenerationJobId,
@@ -135,7 +135,9 @@ export default function Home() {
   const [facetUndo, setFacetUndo] = useState<{ facets: SelectedFacets; identity: string } | null>(null);
   const [error, setError] = useState('');
   const [connection, setConnection] = useState<ConnectionState>('checking');
-  const [claudeModel, setClaudeModel] = useState<string | null>(null);
+  const [provider, setProvider] = useState<IntelligenceProvider>(usesRemoteCompanion || answersInPage ? 'claude' : 'chatgpt');
+  const [modelLabel, setModelLabel] = useState<string | null>(null);
+  const [authFlow, setAuthFlow] = useState<DeviceSignIn | null>(null);
   const [connectionNote, setConnectionNote] = useState('');
   const [passphraseDraft, setPassphraseDraft] = useState('');
   const [connecting, setConnecting] = useState(false);
@@ -169,9 +171,14 @@ export default function Home() {
     try {
       const response = await apiFetch('/api/status', { cache: 'no-store' });
       const payload = await response.json();
-      if (response.ok) setClaudeModel(statusModelLabel(payload));
+      if (response.ok) {
+        const intelligence = statusIntelligence(payload);
+        setModelLabel(intelligence?.model ?? null);
+        if (intelligence) setProvider(intelligence.provider);
+      }
       if (response.ok && isRecord(payload) && payload.authenticated) {
         next = 'connected';
+        setAuthFlow(null);
         setConnectionNote('');
       } else if (lockedOut(payload)) {
         next = 'locked';
@@ -501,6 +508,12 @@ export default function Home() {
   }, [refreshConnection]);
 
   useEffect(() => {
+    if (!authFlow || connection === 'connected') return;
+    const timer = window.setInterval(() => void refreshConnection(true), 2200);
+    return () => window.clearInterval(timer);
+  }, [authFlow, connection, refreshConnection]);
+
+  useEffect(() => {
     if (!hydrated || !activeJobId || connection !== 'connected') return;
 
     const controller = new AbortController();
@@ -722,11 +735,10 @@ export default function Home() {
     setSelectedRecommendation(null);
   }
 
-  // Claude runs on the companion's Anthropic key, so there is no sign-in to start:
-  // the companion re-checks the key and says plainly what is missing.
   async function startConnection() {
     setConnecting(true);
     setError('');
+    setConnectionNote('');
     try {
       const response = await apiFetch('/api/connect', { method: 'POST' });
       const payload = await response.json();
@@ -734,10 +746,17 @@ export default function Home() {
         await refreshConnection();
         return;
       }
+      const signIn = response.ok ? parseDeviceSignIn(payload) : null;
+      if (signIn) {
+        setProvider('chatgpt');
+        setAuthFlow(signIn);
+        setConnection('disconnected');
+        return;
+      }
       setConnection(isRecord(payload) && payload.code === 'CLAUDE_NOT_CONNECTED' ? 'disconnected' : 'unreachable');
-      setConnectionNote(responseMessage(payload, 'Claude could not be reached.'));
+      setConnectionNote(responseMessage(payload, provider === 'chatgpt' ? 'ChatGPT sign-in could not start.' : 'Claude could not be reached.'));
     } catch {
-      setConnectionNote('Claude could not be reached.');
+      setConnectionNote(provider === 'chatgpt' ? 'ChatGPT sign-in could not start.' : 'Claude could not be reached.');
       setConnection('unreachable');
     } finally {
       setConnecting(false);
@@ -1029,7 +1048,7 @@ export default function Home() {
   }
 
   const collectionMenu = <CollectionMenu atlasCount={atlasTrail.maps.length} reelCount={reels.length} savedCount={watchlist.length} likedCount={likedFilms.length} starCount={starCount} afterimageCount={afterimages.length} recentAtlas={activeAtlasStop(atlasTrail) ?? undefined} onNavigate={navigateCollection} />;
-  const skyLink = <a className={`sky-link${hydrated && !starCount ? ' is-empty' : ''}`} href="#sky" onClick={event => { if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); navigateCollection('#sky', event.currentTarget); }}>
+  const skyLink = <a className={`sky-link${hydrated && !starCount ? ' is-empty' : ''}`} href="#sky" aria-label={`Your sky${hydrated && starCount ? `, ${starCount} films` : ''}`} onClick={event => { if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); navigateCollection('#sky', event.currentTarget); }}>
     <StarGlyph /><span>Your sky</span>{hydrated && starCount ? <small>{starCount}</small> : null}</a>;
 
   return (
@@ -1076,15 +1095,17 @@ export default function Home() {
         {connection !== 'connected' && connection !== 'checking' ? (
           <section className="connection-panel" aria-live="polite">
             <div>
-              <div className="connection-kicker">Private intelligence · Claude</div>
-              <h2>{connection === 'locked' ? 'Unlock AFTERIMAGE' : connection === 'unreachable' ? 'Claude is out of reach' : 'Connect Claude'}</h2>
+              <div className="connection-kicker">Private intelligence · {provider === 'chatgpt' ? 'ChatGPT' : 'Claude'}</div>
+              <h2>{connection === 'locked' ? 'Unlock AFTERIMAGE' : provider === 'chatgpt' ? 'Connect your ChatGPT account' : connection === 'unreachable' ? 'Claude is out of reach' : 'Connect Claude'}</h2>
               <p>
                 {connection === 'locked'
-                  ? 'This copy of AFTERIMAGE talks to your private Claude companion. Enter its passphrase to continue; it stays in this browser.'
+                  ? 'Enter your private companion’s passphrase to continue; it stays in this browser.'
                   : connection === 'unreachable'
                     ? usesRemoteCompanion
                       ? 'The companion is unavailable. Your films and saved reel remain on this device.'
                       : 'The reel service is unavailable. Your films and saved reel remain on this device.'
+                    : provider === 'chatgpt'
+                      ? 'Connect to develop recommendations. Your existing reel stays available while you reconnect.'
                     : answersInPage
                       ? 'This copy of AFTERIMAGE asks Claude from inside claude.ai, on your own Claude account. Open it from your Artifacts in claude.ai, then check again. Your existing reel stays available.'
                       : 'AFTERIMAGE is programmed by Claude through its private companion. Connect the companion to your Claude subscription, then check again. Your existing reel stays available.'}
@@ -1098,10 +1119,17 @@ export default function Home() {
                   value={passphraseDraft} onChange={(event) => setPassphraseDraft(event.target.value)} />
                 <button type="submit" disabled={connecting || !passphraseDraft.trim()}>{connecting ? 'Unlocking…' : 'Unlock'}</button>
               </form>
-            ) : (
+            ) : !authFlow ? (
               <button type="button" onClick={startConnection} disabled={connecting}>
-                {connecting ? 'Checking…' : 'Check connection'}
+                {connecting ? 'Connecting…' : provider === 'chatgpt' ? 'Connect ChatGPT' : 'Check connection'}
               </button>
+            ) : (
+              <div className="device-flow">
+                <span>ONE-TIME CODE</span>
+                <strong>{authFlow.userCode}</strong>
+                <a href={authFlow.verificationUrl} target="_blank" rel="noreferrer">Open secure sign-in ↗</a>
+                <small>Return here after approving it. This page will reconnect automatically.</small>
+              </div>
             )}
           </section>
         ) : null}
@@ -1334,7 +1362,7 @@ export default function Home() {
             </div>
           </details>
         </section>
-        <footer className="site-footer"><span>AFTERIMAGE · reasoned live by {claudeModel ?? 'Claude'}</span>
+        <footer className="site-footer"><span>AFTERIMAGE · reasoned live by {modelLabel ?? (provider === 'chatgpt' ? 'ChatGPT' : 'Claude')}</span>
           <span className="ai-mode-note">{lightTableEnabled ? <a href="?experience=standard">Use standard reel</a> : <a href="?experience=light-table-v1">Enable Light Table</a>}</span>
         </footer>
         {result ? <ReelComparison first={comparison ? { recommendation: result.recommendations[comparison.first], metadata: metadataByKey[movieKey(result.recommendations[comparison.first].title, result.recommendations[comparison.first].year)], index: comparison.first } : null} second={comparison ? { recommendation: result.recommendations[comparison.second], metadata: metadataByKey[movieKey(result.recommendations[comparison.second].title, result.recommendations[comparison.second].year)], index: comparison.second } : null} opener={comparison?.opener ?? null} onClose={closeComparison} onSelect={index => { setScreeningIndex(index); closeComparison(); }} onBorrow={lightTableEnabled ? handleSelectFacet : undefined} selectedFacets={selectedFacets} facetDisabled={reelLocked} /> : null}
