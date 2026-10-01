@@ -14,11 +14,21 @@ export function AtlasFilmSearch({ busy, connected, onDevelop }: Props) {
   const [lookup, setLookup] = useState<Lookup | null>(null);
   const [open, setOpen] = useState(false);
   const [revision, setRevision] = useState(0);
+  const form = useRef<HTMLFormElement>(null);
   const results = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLInputElement>(null);
   const term = query.trim();
   const current = lookup?.query === term ? lookup : null;
   const showResults = open && !selected && term.length >= 2;
+
+  useEffect(() => {
+    if (!open) return;
+    function dismissOutside(event: PointerEvent) {
+      if (event.target instanceof Node && !form.current?.contains(event.target)) setOpen(false);
+    }
+    document.addEventListener('pointerdown', dismissOutside);
+    return () => document.removeEventListener('pointerdown', dismissOutside);
+  }, [open]);
 
   useEffect(() => {
     if (term.length < 2 || selected) return;
@@ -46,9 +56,13 @@ export function AtlasFilmSearch({ busy, connected, onDevelop }: Props) {
 
   return <section className="atlas-search" aria-labelledby="atlas-search-heading">
     <div className="atlas-search-intro"><h2 id="atlas-search-heading">Start a new Atlas</h2><p>Another film. A new set of connections.</p></div>
-    <form role="search" aria-label="Find a film for a new Atlas" className="atlas-search-form"
+    <form ref={form} role="search" aria-label="Find a film for a new Atlas" className="atlas-search-form"
       onSubmit={event => { event.preventDefault(); setOpen(true); if (selected) setSelected(null); setRevision(value => value + 1); }}
-      onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false); }}
+      onBlur={event => {
+        // Some browsers blur the input without focusing a clicked button. Keep
+        // the result mounted until its click; outside pointers dismiss above.
+        if (event.relatedTarget && !event.currentTarget.contains(event.relatedTarget)) setOpen(false);
+      }}
       onKeyDown={event => {
         if (event.key === 'Escape' && showResults) { event.preventDefault(); event.stopPropagation(); input.current?.focus(); setOpen(false); }
       }}>
