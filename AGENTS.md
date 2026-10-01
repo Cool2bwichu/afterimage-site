@@ -5,7 +5,8 @@ in `Cool2bwichu/afterimage-subscription-bridge`; do not substitute its prototype
 frontend for this site.
 
 `feat/screening-room` combines the Observatory interface from Claude with the
-ChatGPT subscription bridge. Preserve ChatGPT device sign-in, Terra configuration,
+ChatGPT subscription bridge. Preserve ChatGPT device sign-in, GPT-6.1 Sol at medium
+effort (explicitly selected on 2026-10-01),
 the existing Sites project, and saved reel/Atlas compatibility. `companion/` and
 the static Claude editions are optional; do not switch production to them.
 

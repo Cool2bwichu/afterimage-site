@@ -17,7 +17,8 @@ grammar and the meaning of the map.
 The Sites build uses same-origin `/api` routes. Those routes still proxy to the
 existing ChatGPT subscription bridge using server-only URL/secret values.
 No backend request contracts or model settings are changed by this integration.
-The approved production setting remains GPT-5.6 Terra at medium effort on V2.
+On 2026-10-01 the user selected GPT-6.1 Sol at medium effort for reels and Atlases.
+The ChatGPT companion remains on V2; its live status reports the actual model.
 Model credit comes from the companion's status, never from a guessed model.
 ChatGPT's device code and secure sign-in link are shown when reconnection is
 needed; the page checks status until the sign-in completes.
