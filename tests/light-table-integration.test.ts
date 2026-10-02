@@ -161,3 +161,25 @@ test('the mobile disclosure controls the lanes and composer actions as one regio
   assert.ok(controlledRegion >= 0, 'expected a single controlled Light Table region');
   assert.ok(actions > controlledRegion, 'expected composer actions inside the controlled region');
 });
+
+
+test('saved selections from validated Atlas maps survive reload without admitting unknown sources', () => {
+  const result = fixture();
+  const source = { title: 'An Atlas discovery', year: '1999' };
+  const selectedFacets = { howItLooks: { ...result.recommendations[0].facets.howItLooks, source } };
+  const state = { experience: mode, result, selectedFacets, selectedReelIdentity: reelState.getRecommendationIdentity(result) };
+  assert.deepEqual(parseStoredState(JSON.stringify(state)).selectedFacets, {});
+  assert.deepEqual(parseStoredState(JSON.stringify(state), [source]).selectedFacets, selectedFacets);
+  const onlyAtlas = { ...state, result: null, selectedReelIdentity: 'atlas:an atlas discovery|1999' };
+  assert.deepEqual(parseStoredState(JSON.stringify(onlyAtlas), [source]).selectedFacets, selectedFacets);
+  assert.deepEqual(parseStoredState(JSON.stringify(onlyAtlas)).selectedFacets, {});
+});
+
+
+test('a versioned blend draft keeps a borrowed quality after its source leaves the current reel', () => {
+  const result = fixture();
+  const selectedFacets = { howItLooks: { ...result.recommendations[0].facets.howItLooks, source: { title: 'A previous discovery', year: '1999' } } };
+  const state = { experience: mode, result, blendDraft: { version: 1, facets: selectedFacets } };
+  assert.deepEqual(parseStoredState(JSON.stringify(state)).selectedFacets, selectedFacets);
+  assert.deepEqual(parseStoredState(JSON.stringify({ ...state, blendDraft: { version: 999, facets: selectedFacets } })).selectedFacets, {});
+});

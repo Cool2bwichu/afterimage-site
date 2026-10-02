@@ -1,5 +1,5 @@
 import type { EnrichmentInput, FilmEnrichment } from './movie-metadata.ts';
-import { imdbUrl, selectExactMovie } from './movie-metadata.ts';
+import { imdbUrl, normalizeMovieTitle, selectExactMovie } from './movie-metadata.ts';
 import { parseFilmSearchResults } from './film-search.ts';
 
 type FetchLike = typeof fetch;
@@ -33,7 +33,7 @@ function posterUrl(path: unknown, size = 'w500'): string | null {
 }
 
 function identity(input: EnrichmentInput, status: 'unmatched' | 'unavailable'): FilmEnrichment {
-  return { key: input.key, title: input.title, year: input.year, status };
+  return { key: input.key, title: input.title, year: input.year, status, lookupVersion: 2 };
 }
 
 export function createTmdbClient({
@@ -44,14 +44,19 @@ export function createTmdbClient({
 }: TmdbOptions) {
   const credential = token.trim();
   if (!credential) throw new Error('TMDB is not configured.');
+  // TMDB issues two credentials: the API Read Access Token, sent as a bearer
+  // token, and the shorter v3 API key, which TMDB accepts only as `api_key`.
+  const apiKey = /^[0-9a-f]{32}$/i.test(credential);
 
   async function requestJson(url: URL): Promise<unknown> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
+    const target = new URL(url);
+    if (apiKey) target.searchParams.set('api_key', credential);
     try {
-      const response = await fetchImpl(url, {
+      const response = await fetchImpl(target, {
         method: 'GET',
-        headers: { Authorization: `Bearer ${credential}`, Accept: 'application/json' },
+        headers: apiKey ? { Accept: 'application/json' } : { Authorization: `Bearer ${credential}`, Accept: 'application/json' },
         cache: 'no-store',
         signal: controller.signal,
       });
@@ -64,25 +69,41 @@ export function createTmdbClient({
 
   async function enrichOne(input: EnrichmentInput): Promise<FilmEnrichment> {
     try {
-      const searchUrl = new URL(`${baseUrl}/search/movie`);
-      searchUrl.search = new URLSearchParams({
-        query: input.title,
-        primary_release_year: input.year,
-        include_adult: 'false',
-        language: 'en-US',
-        page: '1',
-      }).toString();
-      const search = await requestJson(searchUrl);
-      const candidate = isRecord(search) ? selectExactMovie(input, search.results) : null;
-      if (!candidate || !Number.isInteger(candidate.id)) return identity(input, 'unmatched');
-
-      const detailsUrl = new URL(`${baseUrl}/movie/${Number(candidate.id)}`);
-      detailsUrl.search = new URLSearchParams({
-        append_to_response: 'credits,external_ids',
-        language: 'en-US',
-      }).toString();
+      let id = input.tmdbId;
+      // Even an exact search hit must be corroborated by its detail record.
+      const checkRelease = true;
+      if (!id) {
+        const searchUrl = new URL(`${baseUrl}/search/movie`);
+        searchUrl.search = new URLSearchParams({ query: input.title, primary_release_year: input.year,
+          include_adult: 'false', language: 'en-US', page: '1' }).toString();
+        const search = await requestJson(searchUrl);
+        const exact = isRecord(search) ? selectExactMovie(input, search.results) : null;
+        if (exact) id = Number(exact.id);
+        else {
+          // A nearby year is only a candidate. The release-date record must
+          // corroborate the requested year before metadata can be attached.
+          searchUrl.searchParams.delete('primary_release_year');
+          const broad = await requestJson(searchUrl);
+          const candidates = isRecord(broad) && Array.isArray(broad.results) ? broad.results.filter(item =>
+            isRecord(item) && item.adult !== true && Number.isSafeInteger(item.id) && Number(item.id) > 0 &&
+            [item.title, item.original_title].some(title => typeof title === 'string' && normalizeMovieTitle(title) === normalizeMovieTitle(input.title)) &&
+            typeof item.release_date === 'string' && Math.abs(Number(item.release_date.slice(0, 4)) - Number(input.year)) <= 2) : [];
+          const unique = new Map(candidates.map(item => [item.id, item]));
+          if (unique.size !== 1) return identity(input, 'unmatched');
+          id = Number([...unique.keys()][0]);
+        }
+      }
+      const detailsUrl = new URL(`${baseUrl}/movie/${id}`);
+      detailsUrl.search = new URLSearchParams({ append_to_response: 'credits,external_ids,release_dates', language: 'en-US' }).toString();
       const details = await requestJson(detailsUrl);
       if (!isRecord(details)) return identity(input, 'unavailable');
+      if (checkRelease) {
+        const sameTitle = [details.title, details.original_title].some(title => typeof title === 'string' && normalizeMovieTitle(title) === normalizeMovieTitle(input.title));
+        const releases = isRecord(details.release_dates) && Array.isArray(details.release_dates.results) ? details.release_dates.results : [];
+        const years = [stringValue(details.release_date).slice(0, 4), ...releases.flatMap(region =>
+          isRecord(region) && Array.isArray(region.release_dates) ? region.release_dates.map(date => isRecord(date) ? stringValue(date.release_date).slice(0, 4) : '') : [])];
+        if (details.id !== id || details.adult === true || !sameTitle || !years.includes(input.year)) return identity(input, 'unmatched');
+      }
 
       const crew = isRecord(details.credits) && Array.isArray(details.credits.crew) ? details.credits.crew : [];
       const directors = crew
@@ -108,7 +129,8 @@ export function createTmdbClient({
         title: input.title,
         year: input.year,
         status: 'matched',
-        tmdbId: Number(candidate.id),
+        tmdbId: id,
+        lookupVersion: 2,
         imdbId,
         tmdbRating,
         posterUrl: posterUrl(details.poster_path),
@@ -136,7 +158,7 @@ export function createTmdbClient({
     const raw = await requestJson(url);
     if (!isRecord(raw) || !Array.isArray(raw.results)) throw new Error('Incomplete film search.');
     return parseFilmSearchResults(raw.results.filter(item => isRecord(item) && item.adult !== true).map(item => ({
-      id: item.id, title: item.title, year: typeof item.release_date === 'string' ? item.release_date.slice(0, 4) : '', posterUrl: posterUrl(item.poster_path),
+      id: item.id, title: item.title, overview: stringValue(item.overview, 320), year: typeof item.release_date === 'string' ? item.release_date.slice(0, 4) : '', posterUrl: posterUrl(item.poster_path),
     })));
   }
 

@@ -1,0 +1,6 @@
+/* The server-rendered site loads these faces with next/font; the static build
+   takes the same families from Google Fonts. */
+:root {
+  --font-display: 'Cormorant Garamond', Georgia, serif;
+  --font-sans: 'DM Sans', system-ui, sans-serif;
+}

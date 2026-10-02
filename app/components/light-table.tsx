@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { FACET_KEYS, FACET_META, searchBreadth, selectionCount, type FacetKey, type SelectedFacets } from '../lib/light-table';
 
 export function BlendSummary({ selectedFacets }: { selectedFacets: SelectedFacets }) {
@@ -11,7 +11,7 @@ export function BlendSummary({ selectedFacets }: { selectedFacets: SelectedFacet
   </div>;
 }
 
-export function LightTable({ selectedFacets, locked, canSubmit, onRemove, onClear, onDevelop, embedded = false, workspace = false }: {
+export function LightTable({ selectedFacets, locked, canSubmit, onRemove, onClear, onDevelop, workspace = false }: {
   selectedFacets: SelectedFacets;
   locked: boolean;
   canSubmit: boolean;
@@ -22,25 +22,9 @@ export function LightTable({ selectedFacets, locked, canSubmit, onRemove, onClea
   workspace?: boolean;
 }) {
   const count = selectionCount(selectedFacets);
-  const [expansionOverride, setExpansionOverride] = useState<boolean | null>(null);
-  const expanded = workspace || (expansionOverride ?? (!embedded && count > 0));
-  const [height, setHeight] = useState(80);
-  const tableRef = useRef<HTMLElement>(null);
+  const [expanded, setExpanded] = useState(false);
   const toggleRef = useRef<HTMLButtonElement>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
-
-  useEffect(() => {
-    if (workspace) return;
-    const table = tableRef.current;
-    if (!table) return;
-    const observer = new ResizeObserver(() => {
-      const measured = table.getBoundingClientRect().height;
-      setHeight(measured);
-      document.documentElement.style.setProperty('--light-table-height', `${measured}px`);
-    });
-    observer.observe(table);
-    return () => { observer.disconnect(); document.documentElement.style.removeProperty('--light-table-height'); };
-  }, [workspace]);
 
   function restoreTableFocus() {
     const target = !workspace && window.matchMedia('(max-width: 760px)').matches ? toggleRef.current : titleRef.current;
@@ -48,15 +32,14 @@ export function LightTable({ selectedFacets, locked, canSubmit, onRemove, onClea
   }
 
   return <>
-    {!embedded ? <div aria-hidden="true" style={{ height: height + 28 }} /> : null}
-    <aside ref={tableRef} className={`ai-light-table ${workspace ? 'is-workspace' : ''} ${count ? 'has-selections' : 'is-empty'} ${expanded ? 'is-expanded' : ''}`} aria-label="The Light Table">
+    <aside className={`ai-light-table ${workspace ? 'is-workspace' : ''} ${count ? 'has-selections' : 'is-empty'} ${expanded ? 'is-expanded' : ''}`} aria-label="The Light Table">
       <header className="ai-light-table__header">
         <div><span className="ai-kicker">Remix the reel</span><h2 ref={titleRef} tabIndex={-1}>{workspace ? 'Your blend' : 'The Light Table'}</h2></div>
         <BlendSummary selectedFacets={selectedFacets} />
-        {!expanded && count > 0 ? <div className="ai-selected-summary">{FACET_KEYS.filter(channel => selectedFacets[channel]).map(channel => <span key={channel} className={FACET_META[channel].className}><i aria-hidden="true" />{selectedFacets[channel]!.label}<small>{selectedFacets[channel]!.source.title}</small></span>)}</div> : null}
-        <button type="button" className="ai-light-table__desktop-toggle" aria-expanded={expanded} aria-controls="ai-light-table-body" onClick={() => setExpansionOverride(!expanded)}>{expanded ? 'Collapse −' : 'Expand +'}</button>
+        {!expanded && count > 0 ? <div className="ai-selected-summary">{FACET_KEYS.filter(channel => selectedFacets[channel]).map(channel => <span key={channel} data-light-table-summary={channel} className={FACET_META[channel].className}><i aria-hidden="true" />{selectedFacets[channel]!.label}<small>{selectedFacets[channel]!.source.title}</small></span>)}</div> : null}
+        <button type="button" className="ai-light-table__desktop-toggle" aria-expanded={expanded} aria-controls="ai-light-table-body" onClick={() => setExpanded(!expanded)}>{expanded ? 'Collapse −' : 'Expand +'}</button>
       </header>
-      <button ref={toggleRef} className="ai-light-table__mobile-toggle" type="button" aria-expanded={expanded} aria-controls="ai-light-table-body" onClick={() => setExpansionOverride(!expanded)}>
+      <button ref={toggleRef} className="ai-light-table__mobile-toggle" type="button" aria-expanded={expanded} aria-controls="ai-light-table-body" onClick={() => setExpanded(!expanded)}>
         <span>Light Table <strong>{count}/4 · {searchBreadth(selectedFacets)}</strong></span>
         <span aria-hidden="true">{expanded ? '−' : '+'}</span>
       </button>

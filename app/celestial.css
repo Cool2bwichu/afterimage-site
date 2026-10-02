@@ -1,0 +1,28 @@
+/* Shared optical language: film is the light, the interface its viewing chamber. */
+.celestial-world { min-height:100dvh; }
+.orbit-mark { width:34px; height:34px; stroke:var(--gold,#dec6a0); stroke-width:1; flex:none; overflow:visible; }
+.orbit-mark-light { fill:var(--white,#f4efe5); stroke:none; }
+.celestial-motion { display:inline-flex; align-items:center; justify-content:center; gap:8px; min-height:44px; padding:4px 0; border:0; background:none; color:var(--muted,#a7b6c5); font:11px var(--font-sans),sans-serif; cursor:pointer; white-space:nowrap; }
+.celestial-motion svg { width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:1; }
+.celestial-motion:hover { color:var(--white); }
+.atlas-dialog .celestial-motion,.projection-room .masthead-actions>.celestial-motion { font:11px var(--font-sans),sans-serif; color:var(--muted); }
+.celestial-motion:focus-visible { outline:2px solid var(--gold); outline-offset:4px; }
+.celestial-sky { position:absolute; inset:0; z-index:-1; pointer-events:none; overflow:hidden; }
+.celestial-wash { position:absolute; inset:0; background:radial-gradient(ellipse at 53% 50%,#41505a30,transparent 62%),radial-gradient(ellipse at 70% 35%,#b0916520,transparent 42%); }
+.celestial-star-plate { position:absolute; width:100%; height:100%; fill:#e2dfd4; opacity:.8; }
+.celestial-instrument { position:absolute; width:100%; height:100%; opacity:.7; }
+.celestial-orbits { stroke-width:.8; }
+.celestial-orbit-light { transform-origin:500px 500px; animation:celestial-orbit 75s linear infinite; }
+.celestial-sky[data-active=false] * { animation-play-state:paused!important; }
+.celestial-sky--page { height:1000px; }
+.celestial-sky--page .celestial-star-plate { opacity:.27; }
+.celestial-sky--page .celestial-instrument { opacity:.12; width:1000px; height:1000px; left:calc(50% - 500px); top:-400px; }
+.celestial-world[data-motion=off] .celestial-orbit-light,
+.celestial-world[data-motion=off] .welcome-portal-trace { animation-play-state:paused!important; }
+@keyframes celestial-orbit { to { transform:rotate(360deg); } }
+@keyframes celestial-arrive { from { opacity:0; transform:translateY(14px); } to { opacity:1; transform:translateY(0); } }
+@media(max-width:760px) { .celestial-motion span { display:none; } .celestial-motion { min-width:36px; } }
+@media(prefers-reduced-motion:reduce) {
+  .celestial-world *, .celestial-world *::before, .celestial-world *::after { animation:none!important; scroll-behavior:auto!important; }
+  .celestial-world .celestial-instrument, .celestial-world .welcome-hero-image { transform:none!important; }
+}

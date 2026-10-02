@@ -28,14 +28,15 @@ test('the page wires the flexible V2 state contract into readiness, payload, and
     page,
     /buildDevelopPayload\(\s*films,\s*creativeBrief,\s*normalizeExcludedFilms/s,
   );
-  assert.match(page, /parseStoredState\(localStorage\.getItem\(STORAGE_KEY\)\)/);
+  assert.match(page, /parseStoredState\(localStorage\.getItem\(STORAGE_KEY\)(?:,|\))/);
   assert.match(page, /version: 4/);
   assert.match(page, /metadataByKey/);
 });
 
 test('the page starts, resumes, and explicitly acknowledges generation jobs', () => {
-  assert.match(page, /fetch\('\/api\/generations'/);
-  assert.match(page, /fetch\(`\/api\/generations\/\$\{encodeURIComponent\(activeJobId\)\}`/);
+  // apiFetch reaches the same routes on the site's own server or, in the GitHub Pages build, on the companion.
+  assert.match(page, /apiFetch\('\/api\/generations'/);
+  assert.match(page, /apiFetch\(`\/api\/generations\/\$\{encodeURIComponent\(activeJobId\)\}`/);
   assert.match(page, /Resuming the reel already in the gate\./);
   assert.match(page, /That reel job has expired\. Your inputs are still here—develop it again\./);
   assert.match(page, /Reconnecting to your reel/);

@@ -2,6 +2,7 @@ import type { FilmEnrichment } from './movie-metadata.ts';
 import { movieKey, parseFilmEnrichment } from './movie-metadata.ts';
 import { LIGHT_TABLE_EXPERIENCE, type FacetMap, type SelectedFacets } from './light-table.ts';
 import { parseFacetMap, parseSelectedFacets } from './light-table-parse.ts';
+import { parseLikedFilms } from './taste-profile.ts';
 
 export type Experience = typeof LIGHT_TABLE_EXPERIENCE | undefined;
 export type DevelopInput = {
@@ -52,6 +53,8 @@ export type ReelStateV2 = {
   acceptedInputJobId?: string;
   displayedInput?: DevelopInput;
   displayedReelIdentity?: string;
+  replacementJob?: { jobId: string; index: number };
+  screeningIndex?: number;
 };
 
 const MAX_FILMS = 20;
@@ -249,7 +252,7 @@ export function buildDevelopPayload(
   };
 }
 
-export function parseStoredState(raw: string | null): ReelStateV2 {
+export function parseStoredState(raw: string | null, atlasSources: readonly ExcludedFilm[] = []): ReelStateV2 {
   const fallback: ReelStateV2 = {
     version: 4,
     films: [],
@@ -279,13 +282,20 @@ export function parseStoredState(raw: string | null): ReelStateV2 {
     }
     const parsedSelections = parseSelectedFacets(stored.selectedFacets);
     const storedSelectionIdentity = typeof stored.selectedReelIdentity === 'string' ? stored.selectedReelIdentity : '';
+    const atlasKeys = new Set(atlasSources.map(film => movieKey(film.title, film.year)));
+    const selectionIdentity = resultIdentity || (storedSelectionIdentity.startsWith('atlas:') && atlasKeys.has(storedSelectionIdentity.slice(6)) ? storedSelectionIdentity : '');
     const selectionsBelongToResult = Boolean(
-      resultIdentity &&
-      (!storedSelectionIdentity || storedSelectionIdentity === resultIdentity) &&
-      Object.values(parsedSelections).every((facet) => allowedKeys.has(movieKey(facet.source.title, facet.source.year))),
+      selectionIdentity &&
+      (!storedSelectionIdentity || storedSelectionIdentity === selectionIdentity) &&
+      Object.values(parsedSelections).every((facet) => allowedKeys.has(movieKey(facet.source.title, facet.source.year)) || atlasKeys.has(movieKey(facet.source.title, facet.source.year))),
     );
-    const selectedFacets = selectionsBelongToResult ? parsedSelections : {};
-    const selectedReelIdentity = Object.keys(selectedFacets).length ? resultIdentity : '';
+    // New blend drafts have their own lifecycle: a borrowed quality retains its
+    // labeled source even when that source leaves the current five-film reel.
+    // Legacy selections still require the old reel/Atlas provenance checks.
+    const draftFacets = isRecord(stored.blendDraft) && stored.blendDraft.version === 1
+      ? parseSelectedFacets(stored.blendDraft.facets) : null;
+    const selectedFacets = draftFacets ?? (selectionsBelongToResult ? parsedSelections : {});
+    const selectedReelIdentity = Object.keys(selectedFacets).length ? selectionIdentity : '';
     const activeJobId = typeof stored.activeJobId === 'string' && GENERATION_JOB_ID.test(stored.activeJobId)
       ? stored.activeJobId
       : null;
@@ -308,13 +318,16 @@ export function parseStoredState(raw: string | null): ReelStateV2 {
       activeJobId,
       metadataByKey,
       excludedFilms: normalizeExcludedFilms(stored.excludedFilms),
+      ...(typeof stored.selectedFilmKey === 'string' && allowedKeys.has(stored.selectedFilmKey) ? { screeningIndex: result!.recommendations.findIndex(film => movieKey(film.title, film.year) === stored.selectedFilmKey) } : {}),
+      ...(acceptedInput ? { acceptedInput } : {}),
+      ...(displayedInput ? { displayedInput, displayedReelIdentity: resultIdentity } : {}),
+      ...(acceptedInputJobId ? { acceptedInputJobId } : {}),
+      ...(isRecord(stored.replacementJob) && stored.replacementJob.jobId === activeJobId && activeJobId && Number.isInteger(stored.replacementJob.index) && Number(stored.replacementJob.index) >= 0 && Number(stored.replacementJob.index) < 5 && result
+        ? { replacementJob: { jobId: activeJobId, index: Number(stored.replacementJob.index) } } : {}),
       ...(experience ? {
         experience,
         selectedFacets,
         ...(selectedReelIdentity ? { selectedReelIdentity } : {}),
-        ...(acceptedInput ? { acceptedInput } : {}),
-        ...(displayedInput ? { displayedInput, displayedReelIdentity: resultIdentity } : {}),
-        ...(acceptedInputJobId ? { acceptedInputJobId } : {}),
       } : {}),
     };
   } catch {
@@ -324,13 +337,15 @@ export function parseStoredState(raw: string | null): ReelStateV2 {
 
 /** Recover the exact accepted intent so a blend retry never inherits old form inputs. */
 export function parseAcceptedInput(value: unknown): DevelopInput | null {
-  if (!isRecord(value) || value.experience !== LIGHT_TABLE_EXPERIENCE || !Array.isArray(value.films) || typeof value.creativeBrief !== 'string') return null;
+  if (!isRecord(value) || (value.experience !== undefined && value.experience !== LIGHT_TABLE_EXPERIENCE) || !Array.isArray(value.films) || typeof value.creativeBrief !== 'string') return null;
   const base = buildDevelopPayload(value.films, value.creativeBrief, normalizeExcludedFilms(value.excludedFilms));
   if (base.films.length !== value.films.length || value.creativeBrief.length > 1200) return null;
   const selectedFacets = parseSelectedFacets(value.selectedFacets);
+  if (value.experience !== LIGHT_TABLE_EXPERIENCE && Object.keys(selectedFacets).length) return null;
   if (value.selectedFacets !== undefined && (!isRecord(value.selectedFacets) || Object.keys(selectedFacets).length !== Object.keys(value.selectedFacets).length)) return null;
   if (!canDevelop(base.films, base.creativeBrief) && !Object.keys(selectedFacets).length) return null;
-  return { ...base, experience: LIGHT_TABLE_EXPERIENCE, ...(Object.keys(selectedFacets).length ? {selectedFacets} : {}) };
+  const likedFilms = parseLikedFilms(JSON.stringify(value.likedFilms ?? []));
+  return { ...base, ...(value.experience === LIGHT_TABLE_EXPERIENCE ? { experience: LIGHT_TABLE_EXPERIENCE } : {}), ...(Object.keys(selectedFacets).length ? {selectedFacets} : {}), ...(likedFilms.length ? {likedFilms} : {}) };
 }
 
 export function withCurrentExclusions(input: DevelopInput, current: readonly ExcludedFilm[]): DevelopInput {

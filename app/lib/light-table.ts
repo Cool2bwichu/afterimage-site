@@ -120,7 +120,7 @@ export function selectFacet(
     label: facet.label,
     explanation: facet.explanation,
     traits: [...facet.traits],
-    source: { ...source },
+    source: { title: source.title, year: source.year },
   };
   const next = { ...selected };
   if (isSameSelectedFacet(channel, selected[channel], candidate)) {
@@ -191,7 +191,7 @@ export function buildBlendPayload({
       label: selected.label,
       explanation: selected.explanation,
       traits: [...selected.traits],
-      source: { ...selected.source },
+      source: { title: selected.source.title, year: selected.source.year },
     };
   }
 

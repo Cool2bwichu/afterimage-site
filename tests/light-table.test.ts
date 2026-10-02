@@ -86,6 +86,26 @@ test('builds a blend from selected qualities only', () => {
   assert.throws(() => buildBlendPayload({ selectedFacets: {} }), /select at least one quality/i);
 });
 
+test('Atlas borrowing carries only source identity through selection and blend submission', async () => {
+  const atlasFilm = {
+    ...source, tmdbId: 414453, summary: 'A full Atlas reading.',
+    watchFor: 'Notice the architecture.', facets: map(),
+    lenses: { howItLooks: { affinity: 'close', evidence: 'Balanced frames.' } },
+  };
+  const selected = selectFacet({}, 'howItLooks', look, atlasFilm);
+  assert.deepEqual(selected.howItLooks?.source, source);
+  // Also repair selections already kept in memory by an older Atlas view.
+  const payload = buildBlendPayload({ selectedFacets: {
+    howItLooks: { ...look, source: atlasFilm },
+  } });
+  assert.deepEqual(payload.selectedFacets.howItLooks?.source, source);
+  const { validateV2Input } = await import('../companion/lib/v2-contract.mjs');
+  const accepted = validateV2Input(payload);
+  assert.deepEqual(accepted.selectedFacets, { howItLooks: { ...look, source } });
+  assert.deepEqual(accepted.films, []);
+  assert.equal(accepted.creativeBrief, '');
+});
+
 
 test('copies facet data defensively and strips UI-only fields from blend requests', () => {
   const mutableFacet = {

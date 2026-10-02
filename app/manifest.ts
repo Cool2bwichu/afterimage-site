@@ -4,7 +4,7 @@ export default function manifest(): MetadataRoute.Manifest {
   return {
     name: 'AFTERIMAGE — Your cinematic sensibility',
     short_name: 'AFTERIMAGE',
-    description: 'A private cinematic instrument powered by your ChatGPT account.',
+    description: 'A private cinematic instrument for discovering films you will love.',
     start_url: '/',
     display: 'standalone',
     background_color: '#0B0D14',

@@ -2,9 +2,10 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { parseFilmSearchResults, type FilmSearchResult } from '../lib/film-search';
-import type { FacetSource } from '../lib/light-table';
+import type { AtlasInput } from '../lib/atlas';
+import { apiFetch } from '../lib/api';
 
-type Props = { busy: boolean; connected: boolean; onDevelop: (film: FacetSource, opener: HTMLElement) => void };
+type Props = { busy: boolean; connected: boolean; onDevelop: (film: AtlasInput['anchor'], opener: HTMLElement) => void };
 type Lookup = { query: string; status: 'loading' | 'ready' | 'error'; films: FilmSearchResult[]; error?: string };
 
 export function AtlasFilmSearch({ busy, connected, onDevelop }: Props) {
@@ -13,6 +14,7 @@ export function AtlasFilmSearch({ busy, connected, onDevelop }: Props) {
   const [lookup, setLookup] = useState<Lookup | null>(null);
   const [open, setOpen] = useState(false);
   const [revision, setRevision] = useState(0);
+  const form = useRef<HTMLFormElement>(null);
   const results = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLInputElement>(null);
   const term = query.trim();
@@ -20,13 +22,28 @@ export function AtlasFilmSearch({ busy, connected, onDevelop }: Props) {
   const showResults = open && !selected && term.length >= 2;
 
   useEffect(() => {
+    if (!open) return;
+    function dismissOutside(event: PointerEvent) {
+      if (event.target instanceof Node && !form.current?.contains(event.target)) setOpen(false);
+    }
+    document.addEventListener('pointerdown', dismissOutside);
+    return () => document.removeEventListener('pointerdown', dismissOutside);
+  }, [open]);
+
+  useEffect(() => {
     if (term.length < 2 || selected) return;
     const controller = new AbortController();
     const timer = setTimeout(async () => {
       setLookup({ query: term, status: 'loading', films: [] });
       try {
-        const response = await fetch(`/api/films/search?q=${encodeURIComponent(term)}`, { signal: AbortSignal.any([controller.signal, AbortSignal.timeout(10000)]) });
-        if (!response.ok) throw new Error('Film search could not connect. Try again.');
+        const response = await apiFetch(`/api/films/search?q=${encodeURIComponent(term)}`, { signal: AbortSignal.any([controller.signal, AbortSignal.timeout(10000)]) });
+        if (!response.ok) {
+          // The service's own explanation, such as a catalogue this copy cannot reach.
+          const failure: unknown = await response.json().catch(() => null);
+          const reason = failure && typeof failure === 'object' && 'error' in failure && typeof failure.error === 'string' ? failure.error.trim().slice(0, 300) : '';
+          if (!controller.signal.aborted) setLookup({ query: term, status: 'error', films: [], error: reason || 'Film search could not connect. Try again.' });
+          return;
+        }
         const raw = await response.json();
         if (!raw || typeof raw !== 'object' || !('films' in raw) || !Array.isArray(raw.films)) throw new Error('Film search returned an incomplete response. Try again.');
         if (!controller.signal.aborted) setLookup({ query: term, status: 'ready', films: parseFilmSearchResults(raw.films) });
@@ -39,9 +56,13 @@ export function AtlasFilmSearch({ busy, connected, onDevelop }: Props) {
 
   return <section className="atlas-search" aria-labelledby="atlas-search-heading">
     <div className="atlas-search-intro"><h2 id="atlas-search-heading">Start a new Atlas</h2><p>Another film. A new set of connections.</p></div>
-    <form role="search" aria-label="Find a film for a new Atlas" className="atlas-search-form"
+    <form ref={form} role="search" aria-label="Find a film for a new Atlas" className="atlas-search-form"
       onSubmit={event => { event.preventDefault(); setOpen(true); if (selected) setSelected(null); setRevision(value => value + 1); }}
-      onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false); }}
+      onBlur={event => {
+        // Some browsers blur the input without focusing a clicked button. Keep
+        // the result mounted until its click; outside pointers dismiss above.
+        if (event.relatedTarget && !event.currentTarget.contains(event.relatedTarget)) setOpen(false);
+      }}
       onKeyDown={event => {
         if (event.key === 'Escape' && showResults) { event.preventDefault(); event.stopPropagation(); input.current?.focus(); setOpen(false); }
       }}>
@@ -53,10 +74,16 @@ export function AtlasFilmSearch({ busy, connected, onDevelop }: Props) {
             onKeyDown={event => { if (event.key === 'ArrowDown' && showResults) { const first = results.current?.querySelector('button'); if (first) { event.preventDefault(); first.focus(); } } }} />
           <button type="submit" aria-label="Search films" disabled={term.length < 2}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" /><path d="m16 16 5 5" /></svg></button>
         </div>
-        <button type="button" className="atlas-search-develop" disabled={!selected || busy || !connected} onClick={event => { if (selected) { setOpen(false); onDevelop({ title: selected.title, year: selected.year }, event.currentTarget); } }}>Develop Atlas <span aria-hidden="true">↗</span></button>
+        <button type="button" className="atlas-search-develop" disabled={!selected || busy || !connected} onClick={event => { if (selected) { setOpen(false); onDevelop({ title: selected.title, year: selected.year, tmdbId: selected.id }, event.currentTarget); } }}>Develop Atlas <span aria-hidden="true">↗</span></button>
       </div>
       <p id="atlas-search-help" className="atlas-search-help" role="status">{busy ? 'An Atlas is developing. You can keep browsing.' : !connected ? 'Reconnect the film service from your reel to develop an Atlas.' : selected ? <>Ready to explore <strong>{selected.title} <span>({selected.year})</span></strong></> : 'Search for a film and select the right release.'}</p>
-      {showResults ? <div className="atlas-search-results" ref={results} aria-label="Matching films">
+      {showResults ? <div className="atlas-search-results" ref={results} aria-label="Matching films"
+        onMouseDown={event => {
+          // Safari can focus the enclosing modal instead of a result button,
+          // dismissing it before click. Keep input focus for primary clicks;
+          // keyboard focus and touch scrolling retain their normal behavior.
+          if (event.button === 0 && event.target instanceof Element && event.target.closest('button')) event.preventDefault();
+        }}>
         {!current || current.status === 'loading' ? <p role="status">Finding films…</p> : current.status === 'error' ? <div role="alert"><p>{current.error}</p><button type="button" className="atlas-search-retry" onClick={() => setRevision(value => value + 1)}>Try again</button></div> : current.films.length ? <>
           <p className="atlas-search-result-label">Choose your film <span>Results from TMDB</span></p>
           <ul>{current.films.map(film => <li key={film.id}><button type="button" aria-label={`Choose ${film.title} (${film.year})`} onClick={() => { setSelected(film); setQuery(film.title); setOpen(false); input.current?.focus(); }}>

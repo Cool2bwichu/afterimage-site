@@ -69,6 +69,25 @@ test('stale jobs and changed anchors cannot replace the current map', () => {
   assert.equal(finishAtlasMap(pending.state, jobId(3), pending.result), pending.state);
   assert.equal(finishAtlasMap(pending.state, jobId(2), atlas('Wrong')), pending.state);
 });
+test('explicitly reopening the current saved map keeps a pending discovery from taking it over', () => {
+  const pending = start(complete(emptyAtlasTrail(), 1, 'Saved map'), 2, 'Developing map');
+  const revisited = visitAtlasMap(pending.state, jobId(1));
+  assert.equal(revisited.pending?.followOnComplete, false);
+  assert.deepEqual(revisited.route, pending.state.route, 'reopening does not duplicate the trail step');
+  const finished = finishAtlasMap(revisited, jobId(2), pending.result);
+  assert.equal(activeAtlasStop(finished)?.atlas.anchor.title, 'Saved map');
+  assert.equal(finished.readyId, jobId(2));
+  assert.equal(finished.maps.length, 2);
+});
+test('identified Atlas maps reload and a different catalog identity cannot complete the pending map', () => {
+  const identified = atlas('After Yang'); identified.anchor = { ...identified.anchor, tmdbId: 402 };
+  const key = atlasInputKey({ anchor: identified.anchor, request });
+  const started = { ...emptyAtlasTrail(), pending: { jobId: jobId(1), inputKey: key, anchor: identified.anchor, followOnComplete: true } };
+  const mismatched = structuredClone(identified); mismatched.anchor = { ...mismatched.anchor, tmdbId: 403 };
+  assert.equal(finishAtlasMap(started, jobId(1), mismatched).maps.length, 0);
+  const completed = finishAtlasMap(started, jobId(1), identified);
+  assert.equal(parseAtlasTrail(JSON.parse(JSON.stringify(completed))).maps[0].atlas.anchor.tmdbId, 402);
+});
 
 test('bounded storage retains the active map and filters evicted trail steps', () => {
   let state = emptyAtlasTrail();
