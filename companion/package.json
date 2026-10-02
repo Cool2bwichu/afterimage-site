@@ -1,0 +1,19 @@
+{
+  "name": "afterimage-claude-companion",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "AFTERIMAGE's private recommendation service, programmed by Claude on your Claude subscription (through Claude Code) or an Anthropic API key.",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "scripts": {
+    "start": "node --experimental-strip-types server.mjs",
+    "dev": "node --experimental-strip-types --env-file-if-exists=../.env.local --env-file-if-exists=.env server.mjs",
+    "check": "node --experimental-strip-types --check server.mjs && node --check lib/*.mjs && npm test",
+    "test": "node --experimental-strip-types --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "0.129.0"
+  }
+}

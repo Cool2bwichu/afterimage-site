@@ -1,6 +1,10 @@
 'use client';
 
-import { useRef, useState, type KeyboardEvent } from 'react';
+import { useEffect, useId, useRef, useState, type FormEvent, type KeyboardEvent, type MouseEvent } from 'react';
+import { CelestialSky, useCelestialMotion } from './celestial';
+import { apiFetch } from '../lib/api';
+import { parseFilmSearchResults, type FilmSearchResult } from '../lib/film-search';
+import { BLANK_SENTENCE, SENTENCE_WORDS, cycleWord, hasAnswer, questionRequest, wordText, type ChosenFilm, type SentenceChoice, type SentenceKey } from '../lib/one-question';
 
 // Verified TMDB stills. These are editorial examples, never generated user results.
 const FILMS = {
@@ -9,62 +13,230 @@ const FILMS = {
   mood: { title: 'In the Mood for Love', year: '2000', director: 'Wong Kar-wai', image: 'https://image.tmdb.org/t/p/w1280/ffQFnAUm2Uu4RU0nijpjPRf9TBT.jpg' },
 };
 export type WelcomeFilm = keyof typeof FILMS;
+const ORDER: WelcomeFilm[] = ['yang', 'columbus', 'mood'];
 export function nextWelcomeFilm(previous: string | null): WelcomeFilm {
-  const sequence: WelcomeFilm[] = ['yang', 'columbus', 'mood'];
-  const index = sequence.findIndex(key => key === previous);
-  return sequence[index < 0 ? 1 : (index + 1) % sequence.length];
+  const index = ORDER.findIndex(key => key === previous);
+  return ORDER[index < 0 ? 1 : (index + 1) % ORDER.length];
 }
-const CHAPTERS = [
-  { name: 'Your reel', title: 'Five films. A thread between them.', copy: 'Name a film you love, describe a feeling, or combine both. Get five recommendations with a reason for each one.' },
-  { name: 'The Light Table', title: 'Keep the feeling. Change the film.', copy: 'Borrow the mood of one film, the visual language of another. Combine the qualities you want to carry into your next reel.' },
-  { name: 'Atlas', title: 'Follow what connects them.', copy: 'Explore how films meet through their worlds, emotions, images and sound. Follow a connection, then find your way back.' },
-];
-const STARTERS = [
-  { name: 'Quiet science fiction', prompt: 'Quiet, intimate science fiction about memory, care, and what makes us human.' },
-  { name: 'Longing after dark', prompt: 'Films filled with nocturnal color, restrained longing, and things left unsaid.' },
-  { name: 'A little wonder', prompt: 'Warm, observant films that find unexpected wonder in ordinary life.' },
-];
 function Still({ film, eager = false }: { film: typeof FILMS.yang; eager?: boolean }) {
   const [failed, setFailed] = useState(false);
   return failed ? <div className="welcome-image-fallback">{film.title}</div> : <img src={film.image} alt={`${film.title} film still`} loading={eager ? 'eager' : 'lazy'} fetchPriority={eager ? 'high' : 'auto'} decoding="async" onError={() => setFailed(true)} />;
 }
-export function Landing({ onStart, hasDraft, hasReel = false, featuredFilm }: { featuredFilm: WelcomeFilm; onStart: (prompt?: string) => void; hasDraft: boolean; hasReel?: boolean }) {
-  const featured = FILMS[featuredFilm];
-  const [chapter, setChapter] = useState(0);
-  const [qualities, setQualities] = useState([true, true]);
-  const [connection, setConnection] = useState<'columbus' | 'mood'>('columbus');
-  const tabs = useRef<Array<HTMLButtonElement | null>>([]);
-  function moveTab(event: KeyboardEvent, index: number) {
-    const next = event.key === 'ArrowRight' ? (index + 1) % 3 : event.key === 'ArrowLeft' ? (index + 2) % 3 : event.key === 'Home' ? 0 : event.key === 'End' ? 2 : null;
-    if (next === null) return;
-    event.preventDefault(); setChapter(next); tabs.current[next]?.focus();
+
+/**
+ * Three films orbit the aperture on the same inclined ring, passing behind the lens and in
+ * front of it. When a pointer or keyboard focus reaches the instrument they gather on the
+ * near side and rest there, each fully in reach, until you leave.
+ */
+function Orrery({ selected, onChoose }: { selected: WelcomeFilm; onChoose: (film: WelcomeFilm) => void }) {
+  const { running } = useCelestialMotion();
+  const root = useRef<HTMLDivElement>(null);
+  const planets = useRef<Array<HTMLButtonElement | null>>([]);
+  const held = useRef(false);
+  const angle = useRef(0);
+  useEffect(() => {
+    // The whole instrument is the aiming zone: once a pointer or focus arrives, the orbit rests.
+    const host = root.current?.parentElement;
+    if (!host) return;
+    const hold = () => { held.current = true; };
+    const release = () => { held.current = false; };
+    const blur = (event: FocusEvent) => { if (!host.contains(event.relatedTarget as Node | null)) release(); };
+    host.addEventListener('pointerenter', hold);
+    host.addEventListener('pointerleave', release);
+    host.addEventListener('focusin', hold);
+    host.addEventListener('focusout', blur);
+    return () => {
+      host.removeEventListener('pointerenter', hold);
+      host.removeEventListener('pointerleave', release);
+      host.removeEventListener('focusin', hold);
+      host.removeEventListener('focusout', blur);
+    };
+  }, []);
+  useEffect(() => {
+    const tilt = -28 * Math.PI / 180;
+    // Where the films rest when someone reaches for them: on the near side, clear of the lens and its credit.
+    const front = [.25, .75, .95].map(turn => turn * Math.PI);
+    const place = (index: number, t: number) => {
+      const planet = planets.current[index];
+      if (!planet) return;
+      const ex = 326 * Math.cos(t);
+      const ey = 130 * Math.sin(t);
+      const x = 340 + ex * Math.cos(tilt) - ey * Math.sin(tilt);
+      const y = 340 + ex * Math.sin(tilt) + ey * Math.cos(tilt);
+      const depth = Math.sin(t);
+      planet.style.setProperty('--x', `${(x / 680 * 100).toFixed(3)}%`);
+      planet.style.setProperty('--y', `${(y / 680 * 100).toFixed(3)}%`);
+      planet.style.setProperty('--depth', (0.72 + 0.28 * (depth + 1) / 2).toFixed(3));
+      planet.dataset.side = depth < -0.12 ? 'far' : 'near';
+    };
+    if (!running) { front.forEach((t, index) => place(index, t)); return; }
+    const current = ORDER.map((_, index) => angle.current + index * Math.PI * 2 / 3);
+    let frame = 0;
+    let last = performance.now();
+    const tick = (time: number) => {
+      const seconds = Math.min(.1, (time - last) / 1000);
+      last = time;
+      if (!held.current) angle.current += seconds * (Math.PI * 2 / 96);
+      current.forEach((t, index) => {
+        const target = held.current ? front[index] : angle.current + index * Math.PI * 2 / 3;
+        const delta = ((target - t + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI;
+        current[index] = t + delta * Math.min(1, seconds * 7);
+        place(index, current[index]);
+      });
+      frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [running]);
+  return <div className="welcome-orrery" ref={root} role="group" aria-label="Choose a film for the aperture">
+    {ORDER.map((key, index) => <button key={key} type="button" ref={element => { planets.current[index] = element; }} className="welcome-planet"
+      aria-label={`View ${FILMS[key].title} in the aperture`} aria-pressed={selected === key} onClick={() => onChoose(key)}>
+      <span className="welcome-planet-body"><Still film={{ ...FILMS[key], image: FILMS[key].image.replace('/w1280/', '/w300/') }} /></span>
+      <span className="welcome-planet-label">{FILMS[key].title}</span>
+    </button>)}
+  </div>;
+}
+
+type QuestionRequest = { films: string[]; creativeBrief: string };
+
+/** One tappable word of the sentence: each tap tries the next option, then back to blank. */
+function SentenceWord({ choice, wordKey, onChange }: { choice: SentenceChoice; wordKey: SentenceKey; onChange: (next: SentenceChoice) => void }) {
+  const word = SENTENCE_WORDS.find(item => item.key === wordKey)!;
+  const value = wordText(choice, wordKey);
+  const step = (event: MouseEvent<HTMLButtonElement>) => onChange(cycleWord(choice, wordKey, event.shiftKey ? -1 : 1));
+  return <button type="button" className={`welcome-word${value ? ' is-set' : ''}`} onClick={step}
+    onKeyDown={event => {
+      if (event.key === 'ArrowDown' || event.key === 'ArrowRight') { event.preventDefault(); onChange(cycleWord(choice, wordKey, 1)); }
+      if (event.key === 'ArrowUp' || event.key === 'ArrowLeft') { event.preventDefault(); onChange(cycleWord(choice, wordKey, -1)); }
+      if ((event.key === 'Backspace' || event.key === 'Delete') && value) { event.preventDefault(); onChange({ ...choice, [wordKey]: -1 }); }
+    }}
+    aria-label={`${word.label}: ${value ?? 'open'}. Tap for another.`}>
+    <span key={value ?? 'blank'}>{value ?? word.blank}</span>
+  </button>;
+}
+
+/**
+ * The entrance asks one thing. Answer with a film from the catalogue, or in your own words,
+ * and fill in as much of the sentence as you like; nothing else is required.
+ */
+function Question({ canSearch, onAnswer, film, setFilm }: {
+  canSearch: boolean; onAnswer: (request: QuestionRequest) => void; film: ChosenFilm | null; setFilm: (film: ChosenFilm | null) => void;
+}) {
+  const [text, setText] = useState('');
+  const [choice, setChoice] = useState<SentenceChoice>(BLANK_SENTENCE);
+  const [suggestions, setSuggestions] = useState<FilmSearchResult[]>([]);
+  const [open, setOpen] = useState(false);
+  const [active, setActive] = useState(-1);
+  const input = useRef<HTMLInputElement>(null);
+  const listId = useId();
+  const term = text.trim();
+
+  useEffect(() => {
+    if (!canSearch || film || term.length < 2) return;
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      try {
+        const response = await apiFetch(`/api/films/search?q=${encodeURIComponent(term)}`, { signal: AbortSignal.any([controller.signal, AbortSignal.timeout(8000)]) });
+        if (!response.ok) return;
+        const payload: unknown = await response.json();
+        const films = payload && typeof payload === 'object' && 'films' in payload ? parseFilmSearchResults(payload.films).slice(0, 5) : [];
+        if (!controller.signal.aborted) { setSuggestions(films); setActive(-1); }
+      } catch { /* Suggestions are optional: what was typed still works as an answer. */ }
+    }, 280);
+    return () => { window.clearTimeout(timer); controller.abort(); };
+  }, [term, canSearch, film]);
+
+  const shown = open && !film && term.length >= 2 ? suggestions : [];
+  function choose(result: FilmSearchResult) {
+    setFilm({ title: result.title, year: result.year, tmdbId: result.id, posterUrl: result.posterUrl });
+    setText(''); setOpen(false); setSuggestions([]);
+  }
+  function submit(event: FormEvent) {
+    event.preventDefault();
+    const request = questionRequest(text, film, choice);
+    if (request) onAnswer(request);
+    else input.current?.focus();
+  }
+  function onKey(event: KeyboardEvent<HTMLInputElement>) {
+    if (!shown.length) return;
+    if (event.key === 'ArrowDown') { event.preventDefault(); setActive(index => (index + 1) % shown.length); }
+    else if (event.key === 'ArrowUp') { event.preventDefault(); setActive(index => (index <= 0 ? shown.length : index) - 1); }
+    else if (event.key === 'Enter' && active >= 0) { event.preventDefault(); choose(shown[active]); }
+    else if (event.key === 'Escape') { event.preventDefault(); setOpen(false); }
+  }
+
+  return <form className="welcome-question" onSubmit={submit} aria-label="What stayed with you?">
+    <div className={`welcome-answer${film ? ' has-film' : ''}`}>
+      {film ? <span className="welcome-chosen">
+        <span className="welcome-chosen-poster" aria-hidden="true">{film.posterUrl ? <img src={film.posterUrl.replace('/w500/', '/w92/')} alt="" /> : film.title.slice(0, 1)}</span>
+        <span><strong>{film.title}</strong> <small>{film.year}</small></span>
+        <button type="button" aria-label={`Remove ${film.title}`} onClick={() => { setFilm(null); requestAnimationFrame(() => input.current?.focus()); }}>×</button>
+      </span> : <>
+        <label className="sr-only" htmlFor="welcome-answer">A film, a scene or a feeling</label>
+        <input ref={input} id="welcome-answer" type="text" autoComplete="off" maxLength={600} value={text} placeholder="A film, a scene, a feeling…"
+          role="combobox" aria-autocomplete="list" aria-expanded={shown.length > 0} aria-controls={listId}
+          aria-activedescendant={active >= 0 && shown[active] ? `${listId}-${active}` : undefined}
+          onChange={event => { setText(event.target.value); setOpen(true); }} onFocus={() => setOpen(true)}
+          onBlur={() => window.setTimeout(() => setOpen(false), 120)} onKeyDown={onKey} />
+      </>}
+      <ul id={listId} role="listbox" className="welcome-suggestions" aria-label="Films in the catalogue" hidden={!shown.length}>
+        {shown.map((result, index) => <li key={result.id} id={`${listId}-${index}`} role="option" aria-selected={index === active}
+          onMouseDown={event => { event.preventDefault(); choose(result); }}>
+          <span className="welcome-suggestion-poster" aria-hidden="true">{result.posterUrl ? <img src={result.posterUrl.replace('/w500/', '/w92/')} alt="" loading="lazy" /> : result.title.slice(0, 1)}</span>
+          <span><strong>{result.title}</strong> <small>{result.year}</small></span>
+        </li>)}
+      </ul>
+    </div>
+    <p className="welcome-sentence">Something <SentenceWord choice={choice} wordKey="mood" onChange={setChoice} /> to watch <SentenceWord choice={choice} wordKey="company" onChange={setChoice} />, <SentenceWord choice={choice} wordKey="time" onChange={setChoice} />.</p>
+    <div className="welcome-actions">
+      <button type="submit" className="welcome-primary" disabled={!hasAnswer(text, film, choice)}>Develop my reel <span aria-hidden="true">↗</span></button>
+    </div>
+  </form>;
+}
+
+export function Landing({ onStart, onAnswer, onEyeTest, canSearch, hasDraft, hasReel = false, featuredFilm }: {
+  featuredFilm: WelcomeFilm; onStart: () => void; onAnswer: (request: QuestionRequest) => void; onEyeTest: () => void;
+  canSearch: boolean; hasDraft: boolean; hasReel?: boolean;
+}) {
+  const [viewing, setViewing] = useState<WelcomeFilm | null>(null);
+  const [previous, setPrevious] = useState<WelcomeFilm | null>(null);
+  const [picked, setPicked] = useState<ChosenFilm | null>(null);
+  const selectedFilm = viewing ?? featuredFilm;
+  const featured = FILMS[selectedFilm];
+  function choose(film: WelcomeFilm) {
+    if (film === selectedFilm) return;
+    setPrevious(selectedFilm);
+    setViewing(film);
   }
   return <div className="welcome">
     <section className="welcome-hero" aria-labelledby="welcome-title">
-      <div className="welcome-hero-image"><Still key={featuredFilm} film={featured} eager /></div>
+      <CelestialSky variant="landing" />
       <div className="welcome-hero-copy">
-        <p className="welcome-prelude">For the love of film.</p>
-        <h2 id="welcome-title" tabIndex={-1}>Some films stay.<br />Find the next one.</h2>
-        <p className="welcome-description">Start with a film you love or a feeling you can’t quite name. Discover what to watch next—and why it might stay with you.</p>
-        <div className="welcome-actions"><button className="welcome-primary" onClick={() => onStart()}>{hasReel ? 'Return to your reel' : hasDraft ? 'Continue your request' : 'Find my next film'} <span aria-hidden="true">↗</span></button><a href="#discover-afterimage">Take a look inside <span aria-hidden="true">↓</span></a></div>
-        <p className="welcome-footnote">Your taste is the starting point.</p>
+        <p className="welcome-prelude"><span aria-hidden="true">✦</span> Some films stay with you.</p>
+        <h2 id="welcome-title" tabIndex={-1}>What stayed<br /><em>with you?</em></h2>
+        <Question canSearch={canSearch} onAnswer={onAnswer} film={picked} setFilm={setPicked} />
+        <p className="welcome-other-ways">
+          <button type="button" onClick={onEyeTest}>Can’t put it into words? <strong>Take the Eye Test</strong></button>
+          <button type="button" onClick={() => onStart()}>{hasReel ? 'Return to your reel' : hasDraft ? 'Continue your request' : 'Use the full composer'}</button>
+        </p>
       </div>
-      <div className="welcome-film-credit"><span>On the screen</span><strong>{featured.title}</strong><span>{featured.year} · {featured.director}</span></div>
-    </section>
-    {!hasDraft ? <section className="welcome-starting-points" aria-label="Ideas for your first reel"><p>Or begin with a feeling</p><div>{STARTERS.map(starter => <button key={starter.name} onClick={() => onStart(starter.prompt)}>{starter.name}<span aria-hidden="true">↗</span></button>)}</div></section> : null}
-    <section className="welcome-discovery" id="discover-afterimage" aria-labelledby="welcome-discovery-title">
-      <header><p>A different way to find a film</p><h2 id="welcome-discovery-title">Let your curiosity lead.</h2></header>
-      <div className="welcome-chapters" role="tablist" aria-label="Explore Afterimage">{CHAPTERS.map((item, index) => <button key={item.name} ref={el => { tabs.current[index] = el; }} id={`welcome-tab-${index}`} role="tab" aria-selected={chapter === index} aria-controls="welcome-chapter" tabIndex={chapter === index ? 0 : -1} onClick={() => setChapter(index)} onKeyDown={event => moveTab(event, index)}>{item.name}<span aria-hidden="true">{index === chapter ? '−' : '+'}</span></button>)}</div>
-      <div className="welcome-chapter" role="tabpanel" id="welcome-chapter" aria-labelledby={`welcome-tab-${chapter}`} tabIndex={0}>
-        <div className="welcome-chapter-copy"><h3>{CHAPTERS[chapter].title}</h3><p>{CHAPTERS[chapter].copy}</p><small>Explore an illustrative example</small></div>
-        <div className={`welcome-example welcome-example-${chapter}`} key={chapter}>
-          {chapter === 0 ? <><div className="welcome-example-still"><Still film={FILMS.yang} /><span>After Yang <small>2022 · Kogonada</small></span></div><div className="welcome-example-note"><span>For a request about quiet futures</span><p>A family story where memory and ordinary rituals make a bigger world feel intimate.</p></div></> : null}
-          {chapter === 1 ? <><div className="welcome-quality-films">{([FILMS.mood, FILMS.columbus]).map((film, i) => <div key={film.title}><Still film={film} /><span>{film.title}</span><button aria-pressed={qualities[i]} onClick={() => setQualities(current => current.map((value, n) => n === i ? !value : value))}><i aria-hidden="true" />{i === 0 ? 'Restrained longing' : 'Composed spaces'}<b aria-hidden="true">{qualities[i] ? '✓' : '+'}</b></button></div>)}</div><p className="welcome-blend" aria-live="polite">{qualities.every(Boolean) ? 'Restrained longing, told through composed spaces.' : qualities[0] ? 'Restrained longing. The visual direction is open.' : qualities[1] ? 'Composed spaces. The emotional direction is open.' : 'Choose a quality to see how a blend begins.'}</p><small className="welcome-demo-note">Try selecting the qualities above. This example doesn’t change your reel.</small></> : null}
-          {chapter === 2 ? <><div className="welcome-map" aria-label="Example connections from After Yang"><svg viewBox="0 0 600 280" preserveAspectRatio="none" aria-hidden="true"><path className={connection === 'columbus' ? 'is-active' : ''} d="M300 190 Q230 64 115 64" /><path className={connection === 'mood' ? 'is-active' : ''} d="M300 190 Q365 64 485 64" /></svg><div className="welcome-map-anchor"><Still film={FILMS.yang} /><span>After Yang</span></div>{(['columbus', 'mood'] as const).map(key => <button className={`welcome-map-${key}`} key={key} aria-label={FILMS[key].title} aria-pressed={connection === key} onClick={() => setConnection(key)}><Still film={FILMS[key]} /><span>{FILMS[key].title}</span></button>)}</div><p className="welcome-map-reading" aria-live="polite">{connection === 'columbus' ? 'Columbus & After Yang: composed spaces give quiet conversations room to unfold.' : 'In the Mood for Love & After Yang: ordinary rituals reveal feelings that words leave unfinished.'}</p><small className="welcome-demo-note">Select a film to read the connection. An editorial reading, not an influence claim.</small></> : null}
+      <div className="welcome-portal" aria-label="The aperture">
+        <div className="welcome-portal-aura" aria-hidden="true" />
+        <svg className="welcome-portal-rings" viewBox="0 0 680 680" fill="none" aria-hidden="true"><circle cx="340" cy="340" r="227" /><circle cx="340" cy="340" r="243" strokeDasharray="1 9" /><ellipse cx="340" cy="340" rx="326" ry="130" transform="rotate(-28 340 340)" className="welcome-orbit-path" /><path className="welcome-portal-trace" d="M42 457C-20 393 162 241 336 196s306-22 305 35" /><path d="M340 70v17m0 506v17M70 340h17m506 0h17" /><g className="welcome-portal-ticks">{Array.from({ length: 72 }, (_, index) => <path key={index} d={index % 6 ? 'M340 92v5' : 'M340 90v10'} transform={`rotate(${index * 5} 340 340)`} />)}</g></svg>
+        <div className="welcome-hero-image">
+          {previous && previous !== selectedFilm ? <div className="welcome-aperture-layer is-leaving" key={`from-${previous}`}><Still film={FILMS[previous]} /></div> : null}
+          <div className={`welcome-aperture-layer${previous ? ' is-entering' : ''}`} key={selectedFilm}><Still film={featured} eager /></div>
         </div>
+        <div className="welcome-aperture-sheen" aria-hidden="true" />
+        <div className="welcome-aperture-edge" aria-hidden="true" />
+        <div className="welcome-film-credit" aria-live="polite"><span>In the aperture</span><strong>{featured.title}</strong><span>{featured.year} · {featured.director}</span>
+          <button type="button" className="welcome-credit-pick" onClick={() => setPicked({ title: featured.title, year: featured.year })}>This one stayed with me</button></div>
+        <Orrery selected={selectedFilm} onChoose={choose} />
+        <span className="welcome-portal-caption">A film is only the beginning.</span>
       </div>
     </section>
-    <section className="welcome-taste"><span className="welcome-heart" aria-hidden="true">♡</span><div><h2>A little more you, every time.</h2><p>Like films you’ve seen and loved. Each Like gently guides future discoveries, while your request and chosen qualities stay in charge.</p><small>Likes and your exploration trail stay in this browser.</small></div><button className="welcome-primary" onClick={() => onStart()}>{hasReel ? 'Return to your reel' : hasDraft ? 'Continue your request' : 'Begin your first reel'} <span aria-hidden="true">↗</span></button></section>
-    <footer className="welcome-footer"><span>AFTERIMAGE</span><p>Better films find you.</p><small>Film imagery: <a href="https://www.themoviedb.org" target="_blank" rel="noreferrer noopener">TMDB</a>. This product uses the TMDB API but is not endorsed or certified by TMDB.</small></footer>
+    <footer className="welcome-footer"><span>AFTERIMAGE</span><p>Better films find you.</p>
+      <details className="welcome-how"><summary>How it works</summary><p>Tell AFTERIMAGE one film or feeling and it develops a reel of five films, each with a reason. From any film you can borrow its qualities on the Light Table, open its Atlas of connections, or collide it with another film. Your likes, afterimages and sky stay in this browser.</p></details>
+      <small>Film imagery: <a href="https://www.themoviedb.org" target="_blank" rel="noreferrer noopener">TMDB</a>. This product uses the TMDB API but is not endorsed or certified by TMDB.</small></footer>
   </div>;
 }

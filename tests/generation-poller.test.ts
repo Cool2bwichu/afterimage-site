@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  DRAFT_POLL_MS,
   GenerationPollError,
   pollGeneration,
 } from '../app/lib/generation-poller.ts';
@@ -87,6 +88,25 @@ test('generation poller reports every queued, running, and complete status and r
 
   assert.deepEqual(delays, [1500, 2025, 2734]);
   assert.deepEqual(reported.map((job) => job.status), ['queued', 'running', 'complete']);
+  assert.equal(result.status, 'complete');
+});
+
+test('generation poller checks about once a second while an answer develops, then backs off again', async () => {
+  const draft = { take: 1, persona: 'Desert Ghost' };
+  const jobs: GenerationJob[] = [
+    { jobId: JOB_ID, status: 'running', createdAt: CREATED_AT, updatedAt: UPDATED_AT },
+    { jobId: JOB_ID, status: 'running', createdAt: CREATED_AT, updatedAt: UPDATED_AT, draft },
+    { jobId: JOB_ID, status: 'running', createdAt: CREATED_AT, updatedAt: UPDATED_AT, draft },
+    { jobId: JOB_ID, status: 'running', createdAt: CREATED_AT, updatedAt: UPDATED_AT },
+    completeJob(),
+  ];
+  const delays: number[] = [];
+  const result = await pollGeneration({
+    fetchStatus: async () => jobs.shift()!,
+    wait: async (milliseconds) => { delays.push(milliseconds); },
+    signal: new AbortController().signal,
+  });
+  assert.deepEqual(delays, [1500, 2025, DRAFT_POLL_MS, DRAFT_POLL_MS, 2734]);
   assert.equal(result.status, 'complete');
 });
 

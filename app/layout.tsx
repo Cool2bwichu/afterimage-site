@@ -2,14 +2,20 @@ import type { Metadata, Viewport } from 'next';
 import { Cormorant_Garamond, DM_Sans } from 'next/font/google';
 import './globals.css';
 import './light-table.css';
-import './projection-room.css';
 import './atlas.css';
 import './landing.css';
+import './projection-room.css';
+import './celestial.css';
+import './collections.css';
+import './observatory.css';
+import './encounters.css';
+import { CelestialProvider } from './components/celestial';
 
 const display = Cormorant_Garamond({
   variable: '--font-display',
   subsets: ['latin'],
   weight: ['400', '500'],
+  style: ['normal', 'italic'],
 });
 
 const sans = DM_Sans({
@@ -51,7 +57,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: '#0b100e',
+  themeColor: '#080d14',
   colorScheme: 'dark',
   viewportFit: 'cover',
 };
@@ -59,7 +65,7 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">
-      <body className={`${display.variable} ${sans.variable}`}>{children}</body>
+      <body className={`${display.variable} ${sans.variable}`}><CelestialProvider>{children}</CelestialProvider></body>
     </html>
   );
 }

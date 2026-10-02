@@ -57,6 +57,9 @@ function defaultWait(milliseconds: number, signal: AbortSignal): Promise<void> {
   });
 }
 
+// While a job's answer is developing on screen, it is checked about once a second.
+export const DRAFT_POLL_MS = 1000;
+
 export async function pollGeneration({
   fetchStatus,
   signal,
@@ -65,10 +68,11 @@ export async function pollGeneration({
   onTransientError = () => {},
 }: PollGenerationOptions): Promise<CompleteGenerationJob | FailedGenerationJob> {
   let attempt = 0;
+  let developing = false;
 
   for (;;) {
     throwIfAborted(signal);
-    await wait(nextPollDelay(attempt), signal);
+    await wait(developing ? DRAFT_POLL_MS : nextPollDelay(attempt), signal);
     throwIfAborted(signal);
 
     let job: GenerationJob;
@@ -89,6 +93,7 @@ export async function pollGeneration({
       }
 
       onTransientError(error);
+      developing = false;
       attempt += 1;
       continue;
     }
@@ -96,6 +101,7 @@ export async function pollGeneration({
     throwIfAborted(signal);
     onStatus(job);
     if (job.status === 'complete' || job.status === 'failed') return job;
-    attempt += 1;
+    developing = job.status === 'running' && Boolean(job.draft);
+    if (!developing) attempt += 1;
   }
 }

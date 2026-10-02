@@ -2,9 +2,10 @@ export type EnrichmentInput = {
   title: string;
   year: string;
   key: string;
+  tmdbId?: number;
 };
 
-export type FilmEnrichment =
+export type FilmEnrichment = ({ lookupVersion?: 2 } & (
   | {
       key: string;
       title: string;
@@ -23,7 +24,7 @@ export type FilmEnrichment =
       directors: string[];
     }
   | { key: string; title: string; year: string; status: 'unmatched' }
-  | { key: string; title: string; year: string; status: 'unavailable' };
+  | { key: string; title: string; year: string; status: 'unavailable' }));
 
 type TmdbCandidate = {
   id?: unknown;
@@ -88,7 +89,7 @@ export function validateEnrichmentInput(value: unknown): EnrichmentInput[] {
 
   const seen = new Set<string>();
   return value.films.map((film) => {
-    if (!isRecord(film) || Object.keys(film).some((key) => key !== 'title' && key !== 'year')) {
+    if (!isRecord(film) || Object.keys(film).some((key) => !['title', 'year', 'tmdbId'].includes(key))) {
       throw new Error('Each film needs only a title and year.');
     }
     const title = boundedText(film.title, 160);
@@ -97,7 +98,8 @@ export function validateEnrichmentInput(value: unknown): EnrichmentInput[] {
     const key = movieKey(title, year);
     if (!normalizeMovieTitle(title) || seen.has(key)) throw new Error('Duplicate or invalid film.');
     seen.add(key);
-    return { title, year, key };
+    if (film.tmdbId !== undefined && (!Number.isSafeInteger(film.tmdbId) || Number(film.tmdbId) <= 0)) throw new Error('Invalid catalog identity.');
+    return { title, year, key, ...(film.tmdbId !== undefined ? { tmdbId: Number(film.tmdbId) } : {}) };
   });
 }
 
@@ -134,7 +136,7 @@ export function parseFilmEnrichment(value: unknown): FilmEnrichment | null {
   if (!title || !year || !/^\d{4}$/.test(year) || !key || key !== movieKey(title, year)) return null;
 
   if (value.status === 'unmatched' || value.status === 'unavailable') {
-    return { key, title, year, status: value.status };
+    return { key, title, year, status: value.status, ...(value.lookupVersion === 2 ? { lookupVersion: 2 } : {}) };
   }
   if (value.status !== 'matched' || !Number.isInteger(value.tmdbId) || Number(value.tmdbId) <= 0) return null;
 
@@ -163,6 +165,7 @@ export function parseFilmEnrichment(value: unknown): FilmEnrichment | null {
     title,
     year,
     status: 'matched',
+    ...(value.lookupVersion === 2 ? { lookupVersion: 2 as const } : {}),
     tmdbId: Number(value.tmdbId),
     imdbId,
     tmdbRating,

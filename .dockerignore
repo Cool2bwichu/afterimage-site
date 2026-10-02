@@ -1,0 +1,13 @@
+# Docker builds from the repository root (companion/Dockerfile) need only
+# companion/ and app/lib/.
+**/node_modules
+.git
+.next
+.vinext
+.wrangler
+dist
+dist-pages
+companion/data
+companion/test
+.env*
+!.env.example

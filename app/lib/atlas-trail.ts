@@ -1,6 +1,6 @@
-import { parseAtlas, type Atlas } from './atlas.ts';
+import { parseAtlas, type Atlas, type AtlasIdentity } from './atlas.ts';
 import { isGenerationJobId } from './generation-state.ts';
-import { FACET_KEYS, type FacetKey, type FacetSource } from './light-table.ts';
+import { FACET_KEYS, type FacetKey } from './light-table.ts';
 import { movieKey } from './movie-metadata.ts';
 
 export const ATLAS_TRAIL_STORAGE_KEY = 'afterimage:atlas:trail:v1';
@@ -8,7 +8,7 @@ export const MAX_ATLAS_MAPS = 12;
 export const MAX_ATLAS_STEPS = 24;
 export type AtlasView = { selected: number; lens: FacetKey | 'all' };
 export type AtlasStop = { id: string; atlas: Atlas; inputKey: string; view: AtlasView };
-export type PendingAtlas = { jobId: string; inputKey: string; anchor: FacetSource; followOnComplete: boolean };
+export type PendingAtlas = { jobId: string; inputKey: string; anchor: AtlasIdentity; followOnComplete: boolean };
 export type AtlasTrail = { version: 1; maps: AtlasStop[]; route: string[]; cursor: number; pending: PendingAtlas | null; readyId: string | null };
 const INITIAL_VIEW: AtlasView = { selected: -1, lens: 'all' };
 export function emptyAtlasTrail(): AtlasTrail {
@@ -16,13 +16,15 @@ export function emptyAtlasTrail(): AtlasTrail {
 }
 const record = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
 const validId = (v: unknown): v is string => typeof v === 'string' && /^[a-z0-9-]{1,64}$/.test(v);
-function inputKey(raw: unknown, anchor: FacetSource): raw is string {
+function inputKey(raw: unknown, anchor: AtlasIdentity): raw is string {
   if (typeof raw !== 'string' || raw.length > 200_000) return false;
   try {
     const value = JSON.parse(raw);
-    return Array.isArray(value) && value.length === 2 && value[0] === movieKey(anchor.title, anchor.year)
-      && record(value[1]) && typeof value[1].creativeBrief === 'string' && Array.isArray(value[1].films)
-      && value[1].films.every((film: unknown) => typeof film === 'string');
+    if (!Array.isArray(value) || ![2, 3].includes(value.length) || value[0] !== movieKey(anchor.title, anchor.year)) return false;
+    if (value.length === 3 && (!Number.isSafeInteger(value[1]) || value[1] <= 0 || (anchor.tmdbId && value[1] !== anchor.tmdbId))) return false;
+    const request = value[value.length - 1];
+    return record(request) && typeof request.creativeBrief === 'string' && Array.isArray(request.films)
+      && request.films.every((film: unknown) => typeof film === 'string');
   } catch { return false; }
 }
 function view(raw: unknown): AtlasView {
@@ -35,7 +37,8 @@ function pending(raw: unknown): PendingAtlas | null {
   if (!record(raw) || !isGenerationJobId(raw.jobId) || !record(raw.anchor)
     || typeof raw.anchor.title !== 'string' || !raw.anchor.title.trim() || raw.anchor.title.length > 160
     || typeof raw.anchor.year !== 'string' || !/^\d{4}$/.test(raw.anchor.year)) return null;
-  const anchor = { title: raw.anchor.title, year: raw.anchor.year };
+  if (raw.anchor.tmdbId !== undefined && (typeof raw.anchor.tmdbId !== 'number' || !Number.isSafeInteger(raw.anchor.tmdbId) || raw.anchor.tmdbId <= 0)) return null;
+  const anchor = { title: raw.anchor.title, year: raw.anchor.year, ...(raw.anchor.tmdbId ? { tmdbId: raw.anchor.tmdbId as number } : {}) };
   return inputKey(raw.inputKey, anchor) ? { jobId: raw.jobId, inputKey: raw.inputKey, anchor, followOnComplete: raw.followOnComplete !== false } : null;
 }
 export function activeAtlasStop(trail: AtlasTrail): AtlasStop | null {
@@ -83,13 +86,19 @@ export function moveAtlasTrail(trail: AtlasTrail, cursor: number): AtlasTrail {
 /** A new branch replaces the forward path, but the previous maps remain in Visited maps. */
 export function visitAtlasMap(trail: AtlasTrail, id: string): AtlasTrail {
   const map = trail.maps.find(item => item.id === id);
-  if (!map || activeAtlasStop(trail)?.id === id) return trail;
+  if (!map) return trail;
+  // Explicitly reopening the current map is still a navigation choice: a
+  // background discovery must not take it over when the new map completes.
+  if (activeAtlasStop(trail)?.id === id) return trail.pending?.followOnComplete
+    ? { ...trail, pending: { ...trail.pending, followOnComplete: false } }
+    : trail;
   const route = [...trail.route.slice(0, trail.cursor + 1), id].slice(-MAX_ATLAS_STEPS);
   return { ...trail, route, cursor: route.length - 1, maps: [...trail.maps.filter(item => item.id !== id), map], pending: trail.pending ? { ...trail.pending, followOnComplete: false } : null, readyId: trail.readyId === id ? null : trail.readyId };
 }
 export function finishAtlasMap(trail: AtlasTrail, jobId: string, atlas: Atlas): AtlasTrail {
   const job = trail.pending;
-  if (!job || job.jobId !== jobId || movieKey(atlas.anchor.title, atlas.anchor.year) !== movieKey(job.anchor.title, job.anchor.year)) return trail;
+  if (!job || job.jobId !== jobId || movieKey(atlas.anchor.title, atlas.anchor.year) !== movieKey(job.anchor.title, job.anchor.year)
+    || (job.anchor.tmdbId && atlas.anchor.tmdbId !== job.anchor.tmdbId)) return trail;
   const active = activeAtlasStop(trail);
   const maps = [...trail.maps, { id: jobId, atlas, inputKey: job.inputKey, view: { ...INITIAL_VIEW } }];
   while (maps.length > MAX_ATLAS_MAPS) maps.splice(maps.findIndex(map => map.id !== active?.id), 1);
