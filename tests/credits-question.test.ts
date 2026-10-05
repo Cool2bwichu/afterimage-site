@@ -52,23 +52,10 @@ test('the route can be read back out of the brief for the strip above the reel',
   assert.equal(parseRoute('I said: Right now I feel low. By the time the credits roll, I want to feel lifted.'), null, 'only a brief this entrance wrote');
 });
 
-test('the evening can have a length, and the route remembers it', () => {
-  const single = routeBrief({ now: 'low', credits: 'lifted', double: false, evening: 90 });
-  assert.match(single, /The evening is about an hour and a half, so every film must finish inside that\.$/);
-  const double = routeBrief({ now: 'wired', credits: 'ready for sleep', double: true, evening: 240 });
-  assert.match(double, /This is a double feature: .+ The whole evening is about four hours: the first two films together/);
-  for (const route of [
-    { now: 'low', credits: 'lifted', double: false, evening: 120 as const },
-    { now: 'numb', credits: 'feeling something', double: true, evening: 180 as const },
-  ]) assert.deepEqual(parseRoute(routeBrief(route)), route);
-  assert.equal('evening' in parseRoute(routeBrief({ now: 'low', credits: 'lifted', double: false }))!, false, 'any length leaves no trace');
-  assert.ok(canDevelop([], double));
-});
-
 test('every brief fits inside the request limit, whatever words are typed', () => {
   const long = 'x'.repeat(400);
-  const brief = routeBrief({ now: long, credits: long, double: true, evening: 90 });
+  const brief = routeBrief({ now: long, credits: long, double: true });
   assert.ok(brief.length <= 1200);
   assert.equal(parseRoute(brief)?.now, 'x'.repeat(40));
-  for (const from of MOODS) for (const to of MOODS) assert.ok(routeBrief({ now: from.word, credits: to.word, double: true, evening: 240 }).length <= 1200);
+  for (const from of MOODS) for (const to of MOODS) assert.ok(routeBrief({ now: from.word, credits: to.word, double: true }).length <= 1200);
 });

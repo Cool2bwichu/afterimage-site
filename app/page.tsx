@@ -30,14 +30,11 @@ import { CheckInCard } from './components/check-in';
 import { CreditsQuestion, RouteStrip } from './components/credits-question';
 import { BlindTable } from './components/blind-table';
 import { BetweenUs } from './components/between-us';
-import { SCREENING_KEY, parseScreening, programmeMinutes, screeningPhase, serializeScreening, startScreening, type ProgrammeFilm, type Screening } from './lib/screening';
+import { SCREENING_KEY, parseScreening, screeningPhase, serializeScreening, startScreening, type ProgrammeFilm, type Screening } from './lib/screening';
 import { HALF_LIFE_KEY, askLater, dueCheckIn, emptyBook, growingFilms, parseHalfLife, recordReading, serializeHalfLife, stayedRequest, type CheckIn, type HalfLifeBook, type Reading } from './lib/half-life';
 import { BLIND_KEY, emptyBlind, isRevealed, isVeiled, liftVeil, parseBlind, reelArrived, reveal, serializeBlind, wantBlind, type BlindState } from './lib/blind';
 import { parseRoute } from './lib/credits-question';
 import { decodeInvite, parseBetween, type BetweenSide } from './lib/between';
-import { eveningLabel, parseEvening, spokenEvening } from './lib/evening';
-import { canTurn, parseTurn, reelQualities, turnRequest, type Turn } from './lib/keep-lose';
-import { KeepLose } from './components/keep-lose';
 import { FilmLibrary } from './components/film-library';
 import { ReelComparison } from './components/reel-comparison';
 import { WATCHLIST_KEY, parseWatchlist, toggleWatchlist, type SavedFilm } from './lib/library';
@@ -509,10 +506,8 @@ export default function Home() {
     const matched = record?.status === 'matched' ? record : null;
     const watchFor = film.watchFor ?? result?.recommendations.find(item => movieKey(item.title, item.year) === movieKey(film.title, film.year))?.watchFor;
     const facets = film.facets ?? facetsFor(film);
-    const place = result?.recommendations.findIndex(item => movieKey(item.title, item.year) === movieKey(film.title, film.year)) ?? -1;
     return {
       title: film.title, year: film.year, runtime: matched?.runtime ?? null,
-      ...(place >= 0 && result?.palette?.length ? { light: filmLight(result.palette, place) } : {}),
       ...(film.tmdbId ?? matched?.tmdbId ? { tmdbId: film.tmdbId ?? matched?.tmdbId } : {}),
       ...(watchFor ? { watchFor } : {}), ...(facets ? { facets } : {}),
       ...(matched ? { directors: matched.directors, posterUrl: matched.posterUrl, backdropUrl: matched.backdropUrl ?? null } : {}),
@@ -1091,27 +1086,6 @@ export default function Home() {
     } else void developReel(false, temporary);
   }
 
-  /** Keep one, lose one: a new reel that holds on to one quality and lets another go. */
-  function turnReel(turn: Turn) {
-    if (!result || !canTurn(turn)) return;
-    const temporary = result.recommendations.map(({ title, year }) => ({ title, year }));
-    const all = [...excludedFilms, ...temporary];
-    if (new Set(all.map(film => `${film.title.trim().toLocaleLowerCase()}|${film.year.trim()}`)).size > 100) {
-      setError('This turn exceeds the 100-film exclusion limit. Your saved exclusions have been preserved.');
-      return;
-    }
-    const request = turnRequest(turn, temporary);
-    setFilms(request.films);
-    setCreativeBrief(request.creativeBrief);
-    setDraft('');
-    clearFacetSelections();
-    requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: 'instant' }));
-    void developReel(false, [], {
-      ...buildDevelopPayload(request.films, request.creativeBrief, normalizeExcludedFilms(all)),
-      ...(lightTableEnabled ? { experience: LIGHT_TABLE_EXPERIENCE } : {}),
-    });
-  }
-
   function startOver() {
     if (resetLocked || startLockRef.current) return;
     setAtlasTarget(null);
@@ -1336,19 +1310,8 @@ export default function Home() {
   // How the reel was asked for, when an entrance asked in its own way.
   const route = parseRoute(displayedInput?.creativeBrief);
   const pair = parseBetween(displayedInput?.creativeBrief);
-  const turned = parseTurn(displayedInput?.creativeBrief);
-  const evening = route || pair ? parseEvening(displayedInput?.creativeBrief) : null;
-  const inTime = evening ? `, in about ${spokenEvening(evening)}` : '';
-  const requestLine = route ? `From ${route.now} to ${route.credits}${route.double ? ', as a double feature' : ''}${inTime}`
-    : pair ? `Between ${pair.first === 'One of us' ? 'the two of you' : `${pair.first} and ${pair.second}`}${inTime}`
-    : turned ? `Kept “${turned.keep}”, lost “${turned.lose}”` : null;
-  const qualities = result ? reelQualities(result) : [];
-  // A double feature's two films and their intermission, once both running times are known.
-  const doubleRuntimes = route?.double ? result?.recommendations.slice(0, 2).map(film => {
-    const record = metadataByKey[movieKey(film.title, film.year)];
-    return record?.status === 'matched' ? record.runtime : null;
-  }) ?? [] : [];
-  const together = doubleRuntimes.length === 2 && doubleRuntimes.every(Boolean) ? programmeMinutes(doubleRuntimes.map(runtime => ({ runtime }))) : null;
+  const requestLine = route ? `From ${route.now} to ${route.credits}${route.double ? ', as a double feature' : ''}`
+    : pair ? `Between ${pair.first === 'One of us' ? 'the two of you' : `${pair.first} and ${pair.second}`}` : null;
   // Blind screening: the reel stays veiled until a film is chosen or the veil is lifted.
   const veiled = Boolean(result) && isVeiled(blind, recommendationIdentity) && Boolean(result?.recommendations.some(film => !isRevealed(blind, film)));
   const revealedKeys = useMemo(() => new Set(blind.revealed), [blind]);
@@ -1411,7 +1374,7 @@ export default function Home() {
           <p className="subtitle">Add films you love, describe what you are searching for,
             or combine both.</p>
         </div> : <section className="request-summary" aria-label="Current reel references">
-          <div className="request-copy"><span className="panel-label">{route ? 'The credits question' : pair ? 'The film between us' : turned ? 'Keep one, lose one' : 'Your reel'}</span><p>{requestLine || displayedInput?.creativeBrief || (result.sourceFilms.length ? result.sourceFilms.join(' + ') : Object.values(displayedInput?.selectedFacets ?? {}).map(facet => facet.label).join(' · ') || 'A blend of selected qualities')}</p>
+          <div className="request-copy"><span className="panel-label">{route ? 'The credits question' : pair ? 'The film between us' : 'Your reel'}</span><p>{requestLine || displayedInput?.creativeBrief || (result.sourceFilms.length ? result.sourceFilms.join(' + ') : Object.values(displayedInput?.selectedFacets ?? {}).map(facet => facet.label).join(' · ') || 'A blend of selected qualities')}</p>
           <button type="button" onClick={() => setComposerOpen(!composerOpen)} disabled={reelLocked}>{composerOpen ? 'Close inputs' : 'Refine request'} <span aria-hidden="true">{composerOpen ? '−' : '+'}</span></button>
           </div>
           {result.sourceFilms.length ? <div className="request-references"><span className="panel-label">Reference films</span><p>{result.sourceFilms.join(' · ')}</p></div> : null}
@@ -1601,7 +1564,7 @@ export default function Home() {
 
             {veiled ? <BlindTable films={result.recommendations} metadata={metadataByKey} revealed={revealedKeys} savedKeys={savedKeys}
               onReveal={chooseBlind} onLift={liftBlind} onWatch={(film, opener) => openLobby([film], opener)} onSave={toggleSave} /> : <>
-            {route ? <RouteStrip route={route} together={together} onWatchDouble={opener => openLobby(result.recommendations.slice(0, 2), opener)} /> : null}
+            {route ? <RouteStrip route={route} onWatchDouble={opener => openLobby(result.recommendations.slice(0, 2), opener)} /> : null}
             <ReelConstellation key={`constellation-${recommendationIdentity}`} seed={recommendationIdentity} name={result.persona} insight={result.insight} palette={result.palette}
               films={result.recommendations} selected={screeningIndex} onSelect={setScreeningIndex} onNotice={setNotice}
               onOpenSky={opener => navigateCollection('#sky', opener)} hold={holdFilm}
@@ -1614,8 +1577,7 @@ export default function Home() {
               lightTable={selectedRecommendation === null && !atlasTarget ? lightTable : null}
               onOpen={(index, event) => openDossier(index, event.currentTarget)}
               onExplore={(index, event) => openAtlas(result.recommendations[index], event.currentTarget)} hold={holdFilm}
-              onWatch={(film, opener) => openLobby([film], opener)} evening={evening}
-              heading={pair ? { title: 'Between you', subtitle: `Five films for both of you${evening ? ` · ${eveningLabel(evening)}` : ''}` } : undefined} />
+              onWatch={(film, opener) => openLobby([film], opener)} heading={pair ? { title: 'Between you', subtitle: 'Five films for both of you' } : undefined} />
             {lightTableEnabled && result.fingerprint ? <details className="reel-fingerprint"><summary>The qualities behind this reel <span>+</span></summary><SearchFingerprint fingerprint={result.fingerprint} insight={result.insight} /></details> : null}
 
             <section className="atlas-entry"><div><h3>Atlas</h3><p>Films are never alone. Explore the connections around a film, and find what carries through.</p></div><button type="button" disabled={developing} onClick={event => openAtlas(result.recommendations[screeningIndex] || result.recommendations[0], event.currentTarget)}>Explore connections ↗</button></section>
@@ -1640,7 +1602,6 @@ export default function Home() {
               <h3>End of reel</h3>
               <p>{veiled ? 'Five films, unnamed. Choose one, or lift the veil.' : 'Five films, and then the lights come up. A reel is never a feed.'}</p>
             </section>
-            {!veiled && qualities.length > 1 ? <KeepLose key={recommendationIdentity} qualities={qualities} disabled={reelLocked || connection !== 'connected'} onTurn={turnReel} /> : null}
             <div className="reroll-panel">
               <button
                 type="button"

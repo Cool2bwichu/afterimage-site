@@ -2,10 +2,7 @@
 
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { JOURNEYS, MOODS, moodPoint, routeRequest, type MoodWord, type Route } from '../lib/credits-question';
-import { eveningLabel, fitsDouble, runsPast, spokenEvening, type Evening } from '../lib/evening';
-import { formatRuntime } from '../lib/screening';
 import { StarGlyph } from './celestial';
-import { EveningPicker } from './evening-picker';
 
 type Light = 'now' | 'credits';
 const place = (word: MoodWord) => { const point = moodPoint(word); return { left: 7 + point.x * 86, top: 9 + (1 - point.y) * 80 }; };
@@ -25,7 +22,6 @@ export function CreditsQuestion({ opener, onClose, onDevelop }: {
   const [credits, setCredits] = useState<MoodWord | null>(null);
   const [placing, setPlacing] = useState<Light>('now');
   const [double, setDouble] = useState(false);
-  const [evening, setEvening] = useState<Evening | null>(null);
 
   useEffect(() => {
     const element = dialog.current;
@@ -39,19 +35,12 @@ export function CreditsQuestion({ opener, onClose, onDevelop }: {
     else setCredits(word);
   }
 
-  function chooseShape(next: boolean) {
-    setDouble(next);
-    // Two films don't fit in two hours: the evening stretches to the shortest that holds them.
-    if (next && !fitsDouble(evening)) setEvening(180);
-  }
-
   const from = now ? place(now) : null;
   const to = credits ? place(credits) : null;
   const staying = Boolean(now && credits && now === credits);
   // The route bows upward, like the arc of a projector's beam.
   const bend = from && to && !staying ? { x: (from.left + to.left) / 2, y: Math.min(from.top, to.top) - 14 - Math.abs(from.left - to.left) * .12 } : null;
-  const route: Route | null = now && credits ? { now, credits, double, ...(evening ? { evening } : {}) } : null;
-  const length = evening ? spokenEvening(evening) : null;
+  const route: Route | null = now && credits ? { now, credits, double } : null;
 
   return <dialog ref={dialog} className="credits-question" aria-labelledby="credits-question-title" onCancel={event => { event.preventDefault(); onClose(); }}>
     <header className="credits-question-head">
@@ -88,13 +77,12 @@ export function CreditsQuestion({ opener, onClose, onDevelop }: {
           <button type="button" className="is-credits" aria-pressed={placing === 'credits'} onClick={() => setPlacing('credits')}>
             <i aria-hidden="true" /><span><small>When the credits roll</small><strong>{credits ?? 'Tap a mood'}</strong></span></button>
         </div>
-        <p className="credits-reading" aria-live="polite">{route ? staying ? `Stay with you where you are: no rescue, just company${length ? `, for about ${length}` : ''}.` : `From ${now} to ${credits}${double ? ', over two films' : ''}${length ? `, in about ${length}` : ''}.` : placing === 'now' ? 'Place the first light where you are tonight.' : 'Now place the second light where you want to end up.'}</p>
+        <p className="credits-reading" aria-live="polite">{route ? staying ? `Stay with you where you are: no rescue, just company.` : `From ${now} to ${credits}${double ? ', over two films' : ''}.` : placing === 'now' ? 'Place the first light where you are tonight.' : 'Now place the second light where you want to end up.'}</p>
         <fieldset className="credits-shape">
           <legend>Tonight</legend>
-          <label data-checked={!double || undefined}><input type="radio" name="credits-shape" checked={!double} onChange={() => chooseShape(false)} />One film</label>
-          <label data-checked={double || undefined}><input type="radio" name="credits-shape" checked={double} onChange={() => chooseShape(true)} />A double feature</label>
+          <label data-checked={!double || undefined}><input type="radio" name="credits-shape" checked={!double} onChange={() => setDouble(false)} />One film</label>
+          <label data-checked={double || undefined}><input type="radio" name="credits-shape" checked={double} onChange={() => setDouble(true)} />A double feature</label>
         </fieldset>
-        <EveningPicker name="credits-evening" value={evening} onChange={setEvening} double={double} />
         <div className="credits-journeys"><p>Or take a well-worn road</p>
           <ul>{JOURNEYS.map(journey => <li key={`${journey.from}-${journey.to}`}><button type="button" aria-pressed={now === journey.from && credits === journey.to} onClick={() => { setNow(journey.from); setCredits(journey.to); setPlacing('credits'); }}>{journey.from} <span aria-hidden="true">→</span><span className="sr-only">to</span> {journey.to}</button></li>)}</ul>
         </div>
@@ -105,20 +93,13 @@ export function CreditsQuestion({ opener, onClose, onDevelop }: {
   </dialog>;
 }
 
-/**
- * Above a reel the credits question developed: the route it was asked to take. For a
- * double feature, `together` is films I and II with their intermission, once both
- * running times are known.
- */
-export function RouteStrip({ route, together, onWatchDouble }: { route: Route; together?: number | null; onWatchDouble?: (opener: HTMLElement) => void }) {
+/** Above a reel the credits question developed: the route it was asked to take. */
+export function RouteStrip({ route, onWatchDouble }: { route: Route; onWatchDouble?: (opener: HTMLElement) => void }) {
   const staying = route.now.toLocaleLowerCase() === route.credits.toLocaleLowerCase();
-  const evening = route.evening ?? null;
-  const fit = together && evening ? `, ${runsPast(together, evening) ? 'longer than' : 'inside'} your ${spokenEvening(evening)}` : '';
-  const pair = together ? ` With the intermission they run ${formatRuntime(together)}${fit}.` : '';
   return <section className="route-strip" aria-label="The route this reel takes">
-    <p className="route-strip-kicker">The credits question{evening ? <span> · {eveningLabel(evening)}</span> : null}</p>
+    <p className="route-strip-kicker">The credits question</p>
     <p className="route-strip-route"><span><small>Right now</small>{route.now}</span><i aria-hidden="true" /><span><small>At the credits</small>{route.credits}</span></p>
-    <p className="route-strip-note">{staying ? 'A reel to keep you company where you are.' : route.double ? `Films I and II are a double feature: watch them in that order.${pair}` : 'Each film is a route between the two.'}</p>
+    <p className="route-strip-note">{staying ? 'A reel to keep you company where you are.' : route.double ? 'Films I and II are a double feature: watch them in that order.' : 'Each film is a route between the two.'}</p>
     {route.double && onWatchDouble ? <button type="button" onClick={event => onWatchDouble(event.currentTarget)}>Watch the double feature tonight <span aria-hidden="true">↗</span></button> : null}
   </section>;
 }

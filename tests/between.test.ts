@@ -2,7 +2,6 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { MAX_GUEST_FILMS, betweenRequest, canMeet, cleanName, decodeInvite, encodeInvite, inviteUrl, parseBetween } from '../app/lib/between.ts';
 import { buildDevelopPayload, canDevelop } from '../app/lib/reel-state.ts';
-import { parseEvening } from '../app/lib/evening.ts';
 
 const mick = { name: 'Mick', films: [{ title: 'Columbus', year: '2017' }, { title: 'Paris, Texas', year: '1984' }, { title: 'Tokyo Story', year: '1953' }] };
 const sam = { name: 'Sam', films: [{ title: 'Mad Max: Fury Road', year: '2015' }, { title: 'Paddington 2' }] };
@@ -18,25 +17,11 @@ test('two people and their films become one ordinary reel request', () => {
   assert.ok(request.creativeBrief.length <= 1200);
 });
 
-test('a film is judged by whichever of the two it suits less', () => {
-  const brief = betweenRequest(mick, sam)!.creativeBrief;
-  assert.match(brief, /Judge each film by whichever of us it suits less/);
-  assert.match(brief, /a perfect fit for one of us never makes up for a poor fit for the other/);
-  assert.doesNotMatch(brief, /evening is about/, 'any length says nothing');
-});
-
-test('the evening can have a length, and every film has to fit inside it', () => {
-  const request = betweenRequest(mick, sam, 120)!;
-  assert.match(request.creativeBrief, /The evening is about two hours, so every film must finish inside that\.$/);
-  assert.equal(parseEvening(request.creativeBrief), 120);
-  assert.deepEqual(parseBetween(request.creativeBrief), { first: 'Mick', second: 'Sam' });
-});
-
 test('every brief fits inside the request limit, however long the titles', () => {
   const long = (name: string) => ({ name: 'A name that is long enough', films: [1, 2, 3].map(n => ({ title: `${name} ${n} `.repeat(30).trim().slice(0, 160), year: '1999' })) });
-  const request = betweenRequest(long('Ours'), long('Theirs'), 240)!;
+  const request = betweenRequest(long('Ours'), long('Theirs'))!;
   assert.ok(request.creativeBrief.length <= 1200, `${request.creativeBrief.length} characters`);
-  assert.match(request.creativeBrief, /The evening is about four hours/, 'the instructions survive the long titles');
+  assert.match(request.creativeBrief, /In each reason, say what each of us will find in it\.$/, 'the instructions survive the long titles');
   assert.equal(buildDevelopPayload(request.films, request.creativeBrief).creativeBrief, request.creativeBrief, 'nothing is trimmed away');
   assert.ok(request.films.every(film => film.length > 160), 'the films themselves keep their full titles');
 });

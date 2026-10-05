@@ -1,10 +1,7 @@
 // The Film Between Us. Two people, three films each, one evening. Afterimage looks for
-// films that give both of them something, and says what each will find. A film is judged
-// by whichever of the two it suits less, so a perfect fit for one never makes up for a
-// poor fit for the other. The six films and the two names become an ordinary reel
-// request. An invitation link carries only the inviter's name and three films, in the
-// address itself; nothing is stored anywhere.
-import { eveningClause, type Evening } from './evening.ts';
+// films that give both of them something, and says what each will find. The six films
+// and the two names become an ordinary reel request. An invitation link carries only
+// the inviter's name and three films, in the address itself; nothing is stored anywhere.
 
 export const MAX_GUEST_FILMS = 3;
 const MAX_NAME = 24;
@@ -50,11 +47,8 @@ export function canMeet(first: BetweenSide, second: BetweenSide): boolean {
 
 const list = (films: BetweenFilm[]) => films.length === 1 ? briefText(films[0]) : `${films.slice(0, -1).map(briefText).join(', ')} and ${briefText(films.at(-1)!)}`;
 
-/**
- * The two of you, as a reel request: six reference films and a brief that says whose is
- * whose, judges each film by the one of you it suits less, and keeps to the evening.
- */
-export function betweenRequest(first: BetweenSide, second: BetweenSide, evening: Evening | null = null): { films: string[]; creativeBrief: string } | null {
+/** The two of you, as a reel request: six reference films and a brief that says whose is whose. */
+export function betweenRequest(first: BetweenSide, second: BetweenSide): { films: string[]; creativeBrief: string } | null {
   const ours = sideFilms(first);
   const theirs = sideFilms(second);
   if (!ours.length || !theirs.length) return null;
@@ -62,9 +56,7 @@ export function betweenRequest(first: BetweenSide, second: BetweenSide, evening:
   const b = cleanName(second.name) || 'the other';
   const same = a.toLocaleLowerCase() === b.toLocaleLowerCase();
   const [one, two] = same ? ['One of us', 'the other'] : [a, b];
-  const fair = 'Judge each film by whichever of us it suits less: it has to give that person a real reason to watch too, because a perfect fit for one of us never makes up for a poor fit for the other.';
-  const reasons = `In each reason, say what ${one === 'One of us' ? 'each of us' : `${one} and ${two}`} will find in it.`;
-  const creativeBrief = [`Two of us are choosing a film to watch together. ${one} loves ${list(ours)}; ${two} loves ${list(theirs)}. Find films between our tastes.`, fair, reasons, eveningClause(evening)].filter(Boolean).join(' ');
+  const creativeBrief = `Two of us are choosing a film to watch together. ${one} loves ${list(ours)}; ${two} loves ${list(theirs)}. Find films between our tastes: each one should give both of us something real, not a compromise neither of us wanted. In each reason, say what ${one === 'One of us' ? 'each of us' : `${one} and ${two}`} will find in it.`;
   return { films: [...ours, ...theirs].map(filmText), creativeBrief };
 }
 
