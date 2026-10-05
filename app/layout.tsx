@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from 'next';
-import { Archivo, Big_Shoulders, IBM_Plex_Mono, Newsreader } from 'next/font/google';
+import { Cormorant_Garamond, DM_Mono, DM_Sans } from 'next/font/google';
 import './globals.css';
 import './light-table.css';
 import './atlas.css';
@@ -9,35 +9,26 @@ import './celestial.css';
 import './collections.css';
 import './observatory.css';
 import './encounters.css';
-import './palace.css';
 import './rooms.css';
 import { CelestialProvider } from './components/celestial';
 
-// The picture palace's four voices: billing caps for titles, a reading serif for the
-// notes and the usher, a plain grotesque for controls, and the booth's typewriter.
-const billing = Big_Shoulders({
-  variable: '--font-billing',
-  subsets: ['latin', 'latin-ext'],
-  axes: ['opsz'],
-});
-
-const display = Newsreader({
+const display = Cormorant_Garamond({
   variable: '--font-display',
-  subsets: ['latin', 'latin-ext'],
-  style: ['normal', 'italic'],
-  axes: ['opsz'],
-});
-
-const sans = Archivo({
-  variable: '--font-sans',
-  subsets: ['latin', 'latin-ext'],
-  axes: ['wdth'],
-});
-
-const mono = IBM_Plex_Mono({
-  variable: '--font-mono',
   subsets: ['latin'],
   weight: ['400', '500'],
+  style: ['normal', 'italic'],
+});
+
+const sans = DM_Sans({
+  variable: '--font-sans',
+  subsets: ['latin'],
+});
+
+// Only the rooms' counters and clocks use it.
+const mono = DM_Mono({
+  variable: '--font-mono',
+  subsets: ['latin'],
+  weight: ['400'],
 });
 
 export const metadata: Metadata = {
@@ -74,7 +65,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: '#0c0a08',
+  themeColor: '#080d14',
   colorScheme: 'dark',
   viewportFit: 'cover',
 };
@@ -82,7 +73,7 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">
-      <body className={`${billing.variable} ${display.variable} ${sans.variable} ${mono.variable}`}><CelestialProvider>{children}</CelestialProvider></body>
+      <body className={`${display.variable} ${sans.variable} ${mono.variable}`}><CelestialProvider>{children}</CelestialProvider></body>
     </html>
   );
 }

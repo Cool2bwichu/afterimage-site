@@ -1,8 +1,5 @@
 # AFTERIMAGE — cinema in orbit
 
-> Superseded on 5 October 2026 by [the picture palace](picture-palace.md), which replaces
-> this palette and type. This page is kept for the reasoning behind the earlier look.
-
 The experience should feel like entering a quiet observatory where films, rather than planets, carry the light. The landing page introduces the aperture; the reel opens it into a screen; Atlas makes its connections navigable. Film imagery supplies the richest color. The interface supplies darkness, warm light, and a precise viewing frame.
 
 ## Visual commitments

@@ -15,10 +15,10 @@ export type StarChartData = {
 
 const WIDTH = 1080;
 const HEIGHT = 1350;
-const INK = '#120e0a';
+const INK = '#080d14';
 const IVORY = '#f4efe5';
 const STARLIGHT = '#dec6a0';
-const MUTED = '#c2b6aa';
+const MUTED = '#a7b6c5';
 
 function fontFamily(variable: string, fallback: string) {
   const value = getComputedStyle(document.body).getPropertyValue(variable).trim();
@@ -80,8 +80,8 @@ export async function renderStarChart(data: StarChartData): Promise<Blob> {
   context.fillStyle = INK;
   context.fillRect(0, 0, WIDTH, HEIGHT);
   const wash = context.createRadialGradient(WIDTH / 2, 640, 40, WIDTH / 2, 640, 720);
-  wash.addColorStop(0, '#302820');
-  wash.addColorStop(1, '#120e0a00');
+  wash.addColorStop(0, '#1b2835');
+  wash.addColorStop(1, '#080d1400');
   context.fillStyle = wash;
   context.fillRect(0, 0, WIDTH, HEIGHT);
   context.drawImage(paintBackdrop(WIDTH, HEIGHT, 1, { ...PRESETS.landing, density: 1.25, band: 1.15 }, seed), -MARGIN, -MARGIN);

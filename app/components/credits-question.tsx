@@ -91,8 +91,8 @@ export function CreditsQuestion({ opener, onClose, onDevelop }: {
         <p className="credits-reading" aria-live="polite">{route ? staying ? `Stay with you where you are: no rescue, just company${length ? `, for about ${length}` : ''}.` : `From ${now} to ${credits}${double ? ', over two films' : ''}${length ? `, in about ${length}` : ''}.` : placing === 'now' ? 'Place the first light where you are tonight.' : 'Now place the second light where you want to end up.'}</p>
         <fieldset className="credits-shape">
           <legend>Tonight</legend>
-          <label><input type="radio" name="credits-shape" checked={!double} onChange={() => chooseShape(false)} />One film</label>
-          <label><input type="radio" name="credits-shape" checked={double} onChange={() => chooseShape(true)} />A double feature</label>
+          <label data-checked={!double || undefined}><input type="radio" name="credits-shape" checked={!double} onChange={() => chooseShape(false)} />One film</label>
+          <label data-checked={double || undefined}><input type="radio" name="credits-shape" checked={double} onChange={() => chooseShape(true)} />A double feature</label>
         </fieldset>
         <EveningPicker name="credits-evening" value={evening} onChange={setEvening} double={double} />
         <div className="credits-journeys"><p>Or take a well-worn road</p>

@@ -30,7 +30,7 @@ import { CheckInCard } from './components/check-in';
 import { CreditsQuestion, RouteStrip } from './components/credits-question';
 import { BlindTable } from './components/blind-table';
 import { BetweenUs } from './components/between-us';
-import { SCREENING_KEY, parseScreening, programmeMinutes, screeningPhase, serializeScreening, startScreening, type ProgrammeFilm, type Screening, type ScreeningPhase } from './lib/screening';
+import { SCREENING_KEY, parseScreening, programmeMinutes, screeningPhase, serializeScreening, startScreening, type ProgrammeFilm, type Screening } from './lib/screening';
 import { HALF_LIFE_KEY, askLater, dueCheckIn, emptyBook, growingFilms, parseHalfLife, recordReading, serializeHalfLife, stayedRequest, type CheckIn, type HalfLifeBook, type Reading } from './lib/half-life';
 import { BLIND_KEY, emptyBlind, isRevealed, isVeiled, liftVeil, parseBlind, reelArrived, reveal, serializeBlind, wantBlind, type BlindState } from './lib/blind';
 import { parseRoute } from './lib/credits-question';
@@ -146,7 +146,6 @@ export default function Home() {
   const [screening, setScreening] = useState<Screening | null>(null);
   const [lobbyOpen, setLobbyOpen] = useState(false);
   const [lobbyOpener, setLobbyOpener] = useState<HTMLElement | null>(null);
-  const [lobbyPhase, setLobbyPhase] = useState<ScreeningPhase['kind'] | null>(null);
   const [halfLife, setHalfLife] = useState<HalfLifeBook>(emptyBook);
   const [checkIn, setCheckIn] = useState<CheckIn | null>(null);
   const [blind, setBlind] = useState<BlindState>(emptyBlind);
@@ -353,7 +352,7 @@ export default function Home() {
     try { if (next) localStorage.setItem(SCREENING_KEY, serializeScreening(next)); else localStorage.removeItem(SCREENING_KEY); }
     catch { /* The screening still runs while this page is open. */ }
     setScreening(next);
-    if (!next) { setLobbyOpen(false); setLobbyPhase(null); }
+    if (!next) setLobbyOpen(false);
   }
   function toggleSave(film: SavedFilm) {
     const record = metadataByKey[movieKey(film.title, film.year)];
@@ -530,7 +529,6 @@ export default function Home() {
     saveScreening(startScreening(chosen.map(programmeFilm)));
     setLobbyOpen(true);
   }
-  const reportLobbyPhase = useCallback((phase: ScreeningPhase['kind']) => setLobbyPhase(phase), []);
   const openSeat = useCallback(() => setLobbyOpen(true), []);
   const lobbyCandidates = useMemo(() => {
     if (!screening || screening.lightsDownAt) return [];
@@ -1334,9 +1332,6 @@ export default function Home() {
   const screenFilm = result?.recommendations[screeningIndex];
   const roomLight = result ? filmLight(result.palette, screeningIndex) : ROOM_DEFAULT;
   const roomLoved = Boolean(screenFilm && likedKeys.has(movieKey(screenFilm.title, screenFilm.year)));
-  // The house lights: up for browsing, at half while a reel develops or you wait in the
-  // lobby, and down for the film itself.
-  const houseLights = lobbyPhase === 'showing' || lobbyPhase === 'intermission' ? 'down' : developing || (lobbyOpen && lobbyPhase === 'lobby') ? 'half' : 'up';
 
   // How the reel was asked for, when an entrance asked in its own way.
   const route = parseRoute(displayedInput?.creativeBrief);
@@ -1385,10 +1380,9 @@ export default function Home() {
     <StarGlyph /><span>Your sky</span>{hydrated && starCount ? <small>{starCount}</small> : null}</a>;
 
   return (
-    <main data-ready={hydrated} data-house={houseLights} className={`site-shell projection-room${lightTableEnabled ? ' has-light-table' : ''}${result ? ' has-reel' : ''}${showLanding ? ' is-landing' : ''}${roomLoved ? ' is-loved' : ''}`}
+    <main data-ready={hydrated} className={`site-shell projection-room${lightTableEnabled ? ' has-light-table' : ''}${result ? ' has-reel' : ''}${showLanding ? ' is-landing' : ''}${roomLoved ? ' is-loved' : ''}`}
       style={{ '--reel-color': roomLight } as CSSProperties}>
       {!showLanding ? <CelestialSky variant="page" /> : null}
-      <div className="house-lights" aria-hidden="true" />
       <div className="wrap">
         <header className="masthead">
           <h1 className="title"><button type="button" aria-label="Afterimage home" onClick={goHome}><OrbitMark />AFTERIMAGE</button></h1>
@@ -1749,7 +1743,7 @@ export default function Home() {
           onSave={saveAfterimage} onRemove={() => { if (afterimageTarget) forgetAfterimage(afterimageTarget.film); }} onClose={() => setAfterimageTarget(null)} />
         <FilmVerbs menu={verbMenu} onClose={closeVerbs} />
         {screening ? <Lobby screening={screening} open={lobbyOpen} opener={lobbyOpener} candidates={lobbyCandidates} kept={afterimageKeys}
-          onOpen={openSeat} onStepOut={() => setLobbyOpen(false)} onChange={saveScreening} onPhase={reportLobbyPhase}
+          onOpen={openSeat} onStepOut={() => setLobbyOpen(false)} onChange={saveScreening}
           onUsher={(film, opener) => openAfterimage(film, opener, true)} /> : null}
         {creditsQuestion ? <CreditsQuestion opener={creditsQuestion.opener} onClose={() => setCreditsQuestion(null)}
           onDevelop={request => { setCreditsQuestion(null); answerQuestion(request); }} /> : null}

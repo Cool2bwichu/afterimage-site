@@ -30,7 +30,7 @@ function Poster({ film }: { film: ProgrammeFilm }) {
  * running time. You can step out and come back to your seat. When the credits roll the
  * usher is waiting, even if you only return tomorrow, with one question.
  */
-export function Lobby({ screening, open, opener, candidates, kept, onOpen, onStepOut, onChange, onUsher, onPhase }: {
+export function Lobby({ screening, open, opener, candidates, kept, onOpen, onStepOut, onChange, onUsher }: {
   screening: Screening; open: boolean; opener: HTMLElement | null;
   /** Films that could join as the second half of a double feature. */
   candidates: ProgrammeFilm[];
@@ -40,7 +40,6 @@ export function Lobby({ screening, open, opener, candidates, kept, onOpen, onSte
   /** The next state of the evening; null ends it. */
   onChange: (next: Screening | null) => void;
   onUsher: (film: ProgrammeFilm, opener: HTMLElement) => void;
-  onPhase: (phase: PhaseKind) => void;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
@@ -57,8 +56,6 @@ export function Lobby({ screening, open, opener, candidates, kept, onOpen, onSte
   }, [phase.kind]);
   // A change made here (lights down, the film's over) is read at once, not on the next tick.
   useEffect(() => { const timer = window.setTimeout(() => setNow(Date.now()), 0); return () => window.clearTimeout(timer); }, [screening]);
-
-  useEffect(() => { onPhase(phase.kind); }, [phase.kind, onPhase]);
 
   // The usher comes to find you: at the intermission and when the credits roll.
   const previous = useRef<PhaseKind>(phase.kind);
@@ -106,8 +103,6 @@ export function Lobby({ screening, open, opener, candidates, kept, onOpen, onSte
     <dialog ref={dialog} className="lobby" data-phase={phase.kind} aria-labelledby="lobby-title" style={featured.light ? { '--film-light': featured.light } as CSSProperties : undefined}
       onCancel={event => { event.preventDefault(); if (phase.kind === 'lobby') onChange(null); else onStepOut(); }}>
       <Still key={movieKey(featured.title, featured.year)} film={featured} />
-      <div className="lobby-curtain is-left" aria-hidden="true" />
-      <div className="lobby-curtain is-right" aria-hidden="true" />
       <div className="lobby-house" aria-hidden="true" />
 
       {phase.kind === 'lobby' ? <div className="lobby-room">

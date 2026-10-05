@@ -5,7 +5,6 @@ import { CelestialSky, useCelestialMotion } from './celestial';
 import { apiFetch } from '../lib/api';
 import { parseFilmSearchResults, type FilmSearchResult } from '../lib/film-search';
 import { BLANK_SENTENCE, SENTENCE_WORDS, cycleWord, hasAnswer, questionRequest, wordText, type ChosenFilm, type SentenceChoice, type SentenceKey } from '../lib/one-question';
-import { formatClock } from '../lib/screening';
 
 // Verified TMDB stills. These are editorial examples, never generated user results.
 const FILMS = {
@@ -199,14 +198,6 @@ function Question({ canSearch, onAnswer, film, setFilm, blind, onBlind }: {
   </form>;
 }
 
-/** The hour, as a cinema's board would show it: "SUNDAY · 11:04 PM". */
-function Showtime() {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => { const timer = window.setInterval(() => setNow(Date.now()), 30_000); return () => window.clearInterval(timer); }, []);
-  const day = new Date(now).toLocaleDateString(undefined, { weekday: 'long' });
-  return <time dateTime={new Date(now).toISOString()}>{day} · {formatClock(now)}</time>;
-}
-
 export function Landing({ onStart, onAnswer, onEyeTest, onCredits, onBetween, blind, onBlind, checkIn, canSearch, hasDraft, hasReel = false, featuredFilm }: {
   featuredFilm: WelcomeFilm; onStart: () => void; onAnswer: (request: QuestionRequest) => void; onEyeTest: () => void;
   /** The other ways in: where you want to be at the credits, and a film for two. */
@@ -232,7 +223,7 @@ export function Landing({ onStart, onAnswer, onEyeTest, onCredits, onBetween, bl
       <CelestialSky variant="landing" />
       <div className="welcome-hero-copy">
         {checkIn}
-        <p className="welcome-prelude"><span aria-hidden="true">✦</span> <Showtime /> · Some films stay with you.</p>
+        <p className="welcome-prelude"><span aria-hidden="true">✦</span> Some films stay with you.</p>
         <h2 id="welcome-title" tabIndex={-1}>What stayed<br /><em>with you?</em></h2>
         <Question canSearch={canSearch} onAnswer={onAnswer} film={picked} setFilm={setPicked} blind={blind} onBlind={onBlind} />
         <nav className="welcome-doors" aria-label="Other ways in">

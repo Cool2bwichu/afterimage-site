@@ -153,8 +153,7 @@ The page takes its light from the film on screen:
   stage's image.
 
 The beam and grain stop when motion is paused or reduced, and are hidden on
-phones. The Lobby carries the same colour into the cinema, behind the film's still (see
-[the picture palace](picture-palace.md)).
+phones.
 
 ## Ticket stubs
 
