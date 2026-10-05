@@ -3,22 +3,22 @@
 // end up, become an ordinary reel request: the route is written into the brief, so the
 // bridge needs nothing new. On a long night the first two films are a double feature.
 
-/** x runs from light (0) to heavy (1); y from still (0) to charged (1). */
+/** x runs from heavy (0) to light (1), as the page drew it; y from still (0) to charged (1). */
 export type MoodPoint = { x: number; y: number };
 
 export const MOODS = [
-  { word: 'at peace', x: 0.12, y: 0.14 },
-  { word: 'ready for sleep', x: 0.34, y: 0.06 },
-  { word: 'restored', x: 0.22, y: 0.36 },
-  { word: 'lifted', x: 0.18, y: 0.74 },
-  { word: 'giddy', x: 0.1, y: 0.94 },
-  { word: 'feeling something', x: 0.44, y: 0.6 },
+  { word: 'at peace', x: 0.88, y: 0.14 },
+  { word: 'ready for sleep', x: 0.66, y: 0.06 },
+  { word: 'restored', x: 0.78, y: 0.36 },
+  { word: 'lifted', x: 0.82, y: 0.74 },
+  { word: 'giddy', x: 0.9, y: 0.94 },
+  { word: 'feeling something', x: 0.56, y: 0.6 },
   { word: 'restless', x: 0.5, y: 0.86 },
-  { word: 'wired', x: 0.84, y: 0.9 },
-  { word: 'on edge', x: 0.7, y: 0.7 },
-  { word: 'low', x: 0.8, y: 0.42 },
-  { word: 'numb', x: 0.6, y: 0.12 },
-  { word: 'wrung out', x: 0.88, y: 0.12 },
+  { word: 'wired', x: 0.16, y: 0.9 },
+  { word: 'on edge', x: 0.3, y: 0.7 },
+  { word: 'low', x: 0.2, y: 0.42 },
+  { word: 'numb', x: 0.4, y: 0.12 },
+  { word: 'wrung out', x: 0.12, y: 0.12 },
   { word: 'somewhere in between', x: 0.5, y: 0.38 },
 ] as const;
 

@@ -1564,7 +1564,7 @@ export default function Home() {
 
             {veiled ? <BlindTable key={recommendationIdentity} films={result.recommendations} palette={result.palette} metadata={metadataByKey} revealed={revealedKeys} savedKeys={savedKeys}
               onReveal={chooseBlind} onLift={liftBlind} onWatch={(film, opener) => openLobby([film], opener)} onSave={toggleSave} /> : <>
-            {route ? <RouteStrip route={route} onWatchDouble={opener => openLobby(result.recommendations.slice(0, 2), opener)} /> : null}
+            {route ? <RouteStrip route={route} films={result.recommendations} metadata={metadataByKey} onWatchDouble={opener => openLobby(result.recommendations.slice(0, 2), opener)} /> : null}
             <ReelConstellation key={`constellation-${recommendationIdentity}`} seed={recommendationIdentity} name={result.persona} insight={result.insight} palette={result.palette}
               films={result.recommendations} selected={screeningIndex} onSelect={setScreeningIndex} onNotice={setNotice}
               onOpenSky={opener => navigateCollection('#sky', opener)} hold={holdFilm}

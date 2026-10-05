@@ -5,11 +5,19 @@ import { buildDevelopPayload, canDevelop } from '../app/lib/reel-state.ts';
 
 test('every point on the map has a word, and the named moods name themselves', () => {
   for (const mood of MOODS) assert.equal(nameMood({ x: mood.x, y: mood.y }), mood.word);
-  assert.equal(nameMood({ x: 0.9, y: 0.95 }), 'wired');
-  assert.equal(nameMood({ x: 0.05, y: 0.05 }), 'at peace');
+  assert.equal(nameMood({ x: 0.1, y: 0.95 }), 'wired');
+  assert.equal(nameMood({ x: 0.95, y: 0.05 }), 'at peace');
   assert.equal(nameMood({ x: Number.NaN, y: 2 }), 'restless', 'a broken point is clamped, never thrown');
-  assert.deepEqual(moodPoint('low'), { x: 0.8, y: 0.42 });
+  assert.deepEqual(moodPoint('low'), { x: 0.2, y: 0.42 });
   assert.deepEqual(moodPoint('not a mood'), moodPoint('somewhere in between'));
+});
+
+test('the map runs heavy to light and still to charged, as the page drew it', () => {
+  const at = (word: string) => moodPoint(word);
+  assert.ok(at('wrung out').x < 0.3 && at('wrung out').y < 0.3, 'heavy and still sit bottom left');
+  assert.ok(at('wired').x < 0.3 && at('wired').y > 0.7, 'heavy and charged sit top left');
+  assert.ok(at('at peace').x > 0.7 && at('at peace').y < 0.3, 'light and still sit bottom right');
+  assert.ok(at('giddy').x > 0.7 && at('giddy').y > 0.7, 'light and charged sit top right');
 });
 
 test('the suggested journeys only use words on the map, and each one goes somewhere', () => {

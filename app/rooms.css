@@ -197,67 +197,70 @@
 .credits-question-head h2 { margin: 0; max-width: 22ch; font: 500 clamp(32px, 3.4vw, 48px)/1.05 var(--font-display), Georgia, serif; letter-spacing: -.01em; text-wrap: balance; }
 .credits-question-head h2:focus { outline: none; }
 .credits-question-close, .between-close { position: absolute; top: 12px; right: 12px; width: 44px; height: 44px; border: 0; background: none; color: var(--muted); font-size: 26px; cursor: pointer; }
-.credits-question-body { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(280px, 1fr); gap: 26px; padding: 0 28px 28px; }
-.credits-map { position: relative; aspect-ratio: 10 / 7.4; border: 1px solid var(--room-line); border-radius: 14px; overflow: hidden; background: radial-gradient(70% 70% at 50% 50%, #132030, #0b1119); }
-.credits-axis { position: absolute; color: var(--room-dim); font: 500 11px var(--font-sans), sans-serif; letter-spacing: .12em; text-transform: uppercase; pointer-events: none; }
-.credits-axis.is-charged { top: 10px; left: 50%; transform: translateX(-50%); }
-.credits-axis.is-still { bottom: 10px; left: 50%; transform: translateX(-50%); }
-.credits-axis.is-light { left: 10px; top: 50%; transform: translateY(-50%) rotate(-90deg); transform-origin: left center; margin-top: 18px; }
-.credits-axis.is-heavy { right: 10px; top: 50%; transform: translateY(-50%) rotate(90deg); transform-origin: right center; margin-top: 18px; }
-.credits-route { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
+.credits-question-body { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(280px, 1fr); gap: 16px 26px; align-items: start; padding: 0 28px 28px; }
+.credits-stage { display: grid; gap: 12px; min-width: 0; }
+.credits-presets { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px; }
+.credits-presets button { min-height: 36px; padding: 6px 13px; border: 1px solid var(--room-line); border-radius: 999px; background: var(--room-chamber-2); color: var(--muted); font: 13px var(--font-sans), sans-serif; white-space: nowrap; cursor: pointer; transition: border-color .2s, color .2s; }
+.credits-presets button:hover, .credits-presets button[aria-pressed=true] { border-color: var(--gold); color: var(--white); }
+.credits-presets button span[aria-hidden] { color: var(--gold); }
+/* The map of moods, as the page drew it: heavy to light, still to charged, and two lights to drag. */
+.credits-pad { position: relative; aspect-ratio: 1.25; border: 1px solid var(--room-line); border-radius: 14px; background: radial-gradient(70% 70% at 50% 50%, #132030, #0b1119); touch-action: none; user-select: none; -webkit-user-select: none; cursor: crosshair; }
+.credits-route { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
 .credits-grid { fill: none; stroke: var(--room-line); stroke-width: 1; vector-effect: non-scaling-stroke; }
-/* Silver for where you are, gold for where the credits find you, and a dashed road between. */
-.credits-path { fill: none; stroke: var(--gold); stroke-width: 1.6; stroke-dasharray: 3 5; stroke-linecap: round; opacity: .8; vector-effect: non-scaling-stroke; animation: credits-reel 1.6s linear infinite, credits-draw .9s var(--room-ease) both; }
+.credits-path { fill: none; stroke: var(--gold); stroke-width: 1.2; stroke-dasharray: 3 5; stroke-linecap: round; opacity: .7; vector-effect: non-scaling-stroke; animation: credits-reel 1.6s linear infinite; }
 @keyframes credits-reel { to { stroke-dashoffset: -16; } }
-@keyframes credits-draw { from { opacity: 0; } }
 .celestial-world[data-motion=off] .credits-path { animation: none; }
-.credits-words { position: absolute; inset: 0; }
-.credits-word { position: absolute; transform: translate(-50%, -50%); display: inline-flex; flex-direction: column; align-items: center; gap: 6px; min-width: 44px; min-height: 44px; padding: 4px 6px; border: 0; background: none; color: var(--muted); font: italic 400 clamp(14px, 1.3vw, 17px)/1.1 var(--font-display), Georgia, serif; white-space: nowrap; cursor: pointer; transition: color .25s; }
-.credits-word i { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); opacity: .45; transition: transform .3s var(--room-ease), opacity .3s, background .3s, box-shadow .3s; }
-.credits-word:hover { color: var(--white); }
-.credits-word:hover i { background: var(--gold); opacity: 1; transform: scale(1.4); }
-.credits-word:focus-visible { outline: 1px solid var(--gold); outline-offset: 2px; }
-.credits-word[data-light] { color: var(--white); font-style: normal; }
-.credits-word[data-light~=now] i { width: 16px; height: 16px; background: var(--room-silver); opacity: 1; box-shadow: 0 0 0 4px #9cbbb92e, 0 0 24px 4px #9cbbb966; }
-.credits-word[data-light~=credits] i { width: 16px; height: 16px; background: var(--gold); opacity: 1; box-shadow: 0 0 0 4px #dec6a02e, 0 0 24px 4px #dec6a066; }
-.credits-word[data-light="now credits"] i { background: linear-gradient(90deg, var(--room-silver) 50%, var(--gold) 50%); }
-.credits-intermission { position: absolute; transform: translate(-50%, -100%); display: grid; justify-items: center; gap: 6px; color: var(--gold); font: 500 10px var(--font-sans), sans-serif; letter-spacing: .16em; text-transform: uppercase; pointer-events: none; }
-.credits-intermission i { order: 2; width: 8px; height: 8px; margin-bottom: -4px; border-radius: 50%; background: var(--gold); box-shadow: 0 0 0 3px #0f1a26; }
-.credits-question-panel { display: grid; align-content: start; gap: 16px; }
-.credits-lights { display: grid; gap: 8px; }
-.credits-lights button { display: grid; grid-template-columns: 22px minmax(0, 1fr); align-items: center; gap: 14px; min-height: 70px; padding: 12px 16px; border: 1px solid transparent; border-radius: 12px; background: var(--room-chamber-2); color: var(--white); text-align: left; cursor: pointer; transition: border-color .25s; }
-.credits-lights button:hover { border-color: var(--room-line); }
-.credits-lights button[aria-pressed=true] { border-color: var(--gold); }
-.credits-lights i { width: 14px; height: 14px; margin-left: 4px; border-radius: 50%; }
-.credits-lights .is-now i { background: var(--room-silver); box-shadow: 0 0 12px #9cbbb988; }
-.credits-lights .is-credits i { background: var(--gold); box-shadow: 0 0 12px #dec6a088; }
-.credits-lights span { display: grid; gap: 3px; }
-.credits-lights small { font: 500 11px var(--font-sans), sans-serif; letter-spacing: .14em; text-transform: uppercase; }
-.credits-lights .is-now small { color: var(--room-silver); }
-.credits-lights .is-credits small { color: var(--gold); }
-.credits-lights strong { font: 500 23px/1.15 var(--font-display), Georgia, serif; }
-.credits-reading { margin: 0; min-height: 3em; padding-left: 14px; border-left: 2px solid var(--gold); color: var(--muted); font: 400 15px/1.5 var(--font-sans), sans-serif; }
-/* One film or a double feature, as a two-way switch. */
-.credits-shape { display: inline-flex; flex-wrap: wrap; justify-self: start; margin: 0; padding: 3px; border: 1px solid var(--room-line); border-radius: 999px; }
-.credits-shape legend { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-.credits-shape label { position: relative; display: inline-flex; align-items: center; min-height: 38px; padding: 0 16px; border-radius: 999px; color: var(--muted); font: 500 13px var(--font-sans), sans-serif; cursor: pointer; transition: background .2s, color .2s; }
-.credits-shape input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: inherit; }
-.credits-shape label:hover { color: var(--white); }
-.credits-shape label[data-checked] { background: var(--gold); color: var(--void); }
-.credits-shape label:has(input:focus-visible) { outline: 2px solid var(--gold); outline-offset: 2px; }
-.credits-journeys p { margin: 0 0 8px; color: var(--room-dim); font: 500 11px var(--font-sans), sans-serif; letter-spacing: .14em; text-transform: uppercase; }
-.credits-journeys ul { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
-.credits-journeys button { min-height: 36px; padding: 6px 13px; border: 1px solid var(--room-line); border-radius: 999px; background: var(--room-chamber-2); color: var(--muted); font: 13px var(--font-sans), sans-serif; cursor: pointer; transition: border-color .2s, color .2s; }
-.credits-journeys button[aria-pressed=true], .credits-journeys button:hover { border-color: var(--gold); color: var(--white); }
-.credits-journeys button span[aria-hidden] { color: var(--gold); }
+.credits-axis { position: absolute; color: var(--room-dim); font: 500 11px var(--font-sans), sans-serif; letter-spacing: .12em; text-transform: uppercase; pointer-events: none; }
+.credits-axis.is-heavy { left: 8%; bottom: 8px; }
+.credits-axis.is-light { right: 8%; bottom: 8px; }
+.credits-axis.is-charged, .credits-axis.is-still { left: 9px; writing-mode: vertical-rl; transform: rotate(180deg); }
+.credits-axis.is-charged { top: 10%; }
+.credits-axis.is-still { bottom: 10%; }
+.credits-marks { position: absolute; inset: 0; margin: 0; padding: 0; list-style: none; pointer-events: none; }
+.credits-marks li { position: absolute; display: grid; justify-items: center; gap: 13px; transform: translate(-50%, -2.5px); color: #6c7a89; font: italic 400 clamp(13px, 1.25vw, 16px)/1 var(--font-display), Georgia, serif; white-space: nowrap; transition: color .3s; }
+.credits-marks i { width: 5px; height: 5px; border-radius: 50%; background: var(--muted); opacity: .4; transition: background .3s, opacity .3s; }
+.credits-marks li[data-lit] { color: var(--white); }
+.credits-marks li[data-lit~=now] i { background: var(--room-silver); opacity: 1; }
+.credits-marks li[data-lit~=credits] i { background: var(--gold); opacity: 1; }
+.credits-interval { position: absolute; transform: translate(-50%, -50%); padding: 3px 8px; border: 1px solid #dec6a055; border-radius: 999px; background: #0d1620; color: var(--gold); font: 500 9.5px var(--font-sans), sans-serif; letter-spacing: .16em; text-transform: uppercase; pointer-events: none; }
+/* Each light: a soft halo and a bright dot, silver for now and gold for the credits. */
+.credits-light { position: absolute; z-index: 2; width: 44px; height: 44px; margin: -22px 0 0 -22px; border-radius: 50%; cursor: grab; touch-action: none; }
+.credits-light::before { content: ''; position: absolute; inset: 6px; border-radius: 50%; background: currentColor; opacity: .16; transition: opacity .2s, transform .2s var(--room-ease); }
+.credits-light::after { content: ''; position: absolute; inset: 15px; border-radius: 50%; background: currentColor; box-shadow: 0 0 16px currentColor; }
+.credits-light.is-now { color: var(--room-silver); }
+.credits-light.is-credits { color: var(--gold); }
+.credits-light:hover::before, .credits-light:focus-visible::before { opacity: .3; transform: scale(1.18); }
+.credits-light:active { cursor: grabbing; }
+.credits-light:focus-visible { outline: 1.5px solid currentColor; outline-offset: -2px; }
+.credits-light span { position: absolute; bottom: calc(100% - 6px); left: 50%; transform: translateX(-50%); font: 500 11px var(--font-sans), sans-serif; letter-spacing: .1em; text-transform: uppercase; white-space: nowrap; pointer-events: none; text-shadow: 0 1px 6px #0b1119; }
+.credits-light[data-below] span { top: calc(100% - 6px); bottom: auto; }
+.credits-hint { margin: 0; color: var(--room-dim); font: 12px/1.5 var(--font-sans), sans-serif; }
+.credits-question-panel { display: grid; align-content: start; gap: 18px; }
+.credits-reading { margin: 0; color: var(--muted); font: italic 400 clamp(24px, 2.4vw, 30px)/1.2 var(--font-display), Georgia, serif; text-wrap: balance; }
+.credits-reading b { font-style: normal; font-weight: 500; }
+.credits-reading .is-now { color: var(--room-silver); }
+.credits-reading .is-credits { color: var(--gold); }
+.credits-seg { display: inline-flex; justify-self: start; padding: 3px; border: 1px solid var(--room-line); border-radius: 999px; }
+.credits-seg button { min-height: 38px; padding: 0 16px; border: 0; border-radius: 999px; background: none; color: var(--muted); font: 500 13px var(--font-sans), sans-serif; cursor: pointer; transition: background .2s, color .2s; }
+.credits-seg button:hover { color: var(--white); }
+.credits-seg button[aria-pressed=true] { background: var(--gold); color: var(--void); }
+.credits-seg button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+/* The programme, as the page set it: a slot for each film, and the interval between. */
+.credits-programme, .route-programme { display: grid; gap: 10px; }
+.route-programme { max-width: 860px; }
+.credits-slot, .route-slot { display: grid; grid-template-columns: 62px minmax(0, 1fr); gap: 14px; align-items: start; padding: 14px 16px; border-radius: 12px; background: var(--room-chamber-2); }
+.credits-slot > span, .route-slot > span { padding-top: 3px; color: var(--gold); font: 400 11.5px var(--font-mono), monospace; letter-spacing: .04em; }
+.credits-slot p, .route-slot p { margin: 0; color: var(--muted); font: 14px/1.5 var(--font-sans), sans-serif; }
+.credits-intermission, .route-intermission { margin: 0; color: var(--room-dim); font: 500 11px var(--font-sans), sans-serif; letter-spacing: .2em; text-transform: uppercase; text-align: center; }
 .credits-develop, .between-develop { justify-self: start; display: inline-flex; gap: 24px; align-items: center; min-height: 52px; padding: 13px 24px; border: 1px solid var(--gold); border-radius: 999px; background: var(--gold); color: var(--void); font: 500 15px var(--font-sans), sans-serif; cursor: pointer; transition: background .2s, border-color .2s; }
 .credits-develop:hover:not(:disabled), .between-develop:hover:not(:disabled) { border-color: var(--white); background: var(--white); }
 .credits-develop:disabled, .between-develop:disabled { background: transparent; color: #dec6a0aa; border-color: #dec6a055; cursor: not-allowed; }
 .credits-note { color: var(--room-dim); font: 12px var(--font-sans), sans-serif; }
 
-/* The route, above a reel the credits question developed. */
-.route-strip { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 6px 26px; margin: 22px 0 14px; padding: 16px 20px; border: 1px solid var(--room-line); border-radius: 14px; background: linear-gradient(100deg, #9cbbb90f, transparent 45%, #dec6a012); }
-.route-strip-kicker { grid-row: span 2; }
+/* The route, above a reel the credits question developed; on a long night, the programme too. */
+.route-strip { display: grid; gap: 14px; margin: 22px 0 14px; padding: 16px 20px; border: 1px solid var(--room-line); border-radius: 14px; background: linear-gradient(100deg, #9cbbb90f, transparent 45%, #dec6a012); }
+.route-strip-head { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 6px 26px; }
+.route-strip-kicker { grid-row: span 2; margin: 0; }
 .route-strip-route { display: flex; align-items: center; gap: 18px; margin: 0; }
 .route-strip-route > span { display: grid; gap: 3px; color: var(--white); font: 500 23px/1.1 var(--font-display), Georgia, serif; }
 .route-strip-route small { color: var(--room-silver); font: 500 10px var(--font-sans), sans-serif; letter-spacing: .16em; text-transform: uppercase; }
@@ -265,8 +268,11 @@
 .route-strip-route > i { position: relative; flex: 1; min-width: 40px; max-width: 220px; height: 1px; background: repeating-linear-gradient(90deg, var(--gold) 0 3px, transparent 3px 8px); opacity: .8; }
 .route-strip-route > i::after { content: ''; position: absolute; right: -2px; top: -3px; border: 3.5px solid transparent; border-left: 6px solid var(--gold); }
 .route-strip-note { grid-column: 2; margin: 0; color: var(--muted); font: 14px/1.5 var(--font-sans), sans-serif; }
-.route-strip button { grid-row: 1 / span 2; grid-column: 3; min-height: 44px; padding: 9px 18px; border: 1px solid var(--gold); border-radius: 999px; background: transparent; color: var(--gold); font: 500 13px var(--font-sans), sans-serif; cursor: pointer; transition: background .2s, color .2s; }
-.route-strip button:hover { background: var(--gold); color: var(--void); }
+.route-slot strong { color: var(--white); font: 500 22px/1.15 var(--font-display), Georgia, serif; }
+.route-slot small { color: var(--room-dim); font: 13px var(--font-sans), sans-serif; }
+.route-slot p { margin-top: 4px; }
+.route-programme button { justify-self: start; min-height: 44px; padding: 9px 18px; border: 1px solid var(--gold); border-radius: 999px; background: transparent; color: var(--gold); font: 500 13px var(--font-sans), sans-serif; cursor: pointer; transition: background .2s, color .2s; }
+.route-programme button:hover { background: var(--gold); color: var(--void); }
 
 /* ——— Blind screening ——— */
 /* One moment at a time, as the page drew it: a scene without its name, and the iris. */
@@ -420,7 +426,6 @@ button.terra-era-bar:hover:not(:disabled) { border-color: var(--gold); backgroun
 
 @media (max-width: 1000px) {
   .credits-question-body { grid-template-columns: 1fr; }
-  .credits-map { aspect-ratio: 10 / 8.4; }
 }
 @media (max-width: 760px) {
   .welcome-doors ul { grid-template-columns: 1fr; border-top: 0; }
@@ -443,12 +448,18 @@ button.terra-era-bar:hover:not(:disabled) { border-color: var(--gold); backgroun
 
   .credits-question-head, .between-head { padding: 18px 54px 12px 18px; }
   .credits-question-body { padding: 0 14px 18px; gap: 18px; }
-  .credits-map { aspect-ratio: 1 / 1.05; }
-  .credits-word { font-size: 13px; gap: 4px; }
+  .credits-presets { flex-wrap: nowrap; overflow-x: auto; margin-inline: -14px; padding: 2px 14px; scrollbar-width: none; }
+  .credits-pad { aspect-ratio: 1 / 1.02; }
+  .credits-marks li { gap: 12px; font-size: 13px; }
+  .credits-axis.is-charged, .credits-axis.is-still { left: 5px; }
+  .credits-reading { font-size: 24px; }
+  .credits-develop { width: 100%; justify-content: space-between; }
 
-  .route-strip { grid-template-columns: 1fr; gap: 10px; }
-  .route-strip-kicker, .route-strip-note, .route-strip button { grid-column: auto; grid-row: auto; }
+  .route-strip { padding: 14px; }
+  .route-strip-head { grid-template-columns: 1fr; gap: 10px; }
+  .route-strip-kicker, .route-strip-note { grid-column: auto; grid-row: auto; }
   .route-strip-route > span { font-size: 20px; }
+  .route-slot { grid-template-columns: 1fr; gap: 4px; padding: 12px 14px; }
 
   .blind-reel { padding: 16px; border-radius: 14px; }
   .blind-moment { min-height: 0; }
