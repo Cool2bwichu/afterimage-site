@@ -2,13 +2,13 @@
 .celestial-world { min-height:100dvh; }
 .orbit-mark { width:34px; height:34px; stroke:var(--gold,#dec6a0); stroke-width:1; flex:none; overflow:visible; }
 .orbit-mark-light { fill:var(--white,#f4efe5); stroke:none; }
-.celestial-motion { display:inline-flex; align-items:center; justify-content:center; gap:8px; min-height:44px; padding:4px 0; border:0; background:none; color:var(--muted,#a7b6c5); font:11px var(--font-sans),sans-serif; cursor:pointer; white-space:nowrap; }
+.celestial-motion { display:inline-flex; align-items:center; justify-content:center; gap:8px; min-height:44px; padding:4px 0; border:0; background:none; color:var(--muted,#c2b6aa); font:11px var(--font-sans),sans-serif; cursor:pointer; white-space:nowrap; }
 .celestial-motion svg { width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:1; }
 .celestial-motion:hover { color:var(--white); }
 .atlas-dialog .celestial-motion,.projection-room .masthead-actions>.celestial-motion { font:11px var(--font-sans),sans-serif; color:var(--muted); }
 .celestial-motion:focus-visible { outline:2px solid var(--gold); outline-offset:4px; }
 .celestial-sky { position:absolute; inset:0; z-index:-1; pointer-events:none; overflow:hidden; }
-.celestial-wash { position:absolute; inset:0; background:radial-gradient(ellipse at 53% 50%,#41505a30,transparent 62%),radial-gradient(ellipse at 70% 35%,#b0916520,transparent 42%); }
+.celestial-wash { position:absolute; inset:0; background:radial-gradient(ellipse at 53% 50%,#564e4530,transparent 62%),radial-gradient(ellipse at 70% 35%,#b0916520,transparent 42%); }
 .celestial-star-plate { position:absolute; width:100%; height:100%; fill:#e2dfd4; opacity:.8; }
 .celestial-instrument { position:absolute; width:100%; height:100%; opacity:.7; }
 .celestial-orbits { stroke-width:.8; }

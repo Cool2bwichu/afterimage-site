@@ -17,6 +17,8 @@ import { NightSky } from './night-sky';
 import { LikeButton } from './like-button';
 import { CHANNEL_COLORS } from './afterimage-log';
 import { TicketStub } from './ticket-stub';
+import { TerraIncognita } from './terra';
+import { CHECKPOINTS, READING_LABEL, READING_STRENGTH, emptyBook, halfLifeGlow, readingsOf, trend, type HalfLifeBook, type HalfLifeRecord } from '../lib/half-life';
 
 type Filter = 'all' | 'liked' | 'saved' | 'afterimages';
 type View = { x: number; y: number; k: number };
@@ -64,8 +66,24 @@ function shortDate(value: string) {
   return Number.isFinite(date.getTime()) ? date.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '';
 }
 
+/** A film's half-life: how strongly it stayed, a day, a week, a month and a season after. */
+function HalfLifeLine({ film }: { film: HalfLifeRecord }) {
+  const readings = readingsOf(film);
+  const points = readings.map(reading => ({ x: 8 + CHECKPOINTS.indexOf(reading.checkpoint) * 61, y: 46 - READING_STRENGTH[reading.value] * 38 }));
+  const direction = trend(film);
+  return <figure className="your-sky-half-life">
+    <figcaption><span>Half-life</span>{direction === 'growing' ? 'Still growing in you' : direction === 'fading' ? 'Fading, as most films do' : 'Holding its light'}</figcaption>
+    <svg viewBox="0 0 200 54" role="img" aria-label={readings.map(reading => `${reading.checkpoint.label}: ${READING_LABEL[reading.value]}`).join('. ')}>
+      <path className="half-life-axis" d="M8 46H192" />
+      {points.length > 1 ? <path className="half-life-curve" d={points.map((point, index) => `${index ? 'L' : 'M'}${point.x} ${point.y}`).join('')} /> : null}
+      {CHECKPOINTS.map((checkpoint, index) => <text key={checkpoint.id} x={8 + index * 61} y="53" textAnchor={index === 0 ? 'start' : index === 3 ? 'end' : 'middle'}>{checkpoint.id}</text>)}
+      {points.map((point, index) => <circle key={index} cx={point.x} cy={point.y} r="3.2" data-reading={readings[index].value} />)}
+    </svg>
+  </figure>;
+}
+
 export function YourSky({ open, opener, onClose, reels, atlases, likes, watchlist, afterimages, metadataByKey, likedKeys, savedKeys, canExplore,
-  onLike, onSave, onLogAfterimage, onNavigate, onExplore, onBegin, onCollide }: {
+  onLike, onSave, onLogAfterimage, onNavigate, onExplore, onBegin, onCollide, halfLife = emptyBook(), canLookUp = false, onDevelop, onWatch }: {
   open: boolean; opener: HTMLElement | null; onClose: () => void;
   reels: SavedReel[]; atlases: AtlasStop[]; likes: LikedFilm[]; watchlist: SavedFilm[]; afterimages: AfterimageEntry[];
   metadataByKey: Record<string, FilmEnrichment>; likedKeys: Set<string>; savedKeys: Set<string>; canExplore: boolean;
@@ -75,6 +93,14 @@ export function YourSky({ open, opener, onClose, reels, atlases, likes, watchlis
   onBegin: () => void;
   /** Collide this star with another film to find the one between them. */
   onCollide?: (film: { title: string; year: string; tmdbId?: number }, opener: HTMLElement) => void;
+  /** What each film became in you; a film that grew burns brighter. */
+  halfLife?: HalfLifeBook;
+  /** Whether the film catalogue can be asked about films the page has not looked up. */
+  canLookUp?: boolean;
+  /** Terra incognita: develop a reel into a part of cinema the sky has not reached. */
+  onDevelop?: (request: { films: string[]; creativeBrief: string }, opener: HTMLElement) => void;
+  /** Into the lobby: watch this film tonight. */
+  onWatch?: (film: { title: string; year: string; tmdbId?: number }, opener: HTMLElement) => void;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -83,7 +109,7 @@ export function YourSky({ open, opener, onClose, reels, atlases, likes, watchlis
   const { running } = useCelestialMotion();
   const [registry, setRegistry] = useState<Record<string, string> | null>(null);
   const [filter, setFilter] = useState<Filter>('all');
-  const [mode, setMode] = useState<'map' | 'list'>('map');
+  const [mode, setMode] = useState<'map' | 'list' | 'terra'>('map');
   const [selection, setSelection] = useState<Selection>(null);
   const [hovered, setHovered] = useState<string | null>(null);
   const [artwork, setArtwork] = useState<Record<string, FilmEnrichment>>({});
@@ -147,16 +173,18 @@ export function YourSky({ open, opener, onClose, reels, atlases, likes, watchlis
     return { ...merged, ...metadataByKey };
   }, [artwork, reels, metadataByKey]);
 
+  const terraFilms = useMemo(() => sky?.stars.map(({ key, title, year }) => ({ key, title, year })) ?? [], [sky]);
+
   const selectedStar = selection?.kind === 'star' ? starsByKey.get(selection.key) ?? null : null;
   const selectedConstellation = selection?.kind === 'constellation' ? constellationsById.get(selection.id) ?? null : null;
   const litConstellations = useMemo(() => new Set(selectedStar ? selectedStar.constellations : selectedConstellation ? [selectedConstellation.id] : []), [selectedStar, selectedConstellation]);
 
   // Everything the painter reads that can change without rebuilding the sky.
-  const live = useRef({ running, filter, selectedKey: '' as string | undefined, hovered: null as string | null, lit: new Set<string>() });
+  const live = useRef({ running, filter, selectedKey: '' as string | undefined, hovered: null as string | null, lit: new Set<string>(), halfLife });
   useEffect(() => {
-    live.current = { running, filter, selectedKey: selectedStar?.key, hovered, lit: litConstellations };
+    live.current = { running, filter, selectedKey: selectedStar?.key, hovered, lit: litConstellations, halfLife };
     request.current();
-  }, [running, filter, selectedStar, hovered, litConstellations]);
+  }, [running, filter, selectedStar, hovered, litConstellations, halfLife]);
 
   const starColor = useCallback((star: SkyStar) => {
     if (star.afterimage) return '#fff1d6';
@@ -227,7 +255,7 @@ export function YourSky({ open, opener, onClose, reels, atlases, likes, watchlis
 
     draw.current = (time: number) => {
       frame.current = 0;
-      const { running, filter, selectedKey, hovered, lit: litConstellations } = live.current;
+      const { running, filter, selectedKey, hovered, lit: litConstellations, halfLife: book } = live.current;
       const selectedStar = selectedKey ? starsByKey.get(selectedKey) : undefined;
       const { width, height, scale } = size.current;
       if (!width) return;
@@ -290,7 +318,9 @@ export function YourSky({ open, opener, onClose, reels, atlases, likes, watchlis
         const twinkle = running ? .78 + .22 * Math.sin(time / 1000 * speed * Math.PI * 2 + phase) : .9;
         const dim = filter !== 'all' && !matches(star, filter) ? .14 : 1;
         const focus = selectedStar?.key === star.key || hovered === star.key;
-        const radius = (1.05 + star.magnitude * 3.3) * zoomScale * (focus ? 1.25 : 1);
+        // A film that grew in you burns brighter; one that faded dims, but never goes out.
+        const magnitude = Math.min(1, Math.max(.08, star.magnitude + halfLifeGlow(book.films[star.key])));
+        const radius = (1.05 + magnitude * 3.3) * zoomScale * (focus ? 1.25 : 1);
         const color = starColor(star);
         const alpha = appear * dim;
         const unseen = star.saved && !star.liked && !star.afterimage;
@@ -310,7 +340,7 @@ export function YourSky({ open, opener, onClose, reels, atlases, likes, watchlis
           context!.fillStyle = '#fffaf0';
           context!.beginPath(); context!.arc(point.x, point.y, Math.max(.9, radius * .5), 0, Math.PI * 2); context!.fill();
         }
-        if (star.magnitude >= .72 && !unseen) {
+        if (magnitude >= .72 && !unseen) {
           const spike = radius * 4.2 * twinkle;
           context!.globalAlpha = alpha * .45;
           context!.strokeStyle = color;
@@ -573,12 +603,13 @@ export function YourSky({ open, opener, onClose, reels, atlases, likes, watchlis
           <strong>{star.title}</strong><small>{star.year}{star.liked ? ' · Loved' : ''}{star.afterimage ? ' · Afterimage' : ''}{star.saved ? ' · To watch' : ''}</small>
         </button></li>)}</ul>
       </section>)}</div> : null}
+      {mode === 'terra' && sky && onDevelop ? <div className="your-sky-terra"><TerraIncognita films={terraFilms} knownArt={knownArt} canLookUp={canLookUp} canDevelop={canExplore} onDevelop={onDevelop} /></div> : null}
     </div>
 
     <header className="your-sky-masthead">
       <button type="button" className="your-sky-back" onClick={onClose}><span aria-hidden="true">←</span> Back</button>
       <h2 id="your-sky-title" ref={headingRef} tabIndex={-1}><OrbitMark /><span><small>AFTERIMAGE</small>Your sky</span></h2>
-      <div className="your-sky-tools"><MotionToggle /><div className="your-sky-view" role="group" aria-label="Sky presentation"><button type="button" aria-pressed={mode === 'map'} onClick={() => setMode('map')}>Map</button><button type="button" aria-pressed={mode === 'list'} onClick={() => setMode('list')}>List</button></div></div>
+      <div className="your-sky-tools"><MotionToggle /><div className="your-sky-view" role="group" aria-label="Sky presentation"><button type="button" aria-pressed={mode === 'map'} onClick={() => setMode('map')}>Map</button><button type="button" aria-pressed={mode === 'list'} onClick={() => setMode('list')}>List</button>{onDevelop ? <button type="button" aria-pressed={mode === 'terra'} onClick={() => setMode('terra')}>Unexplored</button> : null}</div></div>
     </header>
 
     <aside className="your-sky-panel" aria-label="About your sky" data-selected={Boolean(selectedStar || selectedConstellation)}>
@@ -606,10 +637,12 @@ export function YourSky({ open, opener, onClose, reels, atlases, likes, watchlis
         {journal ? <div className="your-sky-journal">
           <TicketStub entry={journal} number={afterimages.indexOf(journal) + 1} />
         </div> : null}
+        {halfLife.films[selectedStar.key] && readingsOf(halfLife.films[selectedStar.key]).length ? <HalfLifeLine film={halfLife.films[selectedStar.key]} /> : null}
         <div className="your-sky-actions">
           <LikeButton film={film} liked={likedKeys.has(selectedStar.key)} onToggle={() => onLike(film)} />
           <button type="button" aria-pressed={savedKeys.has(selectedStar.key)} onClick={() => onSave(film)}>{savedKeys.has(selectedStar.key) ? 'Saved ✓' : 'Save for later +'}</button>
           <button type="button" className="is-primary" onClick={event => onLogAfterimage(film, event.currentTarget)}>{journal ? 'Revisit your afterimage' : 'Log an afterimage'} <span aria-hidden="true">✦</span></button>
+          {onWatch && !journal ? <button type="button" onClick={event => onWatch(film, event.currentTarget)}>Watch it tonight <span aria-hidden="true">↗</span></button> : null}
         </div>
         {selectedStar.constellations.length ? <div className="your-sky-memberships"><h4>Where you met it</h4><ul>{selectedStar.constellations.map(id => {
           const constellation = constellationsById.get(id);

@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useSyncExternalStore, type CSSProperties } from 'react';
 import type { DraftFilm, JobDraft } from '../lib/generation-state';
+import { veiledName } from '../lib/blind';
 
 const NOTIFY_KEY = 'afterimage:notify:v1';
 const DEVELOPING_TITLE = '✦ Developing your reel · AFTERIMAGE';
@@ -27,6 +28,12 @@ export function useDevelopingTitle(developing: boolean) {
   }, [developing]);
 }
 
+/** A system notification, only for someone who asked for them here and only while they look elsewhere. */
+export function notifyAway(title: string, body: string, tag: string) {
+  if (typeof document === 'undefined' || !document.hidden || readPermission() !== 'granted' || !wantsNotice()) return;
+  try { new Notification(title, { body, icon: new URL('icon-192.png', document.baseURI).href, tag }); } catch { /* Some browsers only allow notifications from a service worker. */ }
+}
+
 /** Called once when a reel arrives. Only speaks up when the viewer is looking elsewhere. */
 export function announceReady(body: string) {
   if (typeof document === 'undefined' || !document.hidden) return;
@@ -41,9 +48,7 @@ export function announceReady(body: string) {
     };
     document.addEventListener('visibilitychange', restore);
   }, 0);
-  if (readPermission() === 'granted' && wantsNotice()) {
-    try { new Notification('Your reel is ready', { body, icon: new URL('icon-192.png', document.baseURI).href, tag: 'afterimage-reel' }); } catch { /* Some browsers only allow notifications from a service worker. */ }
-  }
+  notifyAway('Your reel is ready', body, 'afterimage-reel');
 }
 
 function NotifyControl() {
@@ -71,9 +76,11 @@ function NotifyControl() {
  * palette, then each film as the companion finishes it. That draft is provisional, and says
  * so; the finished reel, checked by AFTERIMAGE, replaces it.
  */
-export function ChartingRoom({ message, detail, elapsed, sources, variant = 'reel', draft = null, posterFor }: {
+export function ChartingRoom({ message, detail, elapsed, sources, variant = 'reel', draft = null, posterFor, veiled = false }: {
   message: string; detail: string; elapsed: string | null; sources: string[]; variant?: 'reel' | 'replacement';
   draft?: JobDraft | null; posterFor?: (film: DraftFilm) => string | null;
+  /** A blind reel develops behind the veil: films arrive, but not their names. */
+  veiled?: boolean;
 }) {
   const bodies = sources.slice(0, 5);
   const films = variant === 'replacement' ? (draft?.recommendation ? [draft.recommendation] : []) : draft?.recommendations ?? [];
@@ -99,23 +106,27 @@ export function ChartingRoom({ message, detail, elapsed, sources, variant = 'ree
         style={{ '--i': index, ...(palette[index] ? { '--slot-color': palette[index] } : {}) } as CSSProperties} />)}</div>
     </div>
     <div className="charting-copy">
-      <p className="charting-kicker">{secondTake ? 'A second take' : developing ? 'Developing · Your reel is taking shape' : 'Charting your next constellation'}</p>
+      <p className="charting-kicker">{secondTake ? 'A second take' : developing ? veiled ? 'Developing blind · The films arrive unnamed' : 'Developing · Your reel is taking shape' : veiled ? 'Charting blind · Your next constellation' : 'Charting your next constellation'}</p>
       {persona ? <h2 key={persona} className="developing-in">{persona}</h2> : <h2>{message}</h2>}
-      <p>{secondTake && !developing ? 'The first answer didn’t pass AFTERIMAGE’s checks, so the companion is writing it again.' : variant === 'reel' && draft?.insight ? draft.insight : detail}</p>
+      <p>{secondTake && !developing ? 'The first answer didn’t pass AFTERIMAGE’s checks, so the companion is writing it again.' : variant === 'reel' && draft?.insight && !veiled ? draft.insight : detail}</p>
       {palette.length ? <p className="developing-palette" aria-hidden="true">{palette.map((color, index) => <i key={`${color}-${index}`} style={{ background: color, '--i': index } as CSSProperties} />)}</p> : null}
       {developing && films.length ? <>
         <ol className={`developing-reel developing-reel--${variant}`} aria-live="off">
           {Array.from({ length: slots }, (_, index) => {
             const film = films[index];
             if (!film) return <li key={`waiting-${index}`} className="is-waiting" aria-hidden="true"><span className="developing-frame" /><span className="developing-lines"><i /><i /></span></li>;
-            const poster = posterFor?.(film) ?? null;
+            const poster = veiled ? null : posterFor?.(film) ?? null;
+            if (veiled) return <li key={`veiled-${index}`} className="is-arrived is-veiled" style={{ '--i': index } as CSSProperties}>
+              <span className="developing-frame"><span aria-hidden="true">?</span></span>
+              <span className="developing-film"><strong>{veiledName(index)}</strong> <small>Behind the veil</small></span>
+            </li>;
             return <li key={`${film.title}|${film.year}`} className="is-arrived" style={{ '--i': index } as CSSProperties}>
               <span className="developing-frame">{poster ? <img src={poster} alt="" loading="lazy" onError={event => { event.currentTarget.style.visibility = 'hidden'; }} /> : <span aria-hidden="true">{film.title.slice(0, 1)}</span>}</span>
               <span className="developing-film"><strong>{film.title}</strong> <small>{film.year}</small>{film.reason ? <em>{film.reason}</em> : null}</span>
             </li>;
           })}
         </ol>
-        <p className="sr-only">{variant === 'replacement' ? `${films[0].title} is arriving.` : `${films.length} of 5 films have arrived.`}</p>
+        <p className="sr-only">{variant === 'replacement' ? `${veiled ? 'A film' : films[0].title} is arriving.` : `${films.length} of 5 films have arrived.`}</p>
         <p className="developing-note">Still developing. The reel is final once the companion finishes and AFTERIMAGE checks it.</p>
       </> : bodies.length ? <p className="charting-sources"><span>Following</span>{bodies.map((source, index) => <strong key={`${source}-${index}`}>{source}</strong>)}</p> : null}
       <div className="charting-meta">

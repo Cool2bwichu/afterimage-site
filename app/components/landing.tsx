@@ -1,10 +1,11 @@
 'use client';
 
-import { useEffect, useId, useRef, useState, type FormEvent, type KeyboardEvent, type MouseEvent } from 'react';
+import { useEffect, useId, useRef, useState, type FormEvent, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react';
 import { CelestialSky, useCelestialMotion } from './celestial';
 import { apiFetch } from '../lib/api';
 import { parseFilmSearchResults, type FilmSearchResult } from '../lib/film-search';
 import { BLANK_SENTENCE, SENTENCE_WORDS, cycleWord, hasAnswer, questionRequest, wordText, type ChosenFilm, type SentenceChoice, type SentenceKey } from '../lib/one-question';
+import { formatClock } from '../lib/screening';
 
 // Verified TMDB stills. These are editorial examples, never generated user results.
 const FILMS = {
@@ -119,8 +120,9 @@ function SentenceWord({ choice, wordKey, onChange }: { choice: SentenceChoice; w
  * The entrance asks one thing. Answer with a film from the catalogue, or in your own words,
  * and fill in as much of the sentence as you like; nothing else is required.
  */
-function Question({ canSearch, onAnswer, film, setFilm }: {
+function Question({ canSearch, onAnswer, film, setFilm, blind, onBlind }: {
   canSearch: boolean; onAnswer: (request: QuestionRequest) => void; film: ChosenFilm | null; setFilm: (film: ChosenFilm | null) => void;
+  blind: boolean; onBlind: (on: boolean) => void;
 }) {
   const [text, setText] = useState('');
   const [choice, setChoice] = useState<SentenceChoice>(BLANK_SENTENCE);
@@ -189,13 +191,30 @@ function Question({ canSearch, onAnswer, film, setFilm }: {
     </div>
     <p className="welcome-sentence">Something <SentenceWord choice={choice} wordKey="mood" onChange={setChoice} /> to watch <SentenceWord choice={choice} wordKey="company" onChange={setChoice} />, <SentenceWord choice={choice} wordKey="time" onChange={setChoice} />.</p>
     <div className="welcome-actions">
-      <button type="submit" className="welcome-primary" disabled={!hasAnswer(text, film, choice)}>Develop my reel <span aria-hidden="true">↗</span></button>
+      <button type="submit" className="welcome-primary" disabled={!hasAnswer(text, film, choice)}>{blind ? 'Develop it blind' : 'Develop my reel'} <span aria-hidden="true">↗</span></button>
+      <button type="button" className="welcome-blind" aria-pressed={blind} onClick={() => onBlind(!blind)}
+        title="The reel arrives veiled: no titles, posters or names, only what each film is like.">
+        <i aria-hidden="true" /><span>Blind screening</span><small>{blind ? 'On: the reel arrives veiled' : 'Choose without names'}</small></button>
     </div>
   </form>;
 }
 
-export function Landing({ onStart, onAnswer, onEyeTest, canSearch, hasDraft, hasReel = false, featuredFilm }: {
+/** The hour, as a cinema's board would show it: "SUNDAY · 11:04 PM". */
+function Showtime() {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => { const timer = window.setInterval(() => setNow(Date.now()), 30_000); return () => window.clearInterval(timer); }, []);
+  const day = new Date(now).toLocaleDateString(undefined, { weekday: 'long' });
+  return <time dateTime={new Date(now).toISOString()}>{day} · {formatClock(now)}</time>;
+}
+
+export function Landing({ onStart, onAnswer, onEyeTest, onCredits, onBetween, blind, onBlind, checkIn, canSearch, hasDraft, hasReel = false, featuredFilm }: {
   featuredFilm: WelcomeFilm; onStart: () => void; onAnswer: (request: QuestionRequest) => void; onEyeTest: () => void;
+  /** The other ways in: where you want to be at the credits, and a film for two. */
+  onCredits: () => void; onBetween: () => void;
+  /** Blind screening: the next reel arrives veiled. */
+  blind: boolean; onBlind: (on: boolean) => void;
+  /** A film from the journal, asking whether it is still with you. */
+  checkIn?: ReactNode;
   canSearch: boolean; hasDraft: boolean; hasReel?: boolean;
 }) {
   const [viewing, setViewing] = useState<WelcomeFilm | null>(null);
@@ -212,13 +231,19 @@ export function Landing({ onStart, onAnswer, onEyeTest, canSearch, hasDraft, has
     <section className="welcome-hero" aria-labelledby="welcome-title">
       <CelestialSky variant="landing" />
       <div className="welcome-hero-copy">
-        <p className="welcome-prelude"><span aria-hidden="true">✦</span> Some films stay with you.</p>
+        {checkIn}
+        <p className="welcome-prelude"><span aria-hidden="true">✦</span> <Showtime /> · Some films stay with you.</p>
         <h2 id="welcome-title" tabIndex={-1}>What stayed<br /><em>with you?</em></h2>
-        <Question canSearch={canSearch} onAnswer={onAnswer} film={picked} setFilm={setPicked} />
-        <p className="welcome-other-ways">
-          <button type="button" onClick={onEyeTest}>Can’t put it into words? <strong>Take the Eye Test</strong></button>
-          <button type="button" onClick={() => onStart()}>{hasReel ? 'Return to your reel' : hasDraft ? 'Continue your request' : 'Use the full composer'}</button>
-        </p>
+        <Question canSearch={canSearch} onAnswer={onAnswer} film={picked} setFilm={setPicked} blind={blind} onBlind={onBlind} />
+        <nav className="welcome-doors" aria-label="Other ways in">
+          <p>Other ways in</p>
+          <ul>
+            <li><button type="button" onClick={onCredits}><strong>Ask the credits question</strong><span>Where do you want to be when they roll?</span></button></li>
+            <li><button type="button" onClick={onBetween}><strong>Choose for two</strong><span>Three films each, and the films between you.</span></button></li>
+            <li><button type="button" onClick={onEyeTest}><strong>Take the Eye Test</strong><span>Can’t put it into words? Pick frames instead.</span></button></li>
+          </ul>
+          <button type="button" className="welcome-composer" onClick={() => onStart()}>{hasReel ? 'Return to your reel' : hasDraft ? 'Continue your request' : 'Use the full composer'} <span aria-hidden="true">→</span></button>
+        </nav>
       </div>
       <div className="welcome-portal" aria-label="The aperture">
         <div className="welcome-portal-aura" aria-hidden="true" />
