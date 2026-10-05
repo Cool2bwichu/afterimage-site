@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { movieKey } from '../lib/movie-metadata';
 import {
   INTERMISSION_MINUTES, addToProgramme, creditsRollAt, formatClock, formatCountdown, formatRuntime, hasKnownRuntimes, lightsDown,
@@ -10,6 +10,13 @@ import { notifyAway } from './charting';
 import { StarGlyph } from './celestial';
 
 type PhaseKind = ScreeningPhase['kind'];
+
+/** The film's own frame, faint behind the lit rooms of the evening. */
+function Still({ film }: { film: ProgrammeFilm }) {
+  const [failed, setFailed] = useState(false);
+  const source = !failed ? film.backdropUrl ?? null : null;
+  return <div className="lobby-still" aria-hidden="true">{source ? <img key={source} src={source} alt="" decoding="async" onError={() => setFailed(true)} /> : null}</div>;
+}
 
 function Poster({ film }: { film: ProgrammeFilm }) {
   const [failed, setFailed] = useState(false);
@@ -89,13 +96,16 @@ export function Lobby({ screening, open, opener, candidates, kept, onOpen, onSte
   const dark = phase.kind === 'showing' || phase.kind === 'intermission';
   const unknownRuntime = !hasKnownRuntimes(films);
   const hour = new Date(now).getHours();
+  // The room takes the light of the film it is about: the one coming, showing, or just ended.
+  const featured = films[playing >= 0 ? (phase.kind === 'intermission' ? phase.index + 1 : playing) : phase.kind === 'credits' ? films.length - 1 : 0] ?? films[0];
 
   return <>
     {seat ? <button type="button" className="lobby-seat" onClick={onOpen}>
       <i aria-hidden="true" /><span>{phase.kind === 'showing' ? 'Now showing' : 'Intermission'}</span><strong>{films[playing]?.title}</strong><em>Back to your seat</em>
     </button> : null}
-    <dialog ref={dialog} className="lobby" data-phase={phase.kind} aria-labelledby="lobby-title"
+    <dialog ref={dialog} className="lobby" data-phase={phase.kind} aria-labelledby="lobby-title" style={featured.light ? { '--film-light': featured.light } as CSSProperties : undefined}
       onCancel={event => { event.preventDefault(); if (phase.kind === 'lobby') onChange(null); else onStepOut(); }}>
+      <Still key={movieKey(featured.title, featured.year)} film={featured} />
       <div className="lobby-curtain is-left" aria-hidden="true" />
       <div className="lobby-curtain is-right" aria-hidden="true" />
       <div className="lobby-house" aria-hidden="true" />
@@ -134,6 +144,7 @@ export function Lobby({ screening, open, opener, candidates, kept, onOpen, onSte
       </div> : null}
 
       {dark ? <div className="lobby-dark">
+        <span className="lobby-beam" aria-hidden="true" />
         <p className="lobby-kicker">{phase.kind === 'showing' ? (films.length > 1 ? `Now showing · ${phase.index === 0 ? 'The first film' : 'The second film'}` : 'Now showing') : `The first film’s over · ${INTERMISSION_MINUTES} minutes`}</p>
         <h2 id="lobby-title" ref={heading} tabIndex={-1}>{phase.kind === 'showing' ? films[phase.index].title : 'Intermission'}</h2>
         <p className="lobby-dark-time">{phase.kind === 'showing'

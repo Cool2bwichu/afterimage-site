@@ -1,7 +1,9 @@
 // The Credits Question. Not "what do you like?" but "where do you want to be when the
 // credits roll?" Two lights on a map of moods, where you are now and where you want to
 // end up, become an ordinary reel request: the route is written into the brief, so the
-// bridge needs nothing new. On a long night the first two films are a double feature.
+// bridge needs nothing new. On a long night the first two films are a double feature,
+// and the evening can have a length the films must fit inside.
+import { eveningClause, parseEvening, type Evening } from './evening.ts';
 
 /** x runs from light (0) to heavy (1); y from still (0) to charged (1). */
 export type MoodPoint = { x: number; y: number };
@@ -31,7 +33,7 @@ export const JOURNEYS: ReadonlyArray<{ from: MoodWord; to: MoodWord }> = [
   { from: 'low', to: 'lifted' },
 ];
 
-export type Route = { now: string; credits: string; double: boolean };
+export type Route = { now: string; credits: string; double: boolean; evening?: Evening };
 
 const clamp = (value: number) => Math.min(1, Math.max(0, Number.isFinite(value) ? value : 0.5));
 
@@ -64,7 +66,7 @@ export function routeBrief(route: Route): string {
   const shape = route.double
     ? 'This is a double feature: make the first two films a pair to watch in that order, the first meeting me where I am and the second carrying me the rest of the way. In each reason, say where that film sits on the route.'
     : 'In each reason, say how the film moves me from one to the other.';
-  return `${opening} ${course} ${shape}`;
+  return [opening, course, shape, eveningClause(route.evening ?? null, route.double)].filter(Boolean).join(' ');
 }
 
 /** The route back out of a brief this entrance wrote, for the strip above the reel. */
@@ -72,7 +74,8 @@ export function parseRoute(brief: string | undefined): Route | null {
   if (!brief) return null;
   const match = /^Right now I feel (.{1,40}?)\. By the time the credits roll, I want to feel (.{1,40}?)\./.exec(brief);
   if (!match) return null;
-  return { now: match[1], credits: match[2], double: /This is a double feature:/.test(brief) };
+  const evening = parseEvening(brief);
+  return { now: match[1], credits: match[2], double: /This is a double feature:/.test(brief), ...(evening ? { evening } : {}) };
 }
 
 export function routeRequest(route: Route): { films: string[]; creativeBrief: string } {

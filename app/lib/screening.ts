@@ -25,6 +25,8 @@ export type ProgrammeFilm = {
   directors?: string[];
   posterUrl?: string | null;
   backdropUrl?: string | null;
+  /** The colour the film lends the room, from its reel's palette. */
+  light?: string;
 };
 
 export type Screening = {
@@ -84,6 +86,7 @@ export function parseProgrammeFilm(value: unknown): ProgrammeFilm | null {
   const posterUrl = tmdbImage(value.posterUrl);
   const backdropUrl = tmdbImage(value.backdropUrl);
   const qualities = facets(value.facets);
+  const light = typeof value.light === 'string' && /^#[0-9a-f]{6}$/i.test(value.light) ? value.light.toLowerCase() : undefined;
   return {
     title, year, runtime,
     ...(tmdbId ? { tmdbId } : {}),
@@ -92,6 +95,7 @@ export function parseProgrammeFilm(value: unknown): ProgrammeFilm | null {
     ...(directors.length ? { directors } : {}),
     ...(posterUrl !== undefined ? { posterUrl } : {}),
     ...(backdropUrl !== undefined ? { backdropUrl } : {}),
+    ...(light ? { light } : {}),
   };
 }
 

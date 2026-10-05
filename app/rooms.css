@@ -1,12 +1,13 @@
 /* AFTERIMAGE · The rooms of the picture palace
    The Lobby and its dark room, the usher, the half-life check-in, the credits question,
-   blind screening, the film between us, and terra incognita. Type, colour and light come
+   blind screening, the film between us, terra incognita, and keep one, lose one at the
+   end of a reel. Type, colour and light come
    from palace.css; these are the rooms built with them. */
 
 /* ——— Small shared pieces ——— */
-.room-kicker, .lobby-kicker, .check-in-kicker, .credits-question-kicker, .route-strip-kicker, .blind-kicker, .between-kicker, .terra-kicker, .blind-unveiled-kicker {
+.room-kicker, .lobby-kicker, .check-in-kicker, .credits-question-kicker, .route-strip-kicker, .blind-kicker, .between-kicker, .terra-kicker, .blind-unveiled-kicker, .keep-lose-kicker {
   display: flex; align-items: center; gap: 9px; margin: 0; color: var(--gold); font: 400 10px/1.4 var(--booth-type); letter-spacing: .18em; text-transform: uppercase; }
-:is(.lobby-kicker, .check-in-kicker, .credits-question-kicker, .blind-kicker, .between-kicker, .terra-kicker) .star-glyph { width: 11px; height: 11px; fill: currentColor; flex: none; }
+:is(.lobby-kicker, .check-in-kicker, .credits-question-kicker, .blind-kicker, .between-kicker, .terra-kicker, .keep-lose-kicker) .star-glyph { width: 11px; height: 11px; fill: currentColor; flex: none; }
 
 /* ——— The entrance: the other ways in ——— */
 .welcome-actions { gap: 14px 18px; }
@@ -56,8 +57,15 @@
 .reel-workspace > .check-in { margin: 24px 0 0; }
 
 /* ——— The Lobby ——— */
-.lobby { position: fixed; inset: 0; width: 100vw; max-width: 100vw; height: 100dvh; max-height: 100dvh; margin: 0; padding: 0; border: 0; overflow: hidden; color: var(--white);
-  background: radial-gradient(ellipse 70% 60% at 50% 34%, #3a271b, #1a120d 58%, #0c0a08); }
+.lobby { --film-light: var(--marquee); position: fixed; inset: 0; width: 100vw; max-width: 100vw; height: 100dvh; max-height: 100dvh; margin: 0; padding: 0; border: 0; overflow: hidden; color: var(--white);
+  background: radial-gradient(ellipse 70% 60% at 50% 34%, color-mix(in srgb, var(--film-light) 12%, #34241a), #1a120d 58%, #0c0a08); }
+/* The film's own frame, faint behind the lit rooms, and the colour it lends them. */
+.lobby-still { position: absolute; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; opacity: 0; transition: opacity 1.8s var(--palace-ease); }
+.lobby[data-phase=lobby] .lobby-still, .lobby[data-phase=credits] .lobby-still { opacity: 1; }
+.lobby-still img { width: 100%; height: 100%; object-fit: cover; opacity: .3; filter: saturate(.85);
+  -webkit-mask: radial-gradient(ellipse 60% 64% at 50% 22%, #000 18%, transparent 76%); mask: radial-gradient(ellipse 60% 64% at 50% 22%, #000 18%, transparent 76%); animation: still-arrive 2.6s var(--palace-ease) both; }
+.lobby-still::after { content: ''; position: absolute; inset: 0; background: radial-gradient(ellipse 60% 50% at 50% 30%, color-mix(in srgb, var(--film-light) 14%, transparent), transparent 70%), linear-gradient(transparent 35%, #0c0a08e0 90%); }
+@keyframes still-arrive { from { opacity: 0; transform: scale(1.04); } }
 .lobby::backdrop { background: #000; }
 .lobby[open] { animation: lobby-in .9s var(--palace-ease) both; }
 @keyframes lobby-in { from { opacity: 0; } }
@@ -119,6 +127,11 @@
 /* The dark room: everything goes quiet but the clock you asked for. */
 .lobby-dark { position: relative; z-index: 2; display: grid; place-content: center; justify-items: center; gap: 14px; height: 100%; padding: 24px; text-align: center; animation: celestial-arrive 2.4s 1s both; }
 .lobby-dark .lobby-kicker { color: #6f6253; }
+/* The projector's beam, barely there: the film is on the other screen. */
+.lobby-beam { position: absolute; z-index: -1; top: 0; left: 50%; width: min(1200px, 130vw); height: 100%; transform: translateX(-50%); pointer-events: none;
+  background: linear-gradient(color-mix(in srgb, var(--film-light) 55%, #fff4e0), transparent 88%); clip-path: polygon(49.3% 0, 50.7% 0, 100% 100%, 0 100%); opacity: .07; animation: beam-flicker 7s steps(1) infinite; }
+@keyframes beam-flicker { 0%, 100% { opacity: .07; } 23% { opacity: .061; } 24% { opacity: .076; } 61% { opacity: .065; } 62% { opacity: .072; } }
+.lobby[data-phase=intermission] .lobby-beam { opacity: .035; animation: none; }
 .lobby-dark h2 { margin: 0; color: #5f5446; font: 800 clamp(40px, 6vw, 84px)/.9 var(--billing); text-transform: uppercase; letter-spacing: .04em; }
 .lobby-dark-time { margin: 0; color: #6f6253; font: italic 18px var(--font-display); }
 .lobby-dark-time strong { color: #8f7d66; font-weight: 400; }
@@ -217,6 +230,17 @@
 .credits-shape legend { width: 100%; margin-bottom: 6px; color: var(--dim); font: 400 10px var(--booth-type); letter-spacing: .16em; text-transform: uppercase; }
 .credits-shape label { display: inline-flex; align-items: center; gap: 8px; min-height: 40px; color: var(--white); font: 14px var(--font-sans); cursor: pointer; }
 .credits-shape input { accent-color: var(--marquee); width: 16px; height: 16px; }
+.evening-picker { min-width: 0; margin: 0; padding: 0; border: 0; }
+.evening-picker legend { margin-bottom: 8px; padding: 0; color: var(--dim); font: 400 10px var(--booth-type); letter-spacing: .16em; text-transform: uppercase; }
+.evening-picker > div { display: flex; flex-wrap: wrap; gap: 6px; }
+.evening-picker label { position: relative; display: inline-flex; align-items: center; min-height: 38px; padding: 0 13px; border: 1px solid #f3ebdd24; border-radius: 999px; color: #d8cbb8; font: 13px var(--font-sans); cursor: pointer; transition: border-color .2s, background .2s, color .2s; }
+.evening-picker input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: inherit; }
+.evening-picker label:hover { border-color: #dec6a088; color: var(--white); }
+.evening-picker label[data-checked] { border-color: var(--gold); background: #dec6a01c; color: var(--white); }
+.evening-picker label:has(input:focus-visible) { outline: 2px solid var(--marquee); outline-offset: 2px; }
+.evening-picker label[data-ruled-out] { opacity: .4; cursor: not-allowed; text-decoration: line-through; text-decoration-color: #dec6a080; }
+.evening-picker small { display: block; margin-top: 8px; color: var(--dim); font: 12px var(--font-sans); }
+.between-actions .evening-picker { flex-basis: 100%; margin-bottom: 6px; }
 .credits-journeys p { margin: 0 0 8px; color: var(--dim); font: 400 10px var(--booth-type); letter-spacing: .16em; text-transform: uppercase; }
 .credits-journeys ul { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
 .credits-journeys button { min-height: 38px; padding: 6px 12px; border: 1px solid #f3ebdd24; border-radius: 999px; background: none; color: #d8cbb8; font: italic 15px var(--font-display); cursor: pointer; }
@@ -230,6 +254,7 @@
 /* The route, above a reel the credits question developed. */
 .route-strip { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 6px 26px; margin: 22px 0 14px; padding: 16px 20px; border: 1px solid #dec6a026; border-radius: 3px; background: linear-gradient(100deg, #f2b55c0d, transparent 50%, #7a1d241f); }
 .route-strip-kicker { grid-row: span 2; }
+.route-strip-kicker span { color: var(--gold); }
 .route-strip-route { display: flex; align-items: center; gap: 18px; margin: 0; }
 .route-strip-route > span { display: grid; gap: 3px; font: italic 400 22px/1.1 var(--font-display); color: var(--screen-white); }
 .route-strip-route small { color: var(--gold); font: 400 9px var(--booth-type); font-style: normal; letter-spacing: .16em; text-transform: uppercase; }
@@ -388,6 +413,35 @@ button.terra-era-bar:hover:not(:disabled) { border-color: var(--marquee); backgr
 .your-sky-half-life circle[data-reading=stronger] { fill: var(--marquee); filter: drop-shadow(0 0 4px #f2b55c); }
 .your-sky-half-life text { fill: var(--dim); font: 8px var(--booth-type); text-transform: uppercase; letter-spacing: .1em; }
 
+/* ——— Keep one, lose one: at the end of a reel ——— */
+.keep-lose { width: min(820px, 100%); margin: 30px auto 4px; padding: 28px 32px 26px; border: 1px solid #dec6a026; border-radius: 3px; background: radial-gradient(ellipse 70% 90% at 50% 0%, #f2b55c10, transparent 70%), #100c0a99; }
+.keep-lose-head { display: grid; justify-items: center; gap: 8px; margin-bottom: 20px; text-align: center; }
+.keep-lose-head h3 { margin: 0; color: var(--screen-white); font: italic 400 clamp(30px, 3.2vw, 40px)/1.05 var(--font-display); }
+.keep-lose-head > p:not(.keep-lose-kicker) { margin: 0; color: var(--muted); font: 15px/1.5 var(--font-sans); }
+.keep-lose ul { display: grid; margin: 0; padding: 0; list-style: none; border-top: 1px solid #dec6a01f; }
+.keep-lose li { display: grid; grid-template-columns: 14px minmax(0, 1fr) auto; align-items: center; gap: 16px; padding: 12px 8px; border-bottom: 1px solid #dec6a01f; transition: background .35s var(--palace-ease); }
+.keep-lose-light { justify-self: center; width: 7px; height: 7px; border-radius: 50%; background: #dec6a055; transition: width .35s var(--palace-ease), height .35s var(--palace-ease), background .35s, box-shadow .35s; }
+.keep-lose-quality { display: grid; gap: 3px; min-width: 0; transition: opacity .35s; }
+.keep-lose-quality small { color: var(--gold); font: 400 9px/1.4 var(--booth-type); letter-spacing: .16em; text-transform: uppercase; }
+.keep-lose-quality strong { color: var(--screen-white); font: italic 400 20px/1.2 var(--font-display); }
+.keep-lose-marks { display: inline-flex; gap: 6px; }
+.keep-lose-marks button { min-width: 66px; min-height: 40px; padding: 0 14px; border: 1px solid #f3ebdd24; border-radius: 999px; background: none; color: #cdbfac; font: 13px var(--font-sans); transition: border-color .2s, background .2s, color .2s; }
+.keep-lose-marks button:hover { border-color: #dec6a088; color: var(--white); }
+/* What you keep is lit; what you lose goes into eclipse. */
+.keep-lose li[data-mark=keep] { background: linear-gradient(90deg, #f2b55c17, transparent 75%); }
+.keep-lose li[data-mark=keep] .keep-lose-light { width: 11px; height: 11px; background: var(--marquee); box-shadow: 0 0 0 4px #f2b55c1f, 0 0 16px var(--marquee); }
+.keep-lose li[data-mark=keep] button[aria-pressed=true] { border-color: var(--gold); background: var(--gold); color: #1a140f; }
+.keep-lose li[data-mark=lose] .keep-lose-light { width: 11px; height: 11px; background: #0c0a08; box-shadow: inset -2px 0 0 #dec6a0bb, 0 0 0 1px #dec6a033; }
+.keep-lose li[data-mark=lose] .keep-lose-quality { opacity: .5; }
+.keep-lose li[data-mark=lose] strong { text-decoration: line-through; text-decoration-color: #dec6a088; text-decoration-thickness: 1px; }
+.keep-lose li[data-mark=lose] button[aria-pressed=true] { border-color: #b65a5f; background: #7a1d2440; color: #f1d2cf; }
+.keep-lose-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 14px 22px; margin-top: 20px; }
+.keep-lose-actions p { margin: 0; color: var(--muted); font: italic 17px/1.4 var(--font-display); }
+.keep-lose-actions q { color: var(--screen-white); }
+.keep-lose-turn { display: inline-flex; align-items: center; gap: 22px; min-height: 52px; padding: 12px 20px; border: 1px solid var(--gold); border-radius: 2px; background: var(--gold); color: #1a140f; font: 600 14px var(--font-sans); transition: background .2s, transform .2s; }
+.keep-lose-turn:hover:not(:disabled) { background: #f1ddb8; transform: translateY(-1px); }
+.keep-lose-turn:disabled { background: transparent; color: #dec6a0aa; border-color: #dec6a055; }
+
 @media (max-width: 1000px) {
   .credits-question-body { grid-template-columns: 1fr; }
   .credits-map { aspect-ratio: 10 / 8.4; }
@@ -445,6 +499,12 @@ button.terra-era-bar:hover:not(:disabled) { border-color: var(--marquee); backgr
 }
 /* Three ways to read the sky don't fit beside the title on a phone: they take their own row. */
 @media (max-width: 560px) {
+  .keep-lose { padding: 22px 16px 20px; }
+  .keep-lose li { grid-template-columns: 12px minmax(0, 1fr); row-gap: 10px; column-gap: 12px; padding: 12px 4px; }
+  .keep-lose-marks { grid-column: 2; }
+  .keep-lose-marks button { min-width: 0; flex: 1; }
+  .keep-lose-actions { display: grid; }
+  .keep-lose-turn { justify-content: space-between; }
   .your-sky-masthead { grid-template-columns: auto 1fr; row-gap: 6px; }
   .your-sky-masthead h2 { justify-self: end; }
   .your-sky-tools { grid-column: 1 / -1; justify-self: stretch; }
@@ -459,6 +519,9 @@ button.terra-era-bar:hover:not(:disabled) { border-color: var(--marquee); backgr
   .blind-iris { animation: none; clip-path: none; }
   .credits-path { animation: none; }
   .lobby-seat i { animation: none; }
+  .lobby-beam, .lobby-still img { animation: none; }
+  .keep-lose li, .keep-lose-light, .keep-lose-quality { transition: none; }
 }
 .celestial-world[data-motion=off] :is(.blind-card, .blind-unveiled h3) { animation: none; }
 .celestial-world[data-motion=off] .blind-iris { animation: none; clip-path: none; }
+.celestial-world[data-motion=off] :is(.lobby-beam, .lobby-still img) { animation: none; }

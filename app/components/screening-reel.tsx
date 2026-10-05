@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react';
 import { movieKey, type FilmEnrichment } from '../lib/movie-metadata';
+import { runsPast, spokenEvening, type Evening } from '../lib/evening';
 import type { RecommendationV2 } from '../lib/reel-state';
 import { FACET_KEYS, type CinematicFacet, type FacetKey, type FacetSource, type SelectedFacets } from '../lib/light-table';
 import { FacetTab } from './facet-tab';
@@ -11,7 +12,7 @@ import { CelestialSky, OrbitMark } from './celestial';
 import type { HoldProps } from './film-verbs';
 
 export function ScreeningReel({ films, metadata, selected, onSelect, onOpen, onExplore, likedKeys, savedKeys, afterimageKeys, onLike, onSave, onAfterimage,
-  onResolve, selectedFacets, onBorrow, locked, pending, lightTable, onReplace, onCompare, hold, onWatch, heading }: {
+  onResolve, selectedFacets, onBorrow, locked, pending, lightTable, onReplace, onCompare, hold, onWatch, heading, evening = null }: {
   films: RecommendationV2[]; metadata: Record<string, FilmEnrichment>; selected: number;
   onSelect: (index: number) => void; onOpen: (index: number, event: MouseEvent<HTMLButtonElement>) => void;
   onExplore: (index: number, event: MouseEvent<HTMLButtonElement>) => void;
@@ -27,6 +28,8 @@ export function ScreeningReel({ films, metadata, selected, onSelect, onOpen, onE
   onWatch?: (film: RecommendationV2, opener: HTMLElement) => void;
   /** The billing block's heading and subtitle, when the reel was asked for in a particular way. */
   heading?: { title: string; subtitle: string };
+  /** How long the evening was asked to be: a film that runs past it says so. */
+  evening?: Evening | null;
 }) {
   const [comparing, setComparing] = useState(false);
   const [compareWith, setCompareWith] = useState(1);
@@ -79,7 +82,7 @@ export function ScreeningReel({ films, metadata, selected, onSelect, onOpen, onE
         <div className="screening-caption" key={key}>
           <p className="screening-position">{index === 0 ? 'Closest to your request' : 'Another way into your reel'}</p>
           <h2 id="screening-title">{film.title}</h2>
-          <p className="screening-credits"><span>{film.year}</span>{details?.directors.length ? <span>{details.directors.join(', ')}</span> : null}{details?.runtime ? <span>{details.runtime} min</span> : null}</p>
+          <p className="screening-credits"><span>{film.year}</span>{details?.directors.length ? <span>{details.directors.join(', ')}</span> : null}{details?.runtime ? <span>{details.runtime} min{evening && runsPast(details.runtime, evening) ? <em className="screening-past">, longer than your {spokenEvening(evening)}</em> : null}</span> : null}</p>
           <p className="screening-reason">{film.reason}</p>
           <div className="screening-actions">{onWatch ? <button type="button" className="screening-tonight" onClick={event => onWatch(film, event.currentTarget)}>Watch it tonight <span aria-hidden="true">↗</span></button> : null}<button type="button" className="screening-read" onClick={event => onOpen(index, event)}>Read the film notes <span aria-hidden="true">↗</span></button><button type="button" aria-pressed={savedKeys.has(key)} onClick={() => onSave(film)}>{savedKeys.has(key) ? 'Saved to watchlist ✓' : 'Save for later +'}</button><LikeButton film={film} liked={likedKeys.has(key)} onToggle={() => onLike(film)} /><button type="button" className="screening-afterimage" aria-pressed={afterimageKeys.has(key)} aria-label={afterimageKeys.has(key) ? `Revisit your afterimage of ${film.title}` : `Watched ${film.title}? Keep what stayed with you`} onClick={event => onAfterimage(film, event.currentTarget)}><span aria-hidden="true">✦</span>{afterimageKeys.has(key) ? 'Afterimage kept' : 'Watched it?'}</button></div>
         </div>
@@ -92,7 +95,7 @@ export function ScreeningReel({ films, metadata, selected, onSelect, onOpen, onE
           return <li key={movieKey(item.title, item.year)}><button ref={element => { buttons.current[position] = element; }} type="button"
             aria-current={index === position ? 'true' : undefined} aria-label={`Select ${item.title}, film ${position + 1} of ${films.length}`}
             {...held} onClick={() => onSelect(position)} onKeyDown={event => { held?.onKeyDown(event); if (!event.defaultPrevented) move(event, position); }}>
-            <span className="reel-index-number">{String(position + 1).padStart(2, '0')}</span><span><strong>{item.title}</strong><small>{item.year}{meta?.status === 'matched' && meta.runtime ? ` / ${meta.runtime} min` : ''}</small></span><span className="reel-index-mark" aria-hidden="true">{index === position ? '−' : '+'}</span>
+            <span className="reel-index-number">{String(position + 1).padStart(2, '0')}</span><span><strong>{item.title}</strong><small>{item.year}{meta?.status === 'matched' && meta.runtime ? ` / ${meta.runtime} min` : ''}{meta?.status === 'matched' && runsPast(meta.runtime, evening) ? <em className="reel-index-past"> · runs long</em> : null}</small></span><span className="reel-index-mark" aria-hidden="true">{index === position ? '−' : '+'}</span>
           </button></li>;
         })}</ol>
 

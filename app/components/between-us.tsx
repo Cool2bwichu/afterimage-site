@@ -3,8 +3,10 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { apiFetch } from '../lib/api';
 import { MAX_GUEST_FILMS, betweenRequest, canMeet, cleanName, inviteUrl, type BetweenFilm, type BetweenSide } from '../lib/between';
+import type { Evening } from '../lib/evening';
 import { parseFilmSearchResults, type FilmSearchResult } from '../lib/film-search';
 import { StarGlyph } from './celestial';
+import { EveningPicker } from './evening-picker';
 
 type Slot = { text: string; film: BetweenFilm | null };
 const EMPTY: Slot[] = Array.from({ length: MAX_GUEST_FILMS }, () => ({ text: '', film: null }));
@@ -86,6 +88,7 @@ export function BetweenUs({ opener, invite, canSearch, onClose, onDevelop }: {
   const [ours, setOurs] = useState<Slot[]>(EMPTY);
   const [theirName, setTheirName] = useState('');
   const [theirs, setTheirs] = useState<Slot[]>(EMPTY);
+  const [evening, setEvening] = useState<Evening | null>(null);
   const [link, setLink] = useState('');
   const [copied, setCopied] = useState('');
 
@@ -99,7 +102,7 @@ export function BetweenUs({ opener, invite, canSearch, onClose, onDevelop }: {
   const us: BetweenSide = { name: ourName, films: filmsOf(ours) };
   const them: BetweenSide = invite ?? { name: theirName, films: filmsOf(theirs) };
   // An invitation's films come first: the person who sent it began the evening.
-  const request = invite ? betweenRequest(invite, us) : betweenRequest(us, them);
+  const request = invite ? betweenRequest(invite, us, evening) : betweenRequest(us, them, evening);
   const ready = invite ? canMeet(invite, us) : canMeet(us, them);
 
   async function share() {
@@ -127,6 +130,7 @@ export function BetweenUs({ opener, invite, canSearch, onClose, onDevelop }: {
       <Side title="Them" name={theirName} onName={setTheirName} slots={theirs} onSlots={setTheirs} canSearch={canSearch} fixed={invite ?? undefined} />
     </div>
     <footer className="between-actions">
+      <EveningPicker name="between-evening" value={evening} onChange={setEvening} />
       <button type="button" className="between-develop" disabled={!ready || !request} onClick={() => { if (request) onDevelop(request); }}>Find the films between us <span aria-hidden="true">↗</span></button>
       {!invite ? <button type="button" className="between-share" disabled={!us.films.length} onClick={() => void share()}>Or send them a link with your three</button> : null}
       {copied ? <p className="between-copied" role="status">{copied}</p> : null}
