@@ -10,14 +10,14 @@ import type { AfterimageEntry } from '../lib/afterimages';
 import type { SavedFilm } from '../lib/library';
 import type { LikedFilm } from '../lib/taste-profile';
 import type { FacetKey } from '../lib/light-table';
-import { parseEnrichmentResponse, type FilmEnrichment } from '../lib/movie-metadata';
+import { movieKey, parseEnrichmentResponse, type FilmEnrichment } from '../lib/movie-metadata';
 import { ATLAS_ARTWORK_KEY, readAtlasArtwork } from '../lib/atlas-artwork';
 import { MotionToggle, OrbitMark, StarGlyph, useCelestialMotion } from './celestial';
 import { NightSky } from './night-sky';
 import { LikeButton } from './like-button';
 import { CHANNEL_COLORS } from './afterimage-log';
 import { TicketStub } from './ticket-stub';
-import { TerraIncognita } from './terra';
+import { TerraIncognita, type LovedFilm } from './terra';
 import { CHECKPOINTS, READING_LABEL, READING_STRENGTH, emptyBook, halfLifeGlow, readingsOf, trend, type HalfLifeBook, type HalfLifeRecord } from '../lib/half-life';
 
 type Filter = 'all' | 'liked' | 'saved' | 'afterimages';
@@ -84,7 +84,7 @@ function HalfLifeLine({ film }: { film: HalfLifeRecord }) {
 }
 
 export function YourSky({ open, opener, onClose, reels, atlases, likes, watchlist, afterimages, metadataByKey, likedKeys, savedKeys, canExplore,
-  onLike, onSave, onLogAfterimage, onNavigate, onExplore, onBegin, onCollide, halfLife = emptyBook(), canLookUp = false, onDevelop, onWatch }: {
+  onLike, onSave, onLogAfterimage, onNavigate, onExplore, onBegin, onCollide, halfLife = emptyBook(), canLookUp = false, onDevelop, onDoor, onWatch }: {
   open: boolean; opener: HTMLElement | null; onClose: () => void;
   reels: SavedReel[]; atlases: AtlasStop[]; likes: LikedFilm[]; watchlist: SavedFilm[]; afterimages: AfterimageEntry[];
   metadataByKey: Record<string, FilmEnrichment>; likedKeys: Set<string>; savedKeys: Set<string>; canExplore: boolean;
@@ -100,6 +100,8 @@ export function YourSky({ open, opener, onClose, reels, atlases, likes, watchlis
   canLookUp?: boolean;
   /** Terra incognita: develop a reel into a part of cinema the sky has not reached. */
   onDevelop?: (request: { films: string[]; creativeBrief: string }, opener: HTMLElement) => void;
+  /** Terra incognita: find the one door film, an Atlas around a film you love. */
+  onDoor?: (film: LovedFilm, request: { films: string[]; creativeBrief: string }, opener: HTMLElement) => void;
   /** Into the lobby: watch this film tonight. */
   onWatch?: (film: { title: string; year: string; tmdbId?: number }, opener: HTMLElement) => void;
 }) {
@@ -175,6 +177,16 @@ export function YourSky({ open, opener, onClose, reels, atlases, likes, watchlis
   }, [artwork, reels, metadataByKey]);
 
   const terraFilms = useMemo(() => sky?.stars.map(({ key, title, year }) => ({ key, title, year })) ?? [], [sky]);
+  // A door is found through the film you Liked last, or else the latest one kept in your journal.
+  const loved = useMemo<LovedFilm | null>(() => {
+    const liked = likes.at(-1);
+    const kept = [...afterimages].sort((a, b) => b.loggedAt.localeCompare(a.loggedAt))[0];
+    const film = liked ?? kept;
+    if (!film) return null;
+    const record = knownArt[movieKey(film.title, film.year)];
+    const tmdbId = record?.status === 'matched' ? record.tmdbId : (film as { tmdbId?: number }).tmdbId;
+    return { title: film.title, year: film.year, ...(tmdbId ? { tmdbId } : {}), liked: Boolean(liked) };
+  }, [likes, afterimages, knownArt]);
 
   const selectedStar = selection?.kind === 'star' ? starsByKey.get(selection.key) ?? null : null;
   const selectedConstellation = selection?.kind === 'constellation' ? constellationsById.get(selection.id) ?? null : null;
@@ -604,7 +616,8 @@ export function YourSky({ open, opener, onClose, reels, atlases, likes, watchlis
           <strong>{star.title}</strong><small>{star.year}{star.liked ? ' · Loved' : ''}{star.afterimage ? ' · Afterimage' : ''}{star.saved ? ' · To watch' : ''}</small>
         </button></li>)}</ul>
       </section>)}</div> : null}
-      {mode === 'terra' && sky && onDevelop ? <div className="your-sky-terra"><TerraIncognita films={terraFilms} knownArt={knownArt} canLookUp={canLookUp} canDevelop={canExplore} onDevelop={onDevelop} /></div> : null}
+      {mode === 'terra' && sky && onDevelop ? <div className="your-sky-terra"><TerraIncognita films={terraFilms} knownArt={knownArt} canLookUp={canLookUp} canDevelop={canExplore} onDevelop={onDevelop}
+        atlases={atlases} loved={loved} onDoor={onDoor} onOpenMap={(id, opener) => onNavigate(`#atlas=${id}`, opener)} /></div> : null}
     </div>
 
     <header className="your-sky-masthead">

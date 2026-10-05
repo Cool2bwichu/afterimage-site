@@ -123,21 +123,87 @@ export function chartTerra(films: readonly TerraFilm[], facts: Readonly<Record<s
     for (const id of places) regions.find(region => region.id === id)!.films.push(film);
     for (const form of forms) if (known.genres.some(genre => normalize(genre) === normalize(form.genre))) form.films.push(film);
   }
+  const chart = { regions, eras, forms, charted, total: films.length, doors: [] as Door[] };
+  const blank = blankPlaces(chart);
+  chart.doors = [blank.regions[0], blank.eras[0], blank.forms[0]].filter((door): door is Door => Boolean(door));
+  return chart;
+}
+
+function regionDoor(region: { id: RegionId; name: string }): Door {
+  return { kind: 'region', id: region.id, title: region.name, line: `Your sky has never reached ${region.name.replace(/^The /, 'the ')}.` };
+}
+function eraDoor(era: { id: string; label: string }): Door {
+  return { kind: 'era', id: era.id, title: era.label, line: era.id === 'silent' ? 'Nothing in your sky was made before sound.' : `Nothing in your sky was made in ${era.label.replace(/^The/, 'the')}.` };
+}
+function formDoor(form: { genre: string; name: string }): Door {
+  const meta = FORMS.find(item => item.genre === form.genre) ?? FORMS[0];
+  return { kind: 'form', id: form.genre, title: form.name, line: `There are ${meta.line} in your sky yet.` };
+}
+
+/** The blank places of each kind, in the order their doors open. */
+function blankPlaces(chart: Pick<TerraChart, 'regions' | 'eras' | 'forms' | 'charted' | 'total'>): Record<'regions' | 'eras' | 'forms', Door[]> {
+  const charted = chart.charted >= TERRA_MINIMUM;
+  return {
+    regions: charted ? REGION_ORDER.map(id => chart.regions.find(item => item.id === id)!).filter(item => !item.films.length).map(regionDoor) : [],
+    eras: chart.total >= TERRA_MINIMUM ? ERA_ORDER.map(id => chart.eras.find(item => item.id === id)!).filter(item => !item.films.length).map(eraDoor) : [],
+    forms: charted ? chart.forms.filter(item => !item.films.length).map(formDoor) : [],
+  };
+}
+
+/** How a blank place reads inside a sentence: "East Asia", "the 1970s", "documentary". */
+export function doorName(door: Pick<Door, 'kind' | 'id' | 'title'>): string {
+  if (door.kind === 'era') return door.id === 'silent' ? 'the silent era' : door.title.replace(/^The/, 'the');
+  return door.kind === 'form' ? door.title.toLocaleLowerCase('en-US') : door.title.replace(/^The /, 'the ');
+}
+
+// Where the dark places sit around your sky, as the page drew them, and the colour of each nebula.
+const ZONE_SLOTS = [{ x: 0.15, y: 0.22 }, { x: 0.82, y: 0.2 }, { x: 0.12, y: 0.78 }, { x: 0.84, y: 0.8 }, { x: 0.5, y: 0.1 }] as const;
+const ZONE_INKS = [[120, 90, 160], [190, 110, 60], [150, 150, 150], [200, 90, 130], [110, 170, 140]] as const;
+export type Zone = Door & { x: number; y: number; ink: readonly [number, number, number] };
+
+/** The dark places drawn at the edges of your sky: up to five, taking a place, a time and a form in turn. */
+export function terraZones(chart: TerraChart): Zone[] {
+  const blank = blankPlaces(chart);
+  const lists = [blank.regions, blank.eras, blank.forms];
   const doors: Door[] = [];
-  if (charted >= TERRA_MINIMUM) {
-    const region = REGION_ORDER.map(id => regions.find(item => item.id === id)!).find(item => !item.films.length);
-    if (region) doors.push({ kind: 'region', id: region.id, title: region.name, line: `Your sky has never reached ${region.name.replace(/^The /, 'the ')}.` });
+  for (let index = 0; doors.length < ZONE_SLOTS.length && lists.some(list => index < list.length); index++) {
+    for (const list of lists) if (list[index] && doors.length < ZONE_SLOTS.length) doors.push(list[index]);
   }
-  if (films.length >= TERRA_MINIMUM) {
-    const era = ERA_ORDER.map(id => eras.find(item => item.id === id)!).find(item => !item.films.length);
-    if (era) doors.push({ kind: 'era', id: era.id, title: era.label, line: era.id === 'silent' ? 'Nothing in your sky was made before sound.' : `Nothing in your sky was made in ${era.label.replace(/^The/, 'the')}.` });
-  }
-  if (charted >= TERRA_MINIMUM) {
-    const form = forms.find(item => !item.films.length);
-    const meta = form ? FORMS.find(item => item.genre === form.genre)! : null;
-    if (form && meta) doors.push({ kind: 'form', id: form.genre, title: form.name, line: `There are ${meta.line} in your sky yet.` });
-  }
-  return { regions, eras, forms, charted, total: films.length, doors };
+  return doors.map((door, index) => ({ ...door, ...ZONE_SLOTS[index], ink: ZONE_INKS[index] }));
+}
+
+function doorFor(door: Pick<Door, 'kind' | 'id'>): Door | null {
+  if (door.kind === 'region') { const region = REGIONS.find(item => item.id === door.id); return region ? regionDoor(region) : null; }
+  if (door.kind === 'era') { const era = ERAS.find(item => item.id === door.id); return era ? eraDoor(era) : null; }
+  const form = FORMS.find(item => item.genre === door.id);
+  return form ? formDoor(form) : null;
+}
+
+const DOOR_OPENING = 'A door into ';
+
+/**
+ * A door as an Atlas around a film you love: every film on the map comes from the dark
+ * place, and each is chosen as a way in from that film, so the first step never feels
+ * like homework. Its first neighbour is the door.
+ */
+export function doorAtlasRequest(door: Pick<Door, 'kind' | 'id'>, love: 'liked' | 'kept'): { films: string[]; creativeBrief: string } {
+  const place = doorFor(door) ?? formDoor(FORMS[0]);
+  const name = doorName(place);
+  let rule = `Every film on this map must be one of the ${(FORMS.find(item => item.genre === place.id) ?? FORMS[0]).brief}.`;
+  if (place.kind === 'region') rule = `Every film on this map must have been made in ${name} (${REGIONS.find(item => item.id === place.id)!.examples}, or anywhere else in it), from different countries and decades where you can.`;
+  if (place.kind === 'era') rule = `Every film on this map must have been made ${place.id === 'silent' ? 'before 1930, in the silent era' : `in ${name}`}, from different countries where you can, and still alive to a viewer today.`;
+  const before = place.line.replace('Your sky', 'My film sky').replace('your sky', 'my film sky');
+  const anchor = love === 'liked' ? 'The anchor is a film I love' : 'The anchor is a film that stayed with me';
+  return { films: [], creativeBrief: `${DOOR_OPENING}${name}. ${before} ${rule} ${anchor}: choose each neighbour as a way in from it, so the first step starts from something I already feel.` };
+}
+
+/** Which dark place an Atlas was drawn for, read back from its request. */
+export function parseDoorBrief(brief: string | undefined): Pick<Door, 'kind' | 'id'> | null {
+  if (!brief?.startsWith(DOOR_OPENING)) return null;
+  const name = brief.slice(DOOR_OPENING.length, brief.indexOf('. '));
+  const every = [...REGIONS.map(regionDoor), ...ERAS.map(eraDoor), ...FORMS.map(formDoor)];
+  const door = every.find(item => doorName(item) === name);
+  return door ? { kind: door.kind, id: door.id } : null;
 }
 
 /** A door as an ordinary reel request: the blank place is written into the brief. */

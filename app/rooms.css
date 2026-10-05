@@ -390,15 +390,35 @@
 .terra-head h3 { margin: 0; font: 500 clamp(34px, 3.8vw, 54px)/1.05 var(--font-display), Georgia, serif; letter-spacing: -.01em; }
 .terra-head > p:not(.terra-kicker, .terra-coverage) { margin: 0; max-width: 60ch; color: var(--muted); font: 400 16px/1.55 var(--font-sans), sans-serif; }
 .terra-head .terra-coverage { color: var(--room-dim); font: 12px var(--font-mono), ui-monospace, monospace; }
-.terra-doors { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin: 0; padding: 0; list-style: none; }
-/* Each door is a dark place in the sky, outlined but not yet drawn. */
-.terra-doors button { display: grid; align-content: end; gap: 8px; width: 100%; height: 100%; min-height: 210px; padding: 60px 18px 18px; border: 1px dashed #a7b6c54d; border-radius: 14px; background: radial-gradient(80% 70% at 30% 20%, #1c2c3c, transparent 70%), #05080d; color: var(--white); text-align: left; cursor: pointer; transition: border-color .3s, transform .3s; }
-.terra-doors button:hover:not(:disabled) { border-color: var(--gold); transform: translateY(-2px); }
-.terra-doors button:disabled { opacity: .55; cursor: not-allowed; }
-.terra-doors small { color: var(--room-dim); font: 500 10px var(--font-sans), sans-serif; letter-spacing: .14em; text-transform: uppercase; }
-.terra-doors strong { font: 500 26px/1.05 var(--font-display), Georgia, serif; }
-.terra-doors span { color: var(--muted); font: 14px/1.45 var(--font-sans), sans-serif; }
-.terra-doors em { color: var(--gold); font: 500 13px var(--font-sans), sans-serif; font-style: normal; }
+.terra { max-width: 980px; }
+/* The sky as the page drew it: your stars in the middle, the dark places at the edges. */
+.terra-sky { position: relative; width: min(100%, 96dvh); }
+.terra-sky canvas { display: block; width: 100%; aspect-ratio: 1.5; border-radius: 14px; background: #05080d; }
+.terra-you { position: absolute; left: 44%; top: 50%; transform: translate(-50%, -50%); color: var(--gold); font: italic 400 17px var(--font-display), Georgia, serif; text-shadow: 0 0 8px #05080d, 0 0 3px #05080d; pointer-events: none; }
+.terra-zone { position: absolute; display: grid; justify-items: center; gap: 6px; max-width: 17ch; padding: 0 6px 6px; transform: translate(-50%, -5px); border: 0; background: none; color: var(--room-dim); font: 500 11px/1.35 var(--font-sans), sans-serif; letter-spacing: .1em; text-align: center; text-transform: uppercase; cursor: pointer; transition: color .25s; }
+.terra-zone i { width: 10px; height: 10px; border: 1px dashed currentColor; border-radius: 50%; }
+.terra-zone:hover, .terra-zone[aria-pressed=true] { color: var(--white); }
+.terra-zone:focus-visible { outline: 1px solid var(--gold); outline-offset: 3px; border-radius: 4px; }
+.terra-door { display: grid; gap: 8px; min-height: 150px; padding: 18px 20px; border-radius: 14px; background: var(--room-chamber-2); }
+.terra-door-kicker { margin: 0; color: var(--gold); font: 500 11px var(--font-sans), sans-serif; letter-spacing: .18em; text-transform: uppercase; }
+.terra-door h4 { margin: 0; color: var(--white); font: 500 clamp(26px, 2.6vw, 34px)/1.1 var(--font-display), Georgia, serif; text-wrap: balance; }
+.terra-door-meta { margin: 0; color: var(--room-dim); font: 13px var(--font-sans), sans-serif; }
+.terra-door-why { margin: 0; max-width: 62ch; color: var(--muted); font: 14.5px/1.55 var(--font-sans), sans-serif; }
+.terra-door-why em { color: var(--white); font: italic 400 17px var(--font-display), Georgia, serif; }
+.terra-door-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+.terra-door-actions button { min-height: 42px; padding: 9px 18px; border: 1px solid var(--gold); border-radius: 999px; background: transparent; color: var(--gold); font: 500 13.5px var(--font-sans), sans-serif; cursor: pointer; transition: background .2s, color .2s, border-color .2s; }
+.terra-door-actions button:hover:not(:disabled) { background: var(--gold); color: var(--void); }
+.terra-door-actions button.is-solid { background: var(--gold); color: var(--void); }
+.terra-door-actions button.is-solid:hover:not(:disabled) { border-color: var(--white); background: var(--white); }
+.terra-door-actions button:disabled { opacity: .5; cursor: not-allowed; }
+.terra-door-note { color: var(--room-dim); font: 12px var(--font-sans), sans-serif; }
+.terra-detail { display: grid; gap: 18px; padding-top: 4px; border-top: 1px solid var(--room-line); }
+.terra-detail[open] { gap: 22px; }
+.terra-detail summary { display: flex; justify-content: space-between; align-items: center; min-height: 44px; color: var(--muted); font: 500 12px var(--font-sans), sans-serif; letter-spacing: .14em; text-transform: uppercase; cursor: pointer; list-style: none; }
+.terra-detail summary::-webkit-details-marker { display: none; }
+.terra-detail summary span { color: var(--gold); font-size: 18px; transition: transform .3s var(--room-ease); }
+.terra-detail[open] summary span { transform: rotate(45deg); }
+.terra-detail > :not(summary) { margin-top: 0; }
 .terra-world { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); grid-template-areas: ". . no . . ." "na uk we ee ee ea" "la se me sa sea ea" "la . af . sea oc"; gap: 6px; }
 .terra-region { display: grid; align-content: start; gap: 4px; min-height: 92px; padding: 10px 12px; border: 1px solid var(--room-line); border-radius: 10px; }
 .terra-region strong { font: 500 17px/1.05 var(--font-display), Georgia, serif; }
@@ -491,7 +511,9 @@ button.terra-era-bar:hover:not(:disabled) { border-color: var(--gold); backgroun
   .your-sky-terra { inset: 64px 10px calc(34dvh + 20px) 10px; padding: 8px 6px 20px; }
   .terra-world { grid-template-columns: 1fr 1fr; grid-template-areas: none; }
   .terra-region { grid-area: auto !important; min-height: 76px; }
-  .terra-doors button { min-height: 170px; padding-top: 44px; }
+  .terra-zone { max-width: 19ch; font-size: 9px; letter-spacing: .08em; gap: 4px; }
+  .terra-you { font-size: 14px; }
+  .terra-door { padding: 16px; }
   .terra-eras { height: 100px; gap: 2px; }
   .terra-eras small { font-size: 8px; }
 }

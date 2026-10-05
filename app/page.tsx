@@ -1695,7 +1695,8 @@ export default function Home() {
           onExplore={(film, opener) => { setSkyOpen(false); openAtlas(film, skyOpener || opener, false, true); }}
           onBegin={() => { setSkyOpen(false); enterReel(); }}
           halfLife={halfLife} canLookUp={catalogueReachable} onWatch={(film, opener) => openLobby([film], opener)}
-          onDevelop={request => { setSkyOpen(false); answerQuestion(request); }} />
+          onDevelop={request => { setSkyOpen(false); answerQuestion(request); }}
+          onDoor={(film, request, opener) => { setSkyOpen(false); openAtlas(film, skyOpener || opener, false, false, request); }} />
         <AfterimageLog key={afterimageTarget ? `afterimage:${movieKey(afterimageTarget.film.title, afterimageTarget.film.year)}` : 'afterimage-closed'} target={afterimageTarget?.film ?? null} opener={afterimageTarget?.opener ?? null}
           existing={afterimageTarget ? findAfterimage(afterimages, afterimageTarget.film) : undefined}
           liked={afterimageTarget ? likedKeys.has(movieKey(afterimageTarget.film.title, afterimageTarget.film.year)) : false}

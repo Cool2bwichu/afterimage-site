@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  ERAS, REGIONS, TERRA_KEY, TERRA_MINIMUM, chartTerra, doorRequest, eraOf, factsFromEnrichment, parseTerraCache, regionOf, serializeTerraCache,
-  type TerraFacts, type TerraFilm,
+  ERAS, FORMS, REGIONS, TERRA_KEY, TERRA_MINIMUM, chartTerra, doorAtlasRequest, doorName, doorRequest, eraOf, factsFromEnrichment, parseDoorBrief, parseTerraCache,
+  regionOf, serializeTerraCache, terraZones, type TerraFacts, type TerraFilm,
 } from '../app/lib/terra.ts';
 import { movieKey, type FilmEnrichment } from '../app/lib/movie-metadata.ts';
 import { canDevelop } from '../app/lib/reel-state.ts';
@@ -85,4 +85,34 @@ test('what the catalogue said is cached in its own record, compactly', () => {
   assert.deepEqual(parseTerraCache(serializeTerraCache(facts)), facts);
   assert.deepEqual(parseTerraCache('nope'), {});
   assert.deepEqual(parseTerraCache(JSON.stringify({ version: 1, films: { 'bad key': { c: ['France'] }, 'ok|1999': { c: ['France', 7], g: 'Drama' } } })), { 'ok|1999': { countries: ['France'], genres: [] } });
+});
+
+test('the dark places sit around the sky, a place, a time and a form in turn', () => {
+  const zones = terraZones(chartTerra(sky, facts));
+  assert.equal(zones.length, 5);
+  assert.deepEqual(zones.map(zone => zone.kind), ['region', 'era', 'form', 'region', 'era']);
+  assert.deepEqual(zones.map(zone => zone.id), ['latin-america', '1970s', 'Documentary', 'eastern-europe', '1960s']);
+  assert.equal(new Set(zones.map(zone => `${zone.x},${zone.y}`)).size, 5, 'each in its own part of the sky');
+  assert.ok(zones.every(zone => zone.x > 0 && zone.x < 1 && zone.y > 0 && zone.y < 1));
+  assert.deepEqual(terraZones(chartTerra(sky.slice(0, TERRA_MINIMUM - 1), facts)), [], 'a young sky has no edges yet');
+});
+
+test('each door is also an Atlas around a film you love, and the map remembers which door it was', () => {
+  const doors: Array<{ kind: 'region' | 'era' | 'form'; id: string }> = [...REGIONS.map(region => ({ kind: 'region' as const, id: region.id })), ...ERAS.map(era => ({ kind: 'era' as const, id: era.id })), ...FORMS.map(form => ({ kind: 'form' as const, id: form.genre }))];
+  for (const door of doors) {
+    const request = doorAtlasRequest(door, 'liked');
+    assert.deepEqual(request.films, []);
+    assert.ok(canDevelop(request.films, request.creativeBrief));
+    assert.ok(request.creativeBrief.length <= 1200);
+    assert.deepEqual(parseDoorBrief(request.creativeBrief), { kind: door.kind, id: door.id });
+  }
+  const east = doorAtlasRequest({ kind: 'region', id: 'east-asia' }, 'liked').creativeBrief;
+  assert.match(east, /^A door into East Asia\. My film sky has never reached East Asia\. Every film on this map must have been made in East Asia \(Japan/);
+  assert.match(east, /The anchor is a film I love/);
+  assert.match(doorAtlasRequest({ kind: 'era', id: 'silent' }, 'kept').creativeBrief, /^A door into the silent era\. Nothing in my film sky was made before sound\..+before 1930.+a film that stayed with me/);
+  assert.equal(doorName({ kind: 'form', id: 'Documentary', title: 'Documentary' }), 'documentary');
+  assert.equal(doorName({ kind: 'era', id: '1970s', title: 'The 1970s' }), 'the 1970s');
+  assert.equal(parseDoorBrief('Something slow and Japanese.'), null);
+  assert.equal(parseDoorBrief('A door into Atlantis. Take me there.'), null);
+  assert.equal(parseDoorBrief(undefined), null);
 });
