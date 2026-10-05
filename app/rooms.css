@@ -16,7 +16,7 @@
 }
 
 /* ——— Small shared pieces ——— */
-.room-kicker, .lobby-kicker, .check-in-kicker, .credits-question-kicker, .route-strip-kicker, .blind-kicker, .between-kicker, .terra-kicker, .blind-unveiled-kicker {
+.room-kicker, .lobby-kicker, .check-in-kicker, .credits-question-kicker, .route-strip-kicker, .blind-kicker, .between-kicker, .terra-kicker {
   display: flex; align-items: center; gap: 9px; margin: 0; color: var(--gold); font: 500 11px/1.4 var(--font-sans), sans-serif; letter-spacing: .18em; text-transform: uppercase; }
 :is(.lobby-kicker, .check-in-kicker, .credits-question-kicker, .blind-kicker, .between-kicker, .terra-kicker) .star-glyph { width: 11px; height: 11px; fill: currentColor; flex: none; }
 
@@ -76,34 +76,41 @@
 .lobby::backdrop { background: #000; }
 .lobby[open] { animation: lobby-in .9s var(--room-ease) both; }
 @keyframes lobby-in { from { opacity: 0; } }
-.lobby-house { position: absolute; inset: 0; z-index: 0; background: #020305; opacity: 0; transition: opacity 3.2s var(--room-ease); pointer-events: none; }
+/* The house lights: the whole room dims when the lights go down. */
+.lobby-house { position: absolute; inset: 0; z-index: 0; background: #020305; opacity: 0; transition: opacity 1.6s var(--room-ease); pointer-events: none; }
 .lobby[data-phase=showing] .lobby-house, .lobby[data-phase=intermission] .lobby-house { opacity: 1; }
 .lobby[data-phase=intermission] .lobby-house { opacity: .86; }
 
-.lobby-room, .lobby-usher { position: relative; z-index: 2; height: 100%; overflow: auto; padding: clamp(28px, 6vh, 64px) max(24px, 12vw) 36px; scrollbar-width: thin; scrollbar-color: #dec6a044 transparent; animation: celestial-arrive .8s .2s both; }
-.lobby-room > *, .lobby-usher > * { max-width: 720px; margin-inline: auto; }
-.lobby-header h2 { margin: 12px 0 0; font: 500 clamp(44px, 6vw, 84px)/1.02 var(--font-display), Georgia, serif; letter-spacing: -.02em; text-wrap: balance; color: var(--white); }
-.lobby-header h2:focus, .lobby-dark h2:focus, .lobby-usher h2:focus { outline: none; }
-.lobby-bill { display: grid; gap: 16px; margin-top: 24px; padding: 0; list-style: none; }
-.lobby-bill.is-double { grid-template-columns: 1fr 1fr; }
-.lobby-bill li { display: grid; grid-template-columns: 84px minmax(0, 1fr); gap: 18px; align-items: center; }
-.lobby-poster { display: grid; place-items: center; overflow: hidden; width: 84px; aspect-ratio: 2 / 3; border: 1px solid var(--room-line); border-radius: 6px; background: linear-gradient(170deg, #1b2a38, #0c131c); color: var(--gold); font: italic 30px var(--font-display), Georgia, serif; box-shadow: 0 16px 40px #0009; }
+.lobby-room, .lobby-usher { position: relative; z-index: 2; height: 100%; overflow: auto; padding: clamp(28px, 7vh, 72px) max(24px, 10vw) 36px; scrollbar-width: thin; scrollbar-color: #dec6a044 transparent; animation: celestial-arrive .8s .2s both; }
+.lobby-room { display: grid; align-content: center; gap: 22px; }
+.lobby-room > *, .lobby-usher > *, .lobby-usher form > * { max-width: 760px; margin-inline: auto; width: 100%; }
+.lobby :is(h2):focus { outline: none; }
+/* Tonight: the poster, and the film's name beside it, as the page drew it. */
+.lobby-tonight { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 30px; align-items: center; }
+.lobby-tonight .lobby-poster { width: 150px; }
+.lobby-billing { display: grid; gap: 8px; justify-items: start; }
+.lobby-billing h2, .lobby-header h2 { margin: 0; color: var(--white); font: 500 clamp(40px, 5.4vw, 72px)/1.02 var(--font-display), Georgia, serif; letter-spacing: -.02em; text-wrap: balance; }
+.lobby-header h2 em { color: var(--muted); font-weight: 400; }
+.lobby-meta { margin: 0; color: var(--room-dim); font: 14px/1.4 var(--font-sans), sans-serif; }
+.lobby-poster { display: grid; place-items: center; overflow: hidden; width: 84px; aspect-ratio: 2 / 3; border: 1px solid var(--room-line); border-radius: 6px; background: linear-gradient(170deg, #1b2a38, #0c131c); color: var(--gold); font: italic 30px var(--font-display), Georgia, serif; box-shadow: 0 18px 40px #0009; }
 .lobby-poster img { width: 100%; height: 100%; object-fit: cover; }
-.lobby-billing { display: grid; gap: 5px; justify-items: start; }
-.lobby-billing small { color: var(--gold); font: 500 11px var(--font-sans), sans-serif; letter-spacing: .16em; text-transform: uppercase; }
-.lobby-billing strong { font: 500 27px/1.08 var(--font-display), Georgia, serif; }
-.lobby-billing em { color: #dfe5e8; font: italic 400 21px/1.25 var(--font-display), Georgia, serif; }
-.lobby-billing > span { color: var(--room-dim); font: 400 13px/1.4 var(--font-sans), sans-serif; }
-.lobby-billing button { min-height: 32px; padding: 0; border: 0; background: none; color: var(--muted); font: 12px var(--font-sans), sans-serif; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
-.lobby-time { margin: 24px auto 0; padding: 14px 0; border-block: 1px solid var(--room-line); color: #dfe5e8; font: 400 20px/1.45 var(--font-display), Georgia, serif; }
+.lobby-header { display: grid; gap: 10px; }
+.lobby-bill { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 0; padding: 0; list-style: none; }
+.lobby-bill li { display: grid; grid-template-columns: 84px minmax(0, 1fr); gap: 18px; align-items: center; }
+.lobby-bill .lobby-billing { gap: 5px; }
+.lobby-bill small { color: var(--gold); font: 500 11px var(--font-sans), sans-serif; letter-spacing: .16em; text-transform: uppercase; }
+.lobby-bill strong { font: 500 27px/1.08 var(--font-display), Georgia, serif; }
+.lobby-bill .lobby-billing > span { color: var(--room-dim); font: 13px/1.4 var(--font-sans), sans-serif; }
+.lobby-bill button { min-height: 32px; padding: 0; border: 0; background: none; color: var(--muted); font: 12px var(--font-sans), sans-serif; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.lobby-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 18px; margin-top: 10px; }
+.lobby-lights { min-height: 52px; padding: 13px 30px; border: 1px solid var(--gold); border-radius: 999px; background: var(--gold); color: var(--void); font: 500 16px var(--font-sans), sans-serif; letter-spacing: .02em; cursor: pointer; box-shadow: 0 0 40px #dec6a026; transition: background .2s, border-color .2s, box-shadow .3s; }
+.lobby-lights:hover { border-color: var(--white); background: var(--white); box-shadow: 0 0 60px #dec6a040; }
+.lobby-quiet { min-height: 44px; padding: 0 4px; border: 0; background: none; color: #a9b6bf; font: 14px var(--font-sans), sans-serif; text-decoration: underline; text-decoration-color: #a7b6c555; text-underline-offset: 4px; cursor: pointer; }
+.lobby-quiet:hover { color: var(--white); }
+.lobby-time { margin-block: 0; padding: 14px 0; border-block: 1px solid var(--room-line); color: #dfe5e8; font: 400 19px/1.45 var(--font-display), Georgia, serif; }
 .lobby-time strong { color: var(--gold); font-weight: 500; }
-.lobby-time span { color: var(--muted); font-size: 17px; }
+.lobby-time span { color: var(--muted); font-size: 16px; }
 .lobby-time small { display: block; margin-top: 4px; color: var(--room-dim); font: 13px var(--font-sans), sans-serif; }
-.lobby-ritual { display: grid; gap: 14px; margin-top: 22px; padding: 0; list-style: none; }
-.lobby-ritual li { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 14px; }
-.lobby-ritual span { padding-top: 5px; color: var(--gold); font: 500 11px/1.4 var(--font-sans), sans-serif; letter-spacing: .16em; text-transform: uppercase; }
-.lobby-ritual p { margin: 0; color: var(--white); font: 400 19px/1.4 var(--font-display), Georgia, serif; }
-.lobby-double { margin-top: 20px; }
 .lobby-double summary { display: inline-flex; gap: 12px; align-items: center; min-height: 44px; color: var(--gold); font: 500 14px var(--font-sans), sans-serif; cursor: pointer; list-style: none; }
 .lobby-double summary::-webkit-details-marker { display: none; }
 .lobby-double p { margin: 0 0 10px; color: var(--muted); font: italic 17px var(--font-display), Georgia, serif; }
@@ -112,21 +119,23 @@
 .lobby-double ul button:hover { border-color: var(--gold); }
 .lobby-double ul strong { font: 500 18px/1.1 var(--font-display), Georgia, serif; }
 .lobby-double ul small { color: var(--room-dim); font: 12px var(--font-sans), sans-serif; }
-.lobby-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 18px; margin-top: 26px; padding: 0 0 20px; }
-.lobby-lights { min-height: 54px; padding: 14px 32px; border: 1px solid var(--gold); border-radius: 999px; background: var(--gold); color: var(--void); font: 500 16px var(--font-sans), sans-serif; letter-spacing: .02em; cursor: pointer; box-shadow: 0 0 40px #dec6a026; transition: background .2s, border-color .2s, box-shadow .3s; }
-.lobby-lights:hover { border-color: var(--white); background: var(--white); box-shadow: 0 0 60px #dec6a040; }
-.lobby-quiet { min-height: 44px; padding: 0 4px; border: 0; background: none; color: #a9b6bf; font: 14px var(--font-sans), sans-serif; text-decoration: underline; text-decoration-color: #a7b6c555; text-underline-offset: 4px; cursor: pointer; }
-.lobby-quiet:hover { color: var(--white); }
-.lobby-actions small { flex-basis: 100%; color: var(--room-dim); font: 12px var(--font-sans), sans-serif; }
+.lobby-note { color: var(--room-dim); font: 12px var(--font-sans), sans-serif; }
 
-/* The dark room: everything goes quiet but the clock you asked for. */
-.lobby-dark { position: relative; z-index: 2; display: grid; place-content: center; justify-items: center; gap: 14px; height: 100%; padding: 24px; text-align: center; animation: celestial-arrive 2.4s 1s both; }
+/* Lights down: the ritual arrives a line at a time, in the dark. */
+.lobby-settle { position: relative; z-index: 2; display: grid; align-content: center; justify-items: center; height: 100%; padding: 24px max(24px, 10vw); overflow: auto; }
+.lobby-ritual { display: grid; gap: 18px; width: min(680px, 100%); margin: 0; padding: 0; list-style: none; }
+.lobby-ritual li { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 16px; opacity: 0; transform: translateY(8px); animation: ritual-in .9s var(--room-ease) var(--delay, 0ms) forwards; }
+@keyframes ritual-in { to { opacity: 1; transform: none; } }
+.lobby-ritual span { padding-top: 5px; color: var(--gold); font: 500 11px/1.4 var(--font-sans), sans-serif; letter-spacing: .16em; text-transform: uppercase; }
+.lobby-ritual p { margin: 0; color: var(--white); font: 400 clamp(19px, 2vw, 23px)/1.4 var(--font-display), Georgia, serif; }
+
+/* The dark room: a dim clock and the usher's promise, nothing else. */
+.lobby-dark { position: relative; z-index: 2; display: grid; place-content: center; justify-items: center; gap: 12px; height: 100%; padding: 24px; text-align: center; animation: celestial-arrive 2.4s .4s both; }
 .lobby-dark .lobby-kicker { color: #4b5866; }
-.lobby-dark h2 { margin: 0; color: #55636f; font: 400 clamp(40px, 5.4vw, 72px)/1.04 var(--font-display), Georgia, serif; letter-spacing: -.01em; text-wrap: balance; }
-.lobby-dark-time { margin: 0; color: #55636f; font: italic 19px var(--font-display), Georgia, serif; }
-.lobby-dark-time strong { color: #7d8b98; font-weight: 400; }
-.lobby-countdown { margin: 6px 0 0; color: var(--room-dim); font: 400 30px/1 var(--font-mono), ui-monospace, monospace; letter-spacing: .04em; font-variant-numeric: tabular-nums; }
-.lobby-dark-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 18px; margin-top: 26px; opacity: .55; transition: opacity .6s; }
+.lobby-dark h2 { margin: 0; color: #4f5d69; font: italic 400 clamp(20px, 2.2vw, 26px)/1.2 var(--font-display), Georgia, serif; }
+.lobby-clock { margin: 4px 0 0; color: var(--muted); font: 400 clamp(64px, 11vw, 136px)/1 var(--font-display), Georgia, serif; letter-spacing: .01em; font-variant-numeric: tabular-nums; opacity: .78; }
+.lobby-dark-note { margin: 0; color: var(--room-dim); font: 400 13px/1.5 var(--font-mono), ui-monospace, monospace; letter-spacing: .02em; }
+.lobby-dark-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 18px; margin-top: 28px; opacity: .55; transition: opacity .6s; }
 .lobby-dark:hover .lobby-dark-actions, .lobby-dark-actions:focus-within { opacity: 1; }
 .lobby-dark-actions button { min-height: 44px; padding: 0 4px; border: 0; background: none; color: var(--room-dim); font: 13px var(--font-sans), sans-serif; cursor: pointer; }
 .lobby-dark-actions button:hover, .lobby-dark-actions button:focus-visible { color: var(--white); }
@@ -134,21 +143,25 @@
 .lobby[data-phase=intermission] .lobby-dark h2 { color: var(--muted); }
 .lobby[data-phase=intermission] .lobby-dark .lobby-kicker { color: var(--gold); }
 
-/* The usher, as the lights come up. */
-.lobby-usher { display: grid; align-content: center; gap: 14px; text-align: center; }
-.lobby-usher .lobby-kicker { justify-content: center; }
-.lobby-usher h2 { margin: 0 auto; font: italic 400 clamp(40px, 5.6vw, 72px)/1.04 var(--font-display), Georgia, serif; letter-spacing: -.02em; color: var(--white); }
-.lobby-usher > p:not(.lobby-kicker) { margin: 0 auto; max-width: 46ch; color: var(--muted); font: 400 15px/1.55 var(--font-sans), sans-serif; }
-.lobby-usher ul { display: grid; gap: 10px; width: min(520px, 100%); margin: 14px auto 6px; padding: 0; list-style: none; }
-.lobby-usher ul button { display: grid; grid-template-columns: 54px minmax(0, 1fr) auto; align-items: center; gap: 14px; width: 100%; min-height: 84px; padding: 10px 18px 10px 10px; border: 1px solid var(--room-line); border-radius: 14px; background: var(--room-chamber-2); color: var(--white); text-align: left; cursor: pointer; transition: border-color .25s; }
-.lobby-usher ul button:hover { border-color: var(--gold); }
-.lobby-usher ul .lobby-poster { width: 54px; border-radius: 4px; }
-.lobby-usher ul button > span:nth-child(2) { display: grid; gap: 4px; }
-.lobby-usher ul small { color: var(--gold); font: 500 11px var(--font-sans), sans-serif; letter-spacing: .16em; text-transform: uppercase; }
-.lobby-usher ul strong { font: 500 23px/1.08 var(--font-display), Georgia, serif; }
-.lobby-usher ul button > span:last-child { color: var(--gold); font-size: 18px; }
-.lobby-usher ul button.is-kept { background: transparent; }
-.lobby-usher ul button.is-kept small { color: var(--room-dim); }
+/* The lights are up: what's left, one line, and the stub. */
+.lobby-usher { display: grid; align-content: center; }
+.lobby-usher form, .lobby-usher { gap: 16px; }
+.lobby-usher form { display: grid; }
+.lobby-usher h2 { margin-block: 0; color: var(--white); font: 500 clamp(44px, 6vw, 76px)/1.02 var(--font-display), Georgia, serif; letter-spacing: -.02em; }
+.lobby-usher-film { margin-block: -4px 0; color: var(--muted); font: italic 21px var(--font-display), Georgia, serif; }
+.lobby-usher-film strong { color: var(--white); font-weight: 500; font-style: normal; }
+.lobby-qualities { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+.lobby-qualities button { min-height: 40px; padding: 8px 15px; border: 1px solid var(--room-line); border-radius: 999px; background: none; color: var(--muted); font: 14px var(--font-sans), sans-serif; cursor: pointer; transition: background .2s, border-color .2s, color .2s; }
+.lobby-qualities button:hover { border-color: #dec6a088; color: var(--white); }
+.lobby-qualities button[aria-pressed=true] { border-color: var(--gold); background: var(--gold); color: var(--void); }
+.lobby-line-label { margin-top: 8px; color: var(--room-dim); font: 13px var(--font-sans), sans-serif; }
+.lobby-line { width: 100%; padding: 8px 0; border: 0; border-bottom: 1px solid var(--room-line); background: transparent; color: var(--white); font: italic 400 23px var(--font-display), Georgia, serif; outline: none; transition: border-color .2s; }
+.lobby-line:focus { border-bottom-color: var(--gold); }
+.lobby-line::placeholder { color: #5d6b78; }
+.lobby-error { margin-block: 0; color: #e5a29b; font: 13px var(--font-sans), sans-serif; }
+.lobby-stub { padding: 10px 6px 14px; }
+.lobby-stub .ticket-stub { max-width: 460px; rotate: -1.2deg; }
+.lobby-half-life { margin-block: 0; margin-inline: max(0px, calc((100% - 760px) / 2)) auto; max-width: 52ch; color: var(--muted); font: 15px/1.55 var(--font-sans), sans-serif; }
 
 /* Stepped out: the seat is kept, and a small light shows the way back. */
 .lobby-seat { position: fixed; z-index: 60; left: 50%; bottom: max(16px, env(safe-area-inset-bottom)); transform: translateX(-50%); display: flex; align-items: center; gap: 10px; max-width: calc(100vw - 24px); min-height: 48px; padding: 8px 18px 8px 14px; border: 1px solid #dec6a055; border-radius: 999px; background: #0b1119f2; color: var(--white); box-shadow: 0 16px 50px #000c; cursor: pointer; white-space: nowrap; }
@@ -256,49 +269,41 @@
 .route-strip button:hover { background: var(--gold); color: var(--void); }
 
 /* ——— Blind screening ——— */
-.blind-table { margin: 26px 0 10px; }
-.blind-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 10px 24px; margin-bottom: 22px; }
-.blind-head .blind-kicker, .blind-head h2, .blind-head p { grid-column: 1; }
-.blind-head h2 { margin: 4px 0 0; font: 500 clamp(40px, 4.6vw, 64px)/1.04 var(--font-display), Georgia, serif; letter-spacing: -.015em; }
-.blind-head p:not(.blind-kicker) { margin: 0; max-width: 58ch; color: var(--muted); font: 400 16px/1.55 var(--font-sans), sans-serif; }
-.blind-lift { grid-column: 2; grid-row: 2 / span 2; align-self: end; min-height: 44px; padding: 10px 18px; border: 1px solid var(--room-line); border-radius: 999px; background: transparent; color: var(--muted); font: 500 14px var(--font-sans), sans-serif; cursor: pointer; transition: background .2s, color .2s; }
-.blind-lift:hover { background: var(--room-chamber-2); color: var(--white); }
-.blind-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 12px; margin: 0; padding: 0; list-style: none; }
-/* A moment on the screen, without its name: soft light, and the faint lines of a projected image. */
-.blind-card { position: relative; display: flex; flex-direction: column; gap: 14px; min-height: 420px; padding: 22px 20px 18px; border-radius: 14px; overflow: hidden;
-  background: repeating-linear-gradient(0deg, #ffffff05 0 1px, transparent 1px 3px), radial-gradient(120% 90% at 20% 10%, #2a3a4a, transparent 60%), radial-gradient(90% 80% at 90% 100%, #1a2430, transparent 70%), #0c131c;
-  animation: develop-in 1100ms var(--room-ease) both; animation-delay: calc(var(--i, 0) * 110ms); }
-.blind-numeral { color: var(--gold); font: 400 13px/1 var(--font-mono), ui-monospace, monospace; letter-spacing: .08em; text-transform: uppercase; }
-.blind-runtime { position: absolute; top: 22px; right: 20px; color: var(--room-dim); font: 400 12px var(--font-mono), ui-monospace, monospace; }
-.blind-qualities { display: grid; gap: 10px; margin: 0; }
-.blind-qualities div { padding-left: 10px; border-left: 2px solid var(--channel, #dec6a055); }
-.blind-qualities .is-world { --channel: #e8b34a99; }
-.blind-qualities .is-feeling { --channel: #e5a29b99; }
-.blind-qualities .is-image { --channel: #99c6b799; }
-.blind-qualities .is-voice { --channel: #c3b0d199; }
-.blind-qualities dt { color: var(--room-dim); font: 500 10px var(--font-sans), sans-serif; letter-spacing: .16em; text-transform: uppercase; }
-.blind-qualities dd { margin: 2px 0 0; color: var(--white); font: 400 18px/1.3 var(--font-display), Georgia, serif; }
-.blind-watch { margin: 0; color: var(--white); font: italic 400 18px/1.4 var(--font-display), Georgia, serif; }
-.blind-watch small { display: block; margin-bottom: 3px; color: var(--gold); font: 500 10px var(--font-sans), sans-serif; font-style: normal; letter-spacing: .16em; text-transform: uppercase; }
-.blind-reason { margin: 0; color: var(--muted); font: 400 14px/1.55 var(--font-sans), sans-serif; }
+/* One moment at a time, as the page drew it: a scene without its name, and the iris. */
+.blind-reel { display: grid; gap: 20px; max-width: 780px; margin: 26px auto 10px; padding: clamp(18px, 3vw, 32px); border: 1px solid var(--room-line); border-radius: 18px; background: var(--room-chamber); }
+.blind-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.blind-row h2 { margin: 0; }
+.blind-count { color: var(--room-dim); font: 400 12px var(--font-mono), ui-monospace, monospace; letter-spacing: .04em; }
+.blind-moment { position: relative; display: grid; min-height: 290px; border-radius: 14px; overflow: hidden;
+  background: radial-gradient(120% 90% at 20% 10%, color-mix(in srgb, var(--m1, #2a3a4a) 42%, #0c131c) 0%, transparent 60%), radial-gradient(90% 80% at 90% 100%, color-mix(in srgb, var(--m2, #1a2430) 36%, #0c131c) 0%, transparent 70%), #0c131c;
+  animation: celestial-arrive .7s var(--room-ease) both; }
+/* The faint lines of a projected image. */
+.blind-moment::after { content: ''; position: absolute; inset: 0; z-index: 1; background: repeating-linear-gradient(0deg, #ffffff05 0 1px, transparent 1px 3px); pointer-events: none; }
+.blind-front, .blind-reveal { grid-area: 1 / 1; padding: 28px 26px; }
+.blind-front { display: flex; flex-direction: column; justify-content: space-between; gap: 22px; }
+.blind-scene { margin: 0; max-width: 34ch; color: var(--white); font: italic 400 clamp(21px, 2.4vw, 26px)/1.32 var(--font-display), Georgia, serif; }
+.blind-senses { display: flex; flex-wrap: wrap; gap: 12px 22px; margin: 0; }
+.blind-senses dt { color: var(--gold); font: 500 10.5px/1.4 var(--font-sans), sans-serif; letter-spacing: .14em; text-transform: uppercase; }
+.blind-senses dd { max-width: 24ch; margin: 2px 0 0; color: var(--muted); font: 13px/1.4 var(--font-sans), sans-serif; }
 /* A name drawn out of the text: a bar the length of what was there. */
-.blind-bar { display: inline-block; width: calc(var(--chars) * .48em); max-width: 100%; height: .78em; margin: 0 .06em; vertical-align: -.06em; border-radius: 1px; background: currentColor; opacity: .72; }
-.blind-choose { margin-top: auto; min-height: 46px; padding: 10px 16px; border: 1px solid var(--gold); border-radius: 999px; background: transparent; color: var(--gold); font: 500 14px var(--font-sans), sans-serif; cursor: pointer; transition: background .25s, color .25s; }
-.blind-choose:hover, .blind-choose:focus-visible { background: var(--gold); color: var(--void); }
-.blind-card.is-unveiled { grid-column: span 2; border: 1px solid var(--room-line); background: var(--void); }
-.blind-unveiled { display: grid; gap: 10px; }
-.blind-iris { display: grid; place-items: center; overflow: hidden; aspect-ratio: 16 / 9; border-radius: 10px; background: #0c131c; color: var(--gold); clip-path: circle(0% at 50% 50%); animation: blind-iris 1.6s cubic-bezier(.7, 0, .2, 1) .1s both; }
-.blind-iris img { width: 100%; height: 100%; object-fit: cover; }
-.blind-iris .star-glyph { width: 40px; height: 40px; fill: currentColor; }
-@keyframes blind-iris { to { clip-path: circle(75% at 50% 50%); } }
-.blind-unveiled h3 { margin: 4px 0 0; color: var(--white); font: 500 clamp(34px, 3.6vw, 48px)/1.05 var(--font-display), Georgia, serif; animation: celestial-arrive .8s 1s both; }
-.blind-unveiled-credits { margin: 0; color: var(--room-dim); font: 13px var(--font-sans), sans-serif; }
-.blind-unveiled-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
-.blind-unveiled-actions button { min-height: 42px; padding: 9px 16px; border: 1px solid var(--room-line); border-radius: 999px; background: transparent; color: var(--muted); font: 500 13px var(--font-sans), sans-serif; cursor: pointer; transition: background .2s, border-color .2s, color .2s; }
-.blind-unveiled-actions button:hover { background: var(--room-chamber-2); color: var(--white); }
-.blind-unveiled-actions button.is-primary { border-color: var(--gold); background: var(--gold); color: var(--void); }
-.blind-unveiled-actions button.is-primary:hover { border-color: var(--white); background: var(--white); }
-.blind-unveiled-actions button[aria-pressed=true] { border-color: var(--gold); color: var(--gold); }
+.blind-bar { display: inline-block; width: calc(var(--chars) * .48em); max-width: 100%; height: .78em; margin: 0 .06em; vertical-align: -.06em; border-radius: 1px; background: currentColor; opacity: .62; }
+/* The iris opens from the middle of the frame onto what it was. */
+.blind-reveal { position: relative; z-index: 2; display: flex; flex-direction: column; justify-content: center; gap: 10px; background: var(--void); clip-path: circle(0% at 50% 50%); transition: clip-path .9s cubic-bezier(.7, 0, .2, 1); }
+.blind-reveal[data-still] { background: linear-gradient(90deg, var(--void) 30%, #080d14d9 62%, #080d14a6), var(--still) center / cover no-repeat, var(--void); }
+.blind-moment[data-open] .blind-reveal { clip-path: circle(150% at 50% 50%); }
+.blind-reveal h3 { margin: 0; color: var(--white); font: 500 clamp(32px, 3.6vw, 44px)/1.05 var(--font-display), Georgia, serif; letter-spacing: -.01em; }
+.blind-meta { margin: 0; color: var(--room-dim); font: 13px var(--font-sans), sans-serif; }
+.blind-why { margin: 8px 0 0; max-width: 52ch; color: var(--muted); font: 15px/1.55 var(--font-sans), sans-serif; }
+.blind-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.blind-actions button { min-height: 44px; padding: 10px 18px; border: 1px solid var(--gold); border-radius: 999px; background: transparent; color: var(--gold); font: 500 14px var(--font-sans), sans-serif; cursor: pointer; transition: background .2s, border-color .2s, color .2s; }
+.blind-actions button:hover { background: var(--gold); color: var(--void); }
+.blind-actions .is-solid { background: var(--gold); color: var(--void); }
+.blind-actions .is-solid:hover { border-color: var(--white); background: var(--white); }
+.blind-actions .is-quiet { border-color: var(--room-line); color: var(--muted); }
+.blind-actions .is-quiet:hover { background: var(--room-chamber-2); color: var(--white); }
+.blind-actions .is-quiet[aria-pressed=true] { border-color: #dec6a066; color: var(--gold); }
+.blind-lift { justify-self: start; min-height: 36px; padding: 0; border: 0; background: none; color: var(--room-dim); font: 13px var(--font-sans), sans-serif; text-decoration: underline; text-decoration-color: #a7b6c544; text-underline-offset: 3px; cursor: pointer; }
+.blind-lift:hover { color: var(--white); }
 .developing-reel li.is-veiled .developing-frame { display: grid; place-items: center; background: repeating-linear-gradient(0deg, #ffffff06 0 1px, transparent 1px 3px), linear-gradient(160deg, #1b2732, #0d151e); color: #dec6a088; font: italic 22px var(--font-display), Georgia, serif; }
 .blind-toggle { display: flex; align-items: flex-start; gap: 10px; min-height: 44px; color: var(--muted); font: 13px/1.45 var(--font-sans), sans-serif; cursor: pointer; }
 .blind-toggle input { flex: none; width: 17px; height: 17px; margin-top: 1px; accent-color: var(--ember); }
@@ -426,13 +431,13 @@ button.terra-era-bar:hover:not(:disabled) { border-color: var(--gold); backgroun
   .check-in-question, .check-in-reply { font-size: 19px; }
 
   .lobby-room, .lobby-usher { padding: 26px 22px 30px; }
-  .lobby-header h2 { font-size: clamp(40px, 12vw, 60px); }
-  .lobby-bill.is-double { grid-template-columns: 1fr; }
+  .lobby-tonight { grid-template-columns: 96px minmax(0, 1fr); gap: 18px; align-items: start; }
+  .lobby-tonight .lobby-poster { width: 96px; }
+  .lobby-billing h2, .lobby-header h2 { font-size: clamp(34px, 10vw, 52px); }
+  .lobby-tonight .lobby-actions { grid-column: 1 / -1; }
+  .lobby-bill { grid-template-columns: 1fr; }
   .lobby-ritual li { grid-template-columns: 1fr; gap: 2px; }
-  .lobby-ritual p { font-size: 18px; }
-  /* Lights down stays in reach while the ritual scrolls past. */
-  .lobby-room .lobby-actions { position: sticky; bottom: 0; z-index: 3; flex-wrap: nowrap; margin-inline: -22px; padding: 34px 22px 16px; background: linear-gradient(transparent, #0b1119 34%); }
-  .lobby-room .lobby-actions small { display: none; }
+  .lobby-settle { padding: 24px 22px; }
   .lobby-lights { flex: 1; padding-inline: 18px; }
   .lobby-seat em { display: none; }
 
@@ -445,11 +450,10 @@ button.terra-era-bar:hover:not(:disabled) { border-color: var(--gold); backgroun
   .route-strip-kicker, .route-strip-note, .route-strip button { grid-column: auto; grid-row: auto; }
   .route-strip-route > span { font-size: 20px; }
 
-  .blind-head { grid-template-columns: 1fr; }
-  .blind-lift { grid-column: 1; grid-row: auto; justify-self: start; }
-  .blind-cards { grid-template-columns: 1fr; }
-  .blind-card { min-height: 0; }
-  .blind-card.is-unveiled { grid-column: auto; }
+  .blind-reel { padding: 16px; border-radius: 14px; }
+  .blind-moment { min-height: 0; }
+  .blind-front, .blind-reveal { padding: 22px 18px; }
+  .blind-actions button { flex: 1 1 auto; }
 
   .between-sides { grid-template-columns: 1fr; gap: 18px; padding: 12px 18px 4px; }
   .between-meet { height: 30px; }
@@ -476,11 +480,13 @@ button.terra-era-bar:hover:not(:disabled) { border-color: var(--gold); backgroun
 }
 @media (prefers-reduced-motion: reduce) {
   .lobby-house { transition: none; }
-  .lobby[open], .lobby-dark, .lobby-room, .lobby-usher, .blind-card, .blind-unveiled h3 { animation: none; }
-  .blind-iris { animation: none; clip-path: none; }
+  .lobby[open], .lobby-dark, .lobby-room, .lobby-usher, .blind-moment { animation: none; }
+  .lobby-ritual li { animation: none; opacity: 1; transform: none; }
+  .blind-reveal { transition: none; }
   .credits-path { animation: none; }
   .lobby-seat i { animation: none; }
   .screening-ghost { display: none; }
 }
-.celestial-world[data-motion=off] :is(.blind-card, .blind-unveiled h3) { animation: none; }
-.celestial-world[data-motion=off] .blind-iris { animation: none; clip-path: none; }
+.celestial-world[data-motion=off] .blind-moment { animation: none; }
+.celestial-world[data-motion=off] .blind-reveal { transition: none; }
+.celestial-world[data-motion=off] .lobby-ritual li { animation: none; opacity: 1; transform: none; }

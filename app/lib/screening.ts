@@ -208,9 +208,26 @@ export function formatCountdown(ms: number): string {
 
 export type RitualStep = { label: string; text: string };
 
+/** After the lights go down the ritual arrives a line at a time, then leaves the dark to the film. */
+export const RITUAL_LEAD_MS = 300;
+export const RITUAL_STEP_MS = 1300;
+export const RITUAL_HOLD_MS = 4200;
+
+/** How long the ritual holds the screen once the lights are down, for this many steps. */
+export function ritualMs(steps: number): number {
+  return RITUAL_LEAD_MS + Math.max(0, steps - 1) * RITUAL_STEP_MS + RITUAL_HOLD_MS;
+}
+
+/** Whether the ritual is still on screen: only at the start of the first film. */
+export function inRitual(screening: Screening, steps: number, now: number): boolean {
+  if (!screening.lightsDownAt) return false;
+  const since = now - Date.parse(screening.lightsDownAt);
+  return since >= 0 && since < ritualMs(steps);
+}
+
 /**
- * The few minutes before the lights go down. The room and the sound are the same
- * advice for every film; what to watch for is the reel's own line, which never spoils.
+ * The moment the lights go down. The room and the sound are the same advice for every
+ * film; what to watch for is the reel's own line, which never spoils.
  */
 export function ritual(films: readonly ProgrammeFilm[], hour: number): RitualStep[] {
   const daylight = hour >= 7 && hour < 18;

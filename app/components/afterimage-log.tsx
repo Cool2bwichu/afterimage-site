@@ -14,10 +14,8 @@ const CHANNEL_PROMPTS: Record<FacetKey, string> = { whereItLives: 'Its world', h
  * After watching: what stayed with you? Four qualities, one night and one line.
  * The journal stays in this browser; only an explicit Like guides future reels.
  */
-export function AfterimageLog({ target, opener, existing, liked, saved, count = 0, kicker, onSave, onRemove, onClose }: {
+export function AfterimageLog({ target, opener, existing, liked, saved, count = 0, onSave, onRemove, onClose }: {
   target: AfterimageTarget | null; opener: HTMLElement | null; existing?: AfterimageEntry; liked: boolean; saved: boolean;
-  /** Who is asking: the usher, when the credits of a screening have just rolled. */
-  kicker?: string;
   /** How many afterimages the journal holds before this one: a new one is the next ticket. */
   count?: number;
   onSave: (draft: AfterimageDraft, options: { like: boolean; unsave: boolean }) => string | null;
@@ -75,7 +73,7 @@ export function AfterimageLog({ target, opener, existing, liked, saved, count = 
   return <dialog ref={dialog} className="afterimage-log" aria-labelledby="afterimage-log-title" onCancel={event => { event.preventDefault(); onClose(); }}>
     <form method="dialog" onSubmit={event => { event.preventDefault(); submit(); }}>
       <header>
-        <p className="afterimage-log-kicker"><StarGlyph />{kicker ?? (existing ? 'Your afterimage' : 'After the film')}</p>
+        <p className="afterimage-log-kicker"><StarGlyph />{existing ? 'Your afterimage' : 'After the film'}</p>
         <h2 id="afterimage-log-title" ref={heading} tabIndex={-1}>What stayed with you?</h2>
         <p className="afterimage-log-film">{target.title} <span>{target.year}</span></p>
         <button type="button" className="afterimage-log-close" onClick={onClose} aria-label="Close without saving">×</button>

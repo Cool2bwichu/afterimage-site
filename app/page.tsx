@@ -32,7 +32,7 @@ import { BlindTable } from './components/blind-table';
 import { BetweenUs } from './components/between-us';
 import { SCREENING_KEY, parseScreening, screeningPhase, serializeScreening, startScreening, type ProgrammeFilm, type Screening } from './lib/screening';
 import { HALF_LIFE_KEY, askLater, dueCheckIn, emptyBook, growingFilms, parseHalfLife, recordReading, serializeHalfLife, stayedRequest, type CheckIn, type HalfLifeBook, type Reading } from './lib/half-life';
-import { BLIND_KEY, emptyBlind, isRevealed, isVeiled, liftVeil, parseBlind, reelArrived, reveal, serializeBlind, wantBlind, type BlindState } from './lib/blind';
+import { BLIND_KEY, emptyBlind, isVeiled, liftVeil, parseBlind, reelArrived, reveal, serializeBlind, wantBlind, type BlindState } from './lib/blind';
 import { parseRoute } from './lib/credits-question';
 import { decodeInvite, parseBetween, type BetweenSide } from './lib/between';
 import { FilmLibrary } from './components/film-library';
@@ -137,7 +137,7 @@ export default function Home() {
   const [likedFilms, setLikedFilms] = useState<LikedFilm[]>([]);
   const [watchlist, setWatchlist] = useState<SavedFilm[]>([]);
   const [afterimages, setAfterimages] = useState<AfterimageEntry[]>([]);
-  const [afterimageTarget, setAfterimageTarget] = useState<{ film: AfterimageTarget; opener: HTMLElement | null; usher?: boolean } | null>(null);
+  const [afterimageTarget, setAfterimageTarget] = useState<{ film: AfterimageTarget; opener: HTMLElement | null } | null>(null);
   // The rooms around the reel: the Lobby and its screening, the journal's half-life,
   // the veil of a blind reel, and the two entrances that ask in another way.
   const [screening, setScreening] = useState<Screening | null>(null);
@@ -494,10 +494,10 @@ export default function Home() {
     const fromAtlas = atlasTrail.maps.flatMap(map => [map.atlas.anchor, ...map.atlas.neighbors]).find(item => movieKey(item.title, item.year) === key)?.facets;
     return fromReel(result) ?? reels.map(reel => fromReel(reel.state.result)).find(Boolean) ?? fromAtlas;
   }
-  function openAfterimage(film: { title: string; year: string; tmdbId?: number; facets?: FacetMap }, opener: HTMLElement | null, usher = false) {
+  function openAfterimage(film: { title: string; year: string; tmdbId?: number; facets?: FacetMap }, opener: HTMLElement | null) {
     const details = metadataByKey[movieKey(film.title, film.year)];
     const tmdbId = film.tmdbId ?? (details?.status === 'matched' ? details.tmdbId : undefined);
-    setAfterimageTarget({ film: { title: film.title, year: film.year, ...(tmdbId ? { tmdbId } : {}), facets: facetsFor(film) ?? film.facets }, opener, usher });
+    setAfterimageTarget({ film: { title: film.title, year: film.year, ...(tmdbId ? { tmdbId } : {}), facets: facetsFor(film) ?? film.facets }, opener });
   }
 
   // ——— The Lobby ———
@@ -1313,12 +1313,12 @@ export default function Home() {
   const requestLine = route ? `From ${route.now} to ${route.credits}${route.double ? ', as a double feature' : ''}`
     : pair ? `Between ${pair.first === 'One of us' ? 'the two of you' : `${pair.first} and ${pair.second}`}` : null;
   // Blind screening: the reel stays veiled until a film is chosen or the veil is lifted.
-  const veiled = Boolean(result) && isVeiled(blind, recommendationIdentity) && Boolean(result?.recommendations.some(film => !isRevealed(blind, film)));
+  // Every moment can be said yes to before the veil lifts; then the whole reel shows.
+  const veiled = Boolean(result) && isVeiled(blind, recommendationIdentity);
   const revealedKeys = useMemo(() => new Set(blind.revealed), [blind]);
   function chooseBlind(film: { title: string; year: string }, index: number) {
     saveBlind(reveal(blind, film));
     setScreeningIndex(index);
-    setNotice(`Film ${['I', 'II', 'III', 'IV', 'V'][index] ?? index + 1} is ${film.title}.`);
   }
   function liftBlind() {
     saveBlind(liftVeil(blind));
@@ -1562,7 +1562,7 @@ export default function Home() {
           <section className="results" aria-live="polite" ref={resultsRef}>
             <div className={developing ? "reel-heading" : "sr-only"}><h2>{developing ? 'Your previous reel' : 'Your reel'}</h2><span>Five films, considered together.</span></div>
 
-            {veiled ? <BlindTable films={result.recommendations} metadata={metadataByKey} revealed={revealedKeys} savedKeys={savedKeys}
+            {veiled ? <BlindTable key={recommendationIdentity} films={result.recommendations} palette={result.palette} metadata={metadataByKey} revealed={revealedKeys} savedKeys={savedKeys}
               onReveal={chooseBlind} onLift={liftBlind} onWatch={(film, opener) => openLobby([film], opener)} onSave={toggleSave} /> : <>
             {route ? <RouteStrip route={route} onWatchDouble={opener => openLobby(result.recommendations.slice(0, 2), opener)} /> : null}
             <ReelConstellation key={`constellation-${recommendationIdentity}`} seed={recommendationIdentity} name={result.persona} insight={result.insight} palette={result.palette}
@@ -1600,7 +1600,7 @@ export default function Home() {
             <section className="reel-end" aria-label="End of reel">
               <i className="reel-end-runout" aria-hidden="true" />
               <h3>End of reel</h3>
-              <p>{veiled ? 'Five films, unnamed. Choose one, or lift the veil.' : 'Five films, and then the lights come up. A reel is never a feed.'}</p>
+              <p>{veiled ? 'Five moments, unnamed. Say yes to one, or lift the veil.' : 'Five films, and then the lights come up. A reel is never a feed.'}</p>
             </section>
             <div className="reroll-panel">
               <button
@@ -1700,12 +1700,11 @@ export default function Home() {
           existing={afterimageTarget ? findAfterimage(afterimages, afterimageTarget.film) : undefined}
           liked={afterimageTarget ? likedKeys.has(movieKey(afterimageTarget.film.title, afterimageTarget.film.year)) : false}
           saved={afterimageTarget ? savedKeys.has(movieKey(afterimageTarget.film.title, afterimageTarget.film.year)) : false} count={afterimages.length}
-          kicker={afterimageTarget?.usher ? 'As the credits roll' : undefined}
           onSave={saveAfterimage} onRemove={() => { if (afterimageTarget) forgetAfterimage(afterimageTarget.film); }} onClose={() => setAfterimageTarget(null)} />
         <FilmVerbs menu={verbMenu} onClose={closeVerbs} />
-        {screening ? <Lobby screening={screening} open={lobbyOpen} opener={lobbyOpener} candidates={lobbyCandidates} kept={afterimageKeys}
+        {screening ? <Lobby screening={screening} open={lobbyOpen} opener={lobbyOpener} candidates={lobbyCandidates} kept={afterimageKeys} count={afterimages.length}
           onOpen={openSeat} onStepOut={() => setLobbyOpen(false)} onChange={saveScreening}
-          onUsher={(film, opener) => openAfterimage(film, opener, true)} /> : null}
+          onKeep={draft => saveAfterimage(draft, { like: false, unsave: false })} /> : null}
         {creditsQuestion ? <CreditsQuestion opener={creditsQuestion.opener} onClose={() => setCreditsQuestion(null)}
           onDevelop={request => { setCreditsQuestion(null); answerQuestion(request); }} /> : null}
         {between ? <BetweenUs opener={between.opener} invite={between.invite} canSearch={catalogueReachable}
