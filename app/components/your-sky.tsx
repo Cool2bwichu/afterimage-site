@@ -66,17 +66,18 @@ function shortDate(value: string) {
   return Number.isFinite(date.getTime()) ? date.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '';
 }
 
-/** A film's half-life: how strongly it stayed, a day, a week, a month and a season after. */
+const HALF_LIFE_STEP = 184 / (CHECKPOINTS.length - 1);
+/** A film's half-life: how strongly it stayed, a day, a week, a month, a season and a year after. */
 function HalfLifeLine({ film }: { film: HalfLifeRecord }) {
   const readings = readingsOf(film);
-  const points = readings.map(reading => ({ x: 8 + CHECKPOINTS.indexOf(reading.checkpoint) * 61, y: 46 - READING_STRENGTH[reading.value] * 38 }));
+  const points = readings.map(reading => ({ x: 8 + CHECKPOINTS.indexOf(reading.checkpoint) * HALF_LIFE_STEP, y: 46 - READING_STRENGTH[reading.value] * 38 }));
   const direction = trend(film);
   return <figure className="your-sky-half-life">
     <figcaption><span>Half-life</span>{direction === 'growing' ? 'Still growing in you' : direction === 'fading' ? 'Fading, as most films do' : 'Holding its light'}</figcaption>
     <svg viewBox="0 0 200 54" role="img" aria-label={readings.map(reading => `${reading.checkpoint.label}: ${READING_LABEL[reading.value]}`).join('. ')}>
       <path className="half-life-axis" d="M8 46H192" />
       {points.length > 1 ? <path className="half-life-curve" d={points.map((point, index) => `${index ? 'L' : 'M'}${point.x} ${point.y}`).join('')} /> : null}
-      {CHECKPOINTS.map((checkpoint, index) => <text key={checkpoint.id} x={8 + index * 61} y="53" textAnchor={index === 0 ? 'start' : index === 3 ? 'end' : 'middle'}>{checkpoint.id}</text>)}
+      {CHECKPOINTS.map((checkpoint, index) => <text key={checkpoint.id} x={8 + index * HALF_LIFE_STEP} y="53" textAnchor={index === 0 ? 'start' : index === CHECKPOINTS.length - 1 ? 'end' : 'middle'}>{checkpoint.id}</text>)}
       {points.map((point, index) => <circle key={index} cx={point.x} cy={point.y} r="3.2" data-reading={readings[index].value} />)}
     </svg>
   </figure>;

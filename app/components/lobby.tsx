@@ -16,9 +16,9 @@ import { TicketStub, type StubEntry } from './ticket-stub';
 
 type PhaseKind = ScreeningPhase['kind'];
 const PLAIN: Record<FacetKey, string> = { whereItLives: 'its world', howItFeels: 'its feeling', howItLooks: 'its images', howItSpeaks: 'its voice' };
-// "tomorrow, in a week, in a month and in three months"
-const ASKS = CHECKPOINTS.map(checkpoint => checkpoint.days === 1 ? 'tomorrow' : `in ${checkpoint.since}`);
-const ASKING = `${ASKS.slice(0, -1).join(', ')} and ${ASKS.at(-1)}`;
+// "tomorrow, in a week, a month, three months and a year"
+const LATER = CHECKPOINTS.filter(checkpoint => checkpoint.days > 1).map(checkpoint => checkpoint.since);
+const ASKING = `tomorrow, in ${LATER.slice(0, -1).join(', ')} and ${LATER.at(-1)}`;
 
 function Poster({ film }: { film: ProgrammeFilm }) {
   const [failed, setFailed] = useState(false);

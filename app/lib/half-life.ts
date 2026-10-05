@@ -1,5 +1,5 @@
-// Half-life. Ratings measure the night; this measures the months after. Once a film is in
-// the journal, Afterimage asks again, gently: a day later, a week, a month, a season.
+// Half-life. Ratings measure the night; this measures the year. Once a film is in the
+// journal, Afterimage asks again, gently: a day later, a week, a month, a season, a year.
 // One tap: gone, still there, or stronger. The answers stay in this browser and only
 // brighten your sky; a film shapes recommendations only if you also Like it.
 import type { AfterimageEntry } from './afterimages.ts';
@@ -8,13 +8,14 @@ import { movieKey } from './movie-metadata.ts';
 export const HALF_LIFE_KEY = 'afterimage:half-life:v1';
 
 export const CHECKPOINTS = [
-  { id: 'day', days: 1, label: 'A day later', since: 'a day' },
-  { id: 'week', days: 7, label: 'A week later', since: 'a week' },
-  { id: 'month', days: 30, label: 'A month later', since: 'a month' },
-  { id: 'season', days: 91, label: 'A season later', since: 'three months' },
+  { id: 'day', days: 1, label: 'A day later', since: 'a day', short: 'A day' },
+  { id: 'week', days: 7, label: 'A week later', since: 'a week', short: 'A week' },
+  { id: 'month', days: 30, label: 'A month later', since: 'a month', short: 'A month' },
+  { id: 'season', days: 91, label: 'A season later', since: 'three months', short: '3 months' },
+  { id: 'year', days: 365, label: 'A year later', since: 'a year', short: 'A year' },
 ] as const;
-/** After a year the journal stops asking; by then the film has settled. */
-export const LAST_ASK_DAY = 365;
+/** The year's question can wait a couple of months for you; after that the film has settled. */
+export const LAST_ASK_DAY = 425;
 
 export type CheckpointId = typeof CHECKPOINTS[number]['id'];
 export type Checkpoint = typeof CHECKPOINTS[number];
@@ -129,6 +130,11 @@ export function forgetFilm(book: HalfLifeBook, film: { title: string; year: stri
   return { version: 1, films };
 }
 
+/** The question after this one, or null when this was the last. */
+export function nextCheckpoint(checkpoint: Checkpoint): Checkpoint | null {
+  return CHECKPOINTS[CHECKPOINTS.indexOf(checkpoint) + 1] ?? null;
+}
+
 /** Readings in the order they were asked. */
 export function readingsOf(film: HalfLifeRecord | undefined): Array<{ checkpoint: Checkpoint; value: Reading; on: string }> {
   if (!film) return [];
@@ -172,6 +178,36 @@ export function growingFilms(entries: readonly AfterimageEntry[], book: HalfLife
     .map(({ entry }) => entry);
 }
 
+/**
+ * The lines for the "still with you" chart: the film in question first, then the films
+ * whose answers came most recently, each with every reading it has.
+ */
+export function halfLifeSeries(entries: readonly AfterimageEntry[], book: HalfLifeBook, focus: { title: string; year: string }, limit = 5) {
+  const focusKey = movieKey(focus.title, focus.year);
+  const seen = new Set<string>();
+  return entries
+    .map(entry => ({ entry, key: movieKey(entry.title, entry.year), readings: readingsOf(book.films[movieKey(entry.title, entry.year)]) }))
+    .filter(({ key, readings }) => readings.length && !seen.has(key) && seen.add(key))
+    .sort((a, b) => Number(b.key === focusKey) - Number(a.key === focusKey) || (b.readings.at(-1)!.on).localeCompare(a.readings.at(-1)!.on))
+    .slice(0, limit)
+    .map(({ entry, key, readings }) => ({ title: entry.title, year: entry.year, focus: key === focusKey, readings }));
+}
+
+/** What an answer means for this film, set beside the other films in the journal. */
+export function halfLifeReading(reading: Reading, film: { title: string; year: string }, entries: readonly AfterimageEntry[], book: HalfLifeBook): string {
+  const self = movieKey(film.title, film.year);
+  const others = (value: Reading) => [...new Set(entries
+    .filter(entry => movieKey(entry.title, entry.year) !== self && latestReading(book.films[movieKey(entry.title, entry.year)]) === value)
+    .map(entry => entry.title))];
+  const like = (titles: string[]) => titles.length ? `, like ${titles[0]}` : '';
+  if (reading === 'stronger') {
+    const faded = others('gone');
+    return `${film.title} grew${like(others('stronger'))}. Its star burns brighter in your sky now${faded.length ? `, while ${faded.length === 1 ? faded[0] : `${faded.length} other films`} faded` : ''}.`;
+  }
+  if (reading === 'there') return `${film.title} is holding steady${like(others('there'))}. Its star keeps its light in your sky.`;
+  return `${film.title} faded${like(others('gone'))}. Most films do; the few that don’t are the ones worth knowing.`;
+}
+
 /** A reel request built from the films that grew: the strongest taste signal there is. */
 export function stayedRequest(films: readonly { title: string; year: string }[]): { films: string[]; creativeBrief: string } | null {
   const chosen = films.slice(0, 5);
@@ -203,7 +239,7 @@ function icsText(value: string): string {
 
 /**
  * The check-ins as calendar reminders, for anyone who wants the nudge without a server:
- * four all-day events, each asking whether the film is still with you.
+ * an all-day event for each one, asking whether the film is still with you.
  */
 export function checkInCalendar(entry: Pick<AfterimageEntry, 'title' | 'year' | 'watchedOn'>, url: string, stamp = new Date()): string {
   const now = stamp.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');

@@ -1333,7 +1333,7 @@ export default function Home() {
   }
   const activeOpener = () => document.activeElement instanceof HTMLElement ? document.activeElement : null;
   const checkInCard = checkIn ? <CheckInCard key={`${movieKey(checkIn.entry.title, checkIn.entry.year)}:${checkIn.checkpoint.id}`} checkIn={checkIn}
-    liked={likedKeys.has(movieKey(checkIn.entry.title, checkIn.entry.year))} canDevelop={!reelLocked} growingCount={growing.length}
+    entries={afterimages} book={halfLife} liked={likedKeys.has(movieKey(checkIn.entry.title, checkIn.entry.year))} canDevelop={!reelLocked} growingCount={growing.length}
     onAnswer={answerCheckIn} onLater={laterCheckIn} onClose={() => setCheckIn(null)}
     onLike={() => toggleLike({ title: checkIn.entry.title, year: checkIn.entry.year })}
     onDevelop={() => { const request = stayedRequest(growing); if (request) { setCheckIn(null); answerQuestion(request); } }} /> : null;
