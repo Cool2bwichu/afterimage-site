@@ -435,7 +435,7 @@
 .between-link { flex-basis: 100%; min-height: 44px; padding: 8px 12px; border: 1px solid var(--room-line); border-radius: 10px; background: var(--void); color: var(--muted); font: 12px var(--font-mono), ui-monospace, monospace; }
 .between-actions small { flex-basis: 100%; color: var(--room-dim); font: 12px var(--font-sans), sans-serif; }
 /* Closed while it develops: a way back, wherever you are on the site. */
-.between-away { position: fixed; z-index: 55; left: 50%; bottom: max(16px, env(safe-area-inset-bottom)); transform: translateX(-50%); display: flex; align-items: center; gap: 10px 12px; width: max-content; max-width: calc(100vw - 24px); padding: 6px 6px 6px 16px; border: 1px solid #dec6a040; border-radius: 999px; background: #101923f2; color: var(--muted); font: 14px/1.3 var(--font-sans), sans-serif; box-shadow: 0 20px 60px #000a; animation: panel-arrive 420ms var(--room-ease) both; }
+.between-away { position: fixed; z-index: 55; left: 12px; right: 12px; bottom: max(16px, env(safe-area-inset-bottom)); display: flex; align-items: center; gap: 10px 12px; width: fit-content; margin-inline: auto; padding: 6px 6px 6px 16px; border: 1px solid #dec6a040; border-radius: 999px; background: #101923f2; color: var(--muted); font: 14px/1.3 var(--font-sans), sans-serif; box-shadow: 0 20px 60px #000a; animation: panel-arrive 420ms var(--room-ease) both; }
 body:has(.lobby-seat) .between-away { bottom: calc(max(16px, env(safe-area-inset-bottom)) + 68px); }
 .between-away .star-glyph { width: 12px; height: 12px; flex: none; fill: var(--gold); }
 .between-away em { color: var(--white); font: italic 500 17px var(--font-display), Georgia, serif; }
