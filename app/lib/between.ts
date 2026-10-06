@@ -1,7 +1,9 @@
-// The Film Between Us. Two people, three films each, one evening. Afterimage looks for
-// films that give both of them something, and says what each will find. The six films
-// and the two names become an ordinary reel request. An invitation link carries only
-// the inviter's name and three films, in the address itself; nothing is stored anywhere.
+// The Film Between Us. Two people, three films each, one evening. Their two skies drift
+// together and the one film in the overlap appears, with what it takes from each: that
+// is an ordinary collision, which the bridge already answers. The six films and the two
+// names can also become an ordinary reel request. An invitation link carries only the
+// inviter's name and three films, in the address itself; nothing is stored anywhere.
+import type { CollisionFilm } from './collision.ts';
 
 export const MAX_GUEST_FILMS = 3;
 const MAX_NAME = 24;
@@ -10,6 +12,8 @@ const BRIEF_TITLE = 80;
 
 export type BetweenFilm = { title: string; year?: string };
 export type BetweenSide = { name: string; films: BetweenFilm[] };
+/** The two of you: whoever has the page open, and the other person. */
+export type Skies = { us: BetweenSide; them: BetweenSide };
 
 function clean(value: unknown, max: number): string {
   return typeof value === 'string' ? value.replace(/[\u0000-\u001f\u007f]/g, '').replace(/\s+/g, ' ').trim().slice(0, max) : '';
@@ -18,6 +22,32 @@ function clean(value: unknown, max: number): string {
 /** A name as it will be written into the request: a first name or nothing. */
 export function cleanName(value: unknown): string {
   return clean(value, MAX_NAME).replace(/[^\p{L}\p{M}\p{N} '’.-]/gu, '').trim();
+}
+
+/** A film typed by hand. "Aftersun 2022" and "Aftersun (2022)" bring their year; anything else is a title. */
+export function typedFilm(text: string, now = new Date()): BetweenFilm | null {
+  const title = clean(text, 160);
+  if (!title) return null;
+  const match = /^(.*\S)\s*\((\d{4})\)$/.exec(title) ?? /^(.*\S)[\s,]+(\d{4})$/.exec(title);
+  const year = match ? Number(match[2]) : 0;
+  // Blade Runner 2049 and THX 1138 keep their numbers.
+  if (!match || year < 1888 || year > now.getFullYear() + 2) return { title };
+  return { title: match[1].replace(/[\s,]+$/, ''), year: match[2] };
+}
+
+/** The names the request uses: first names, or "One of us" and "the other" when there are none or they match. */
+function names(first: BetweenSide, second: BetweenSide): [string, string] {
+  const a = cleanName(first.name) || 'One of us';
+  const b = cleanName(second.name) || 'the other';
+  return a.toLocaleLowerCase() === b.toLocaleLowerCase() ? ['One of us', 'the other'] : [a, b];
+}
+
+/** Each sky as the page names it: "Mick’s sky", or your sky and their sky. */
+export function skyNames(skies: Skies): [string, string] {
+  const a = cleanName(skies.us.name);
+  const b = cleanName(skies.them.name);
+  const same = Boolean(a && b && a.toLocaleLowerCase() === b.toLocaleLowerCase());
+  return [a && !same ? `${a}’s sky` : 'your sky', b && !same ? `${b}’s sky` : 'their sky'];
 }
 
 function filmText(film: BetweenFilm): string {
@@ -52,12 +82,45 @@ export function betweenRequest(first: BetweenSide, second: BetweenSide): { films
   const ours = sideFilms(first);
   const theirs = sideFilms(second);
   if (!ours.length || !theirs.length) return null;
-  const a = cleanName(first.name) || 'One of us';
-  const b = cleanName(second.name) || 'the other';
-  const same = a.toLocaleLowerCase() === b.toLocaleLowerCase();
-  const [one, two] = same ? ['One of us', 'the other'] : [a, b];
+  const [one, two] = names(first, second);
   const creativeBrief = `Two of us are choosing a film to watch together. ${one} loves ${list(ours)}; ${two} loves ${list(theirs)}. Find films between our tastes: each one should give both of us something real, not a compromise neither of us wanted. In each reason, say what ${one === 'One of us' ? 'each of us' : `${one} and ${two}`} will find in it.`;
   return { films: [...ours, ...theirs].map(filmText), creativeBrief };
+}
+
+const filmKey = (film: BetweenFilm) => `${film.title.toLocaleLowerCase()}|${film.year ?? ''}`;
+
+/**
+ * The two skies as a collision. A collision holds exactly two dated films, so one film
+ * from each side stands for its sky, the brief names all six and says whose is whose,
+ * and the other dated films are ruled out as answers. Null until each side has a film
+ * with its year, and the two stand-ins are different films.
+ */
+export function betweenCollision(skies: Skies): { films: [CollisionFilm, CollisionFilm]; reelFilms: CollisionFilm[]; creativeBrief: string } | null {
+  const ours = sideFilms(skies.us);
+  const theirs = sideFilms(skies.them);
+  const dated = (films: BetweenFilm[]) => films.filter((film): film is CollisionFilm => Boolean(film.year));
+  let pair: [CollisionFilm, CollisionFilm] | null = null;
+  for (const first of dated(ours)) {
+    const second = dated(theirs).find(film => filmKey(film) !== filmKey(first));
+    if (second) { pair = [first, second]; break; }
+  }
+  if (!pair) return null;
+  const ruledOut = new Map<string, CollisionFilm>();
+  for (const film of [...dated(ours), ...dated(theirs)]) if (!pair.some(anchor => filmKey(anchor) === filmKey(film))) ruledOut.set(filmKey(film), film);
+  const [one, two] = names(skies.us, skies.them);
+  const lower = one === 'One of us' ? 'one of us' : one;
+  const creativeBrief = `Two of us are choosing one film to watch together. ${one} loves ${list(ours)}; ${two} loves ${list(theirs)}. The first film stands for the films ${lower} loves, the second for the films ${two} loves: what the answer carries from each should come from that person's films, and name them. Find the one film that lives between all of them and gives each of us something real, not a compromise neither of us wanted.`;
+  return { films: pair, reelFilms: [...ruledOut.values()], creativeBrief };
+}
+
+/** The two skies as one key: the same names and the same films give the same key. */
+export function skiesKey(skies: Skies): string {
+  return JSON.stringify([skies.us, skies.them].map(side => [cleanName(side.name), sideFilms(side).map(filmKey)]));
+}
+
+/** Whether these are still the skies that were brought together, film for film. */
+export function sameSkies(a: Skies | null, b: Skies | null): boolean {
+  return Boolean(a && b) && skiesKey(a!) === skiesKey(b!);
 }
 
 /** The two names back out of a brief this room wrote, for the heading above the reel. */

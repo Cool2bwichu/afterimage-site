@@ -29,12 +29,12 @@ import { Lobby } from './components/lobby';
 import { CheckInCard } from './components/check-in';
 import { CreditsQuestion, RouteStrip } from './components/credits-question';
 import { BlindTable } from './components/blind-table';
-import { BetweenUs } from './components/between-us';
+import { BETWEEN_WORDS, BetweenUs } from './components/between-us';
 import { SCREENING_KEY, parseScreening, screeningPhase, serializeScreening, startScreening, type ProgrammeFilm, type Screening } from './lib/screening';
 import { HALF_LIFE_KEY, askLater, dueCheckIn, emptyBook, growingFilms, parseHalfLife, recordReading, serializeHalfLife, stayedRequest, type CheckIn, type HalfLifeBook, type Reading } from './lib/half-life';
 import { BLIND_KEY, emptyBlind, isVeiled, liftVeil, parseBlind, reelArrived, reveal, serializeBlind, wantBlind, type BlindState } from './lib/blind';
 import { parseRoute } from './lib/credits-question';
-import { decodeInvite, parseBetween, type BetweenSide } from './lib/between';
+import { betweenCollision, decodeInvite, parseBetween, type BetweenSide, type Skies } from './lib/between';
 import { FilmLibrary } from './components/film-library';
 import { ReelComparison } from './components/reel-comparison';
 import { WATCHLIST_KEY, parseWatchlist, toggleWatchlist, type SavedFilm } from './lib/library';
@@ -501,8 +501,8 @@ export default function Home() {
   }
 
   // ——— The Lobby ———
-  function programmeFilm(film: { title: string; year: string; tmdbId?: number; watchFor?: string; facets?: FacetMap }): ProgrammeFilm {
-    const record = metadataByKey[movieKey(film.title, film.year)];
+  function programmeFilm(film: { title: string; year: string; tmdbId?: number; watchFor?: string; facets?: FacetMap; record?: FilmEnrichment }): ProgrammeFilm {
+    const record = film.record ?? metadataByKey[movieKey(film.title, film.year)];
     const matched = record?.status === 'matched' ? record : null;
     const watchFor = film.watchFor ?? result?.recommendations.find(item => movieKey(item.title, item.year) === movieKey(film.title, film.year))?.watchFor;
     const facets = film.facets ?? facetsFor(film);
@@ -513,7 +513,7 @@ export default function Home() {
       ...(matched ? { directors: matched.directors, posterUrl: matched.posterUrl, backdropUrl: matched.backdropUrl ?? null } : {}),
     };
   }
-  function openLobby(chosen: Array<{ title: string; year: string; tmdbId?: number; watchFor?: string; facets?: FacetMap }>, opener: HTMLElement | null) {
+  function openLobby(chosen: Array<{ title: string; year: string; tmdbId?: number; watchFor?: string; facets?: FacetMap; record?: FilmEnrichment }>, opener: HTMLElement | null) {
     setVerbMenu(null);
     setLobbyOpener(opener);
     if (screening?.lightsDownAt && screeningPhase(screening, Date.now()).kind !== 'credits') {
@@ -1205,6 +1205,23 @@ export default function Home() {
     setNotice(`Between ${found.films[0].title} and ${found.films[1].title}: ${found.film.title}.`);
   }, []);
   const collision = useCollision({ onLocked: recheckConnection, onFound: collisionFound });
+  // The film between us: two skies brought together are a collision of their own.
+  const [betweenSkies, setBetweenSkies] = useState<Skies | null>(null);
+  // Closed while it develops, the room leaves a way back that outlasts the page it was opened from.
+  const [betweenAway, setBetweenAway] = useState(false);
+  const together = useCollision({ onLocked: recheckConnection, words: BETWEEN_WORDS });
+  function collideSkies(skies: Skies) {
+    const ask = betweenCollision(skies);
+    if (!ask) return;
+    setBetweenSkies(skies);
+    void together.start(ask.films[0], ask.films[1], { excludedFilms, likedFilms, creativeBrief: ask.creativeBrief, reelFilms: ask.reelFilms });
+  }
+  function closeBetween() {
+    const developing = together.state?.status === 'starting' || together.state?.status === 'developing';
+    setBetween(null);
+    clearInvite();
+    setBetweenAway(developing);
+  }
   function startCollision(first: CollisionFilm, second: CollisionFilm, opener: HTMLElement | null) {
     setCollidePick(null);
     if (collision.state && (collision.state.status === 'starting' || collision.state.status === 'developing')) {
@@ -1708,8 +1725,15 @@ export default function Home() {
           onKeep={draft => saveAfterimage(draft, { like: false, unsave: false })} /> : null}
         {creditsQuestion ? <CreditsQuestion opener={creditsQuestion.opener} onClose={() => setCreditsQuestion(null)}
           onDevelop={request => { setCreditsQuestion(null); answerQuestion(request); }} /> : null}
-        {between ? <BetweenUs opener={between.opener} invite={between.invite} canSearch={catalogueReachable}
-          onClose={() => { setBetween(null); clearInvite(); }}
+        {betweenAway && !between && together.state ? <div className="between-away" role="status"><StarGlyph />
+          <span>{together.state.result ? <>The film between you: <em>{together.state.result.film.title}</em></> : together.state.status === 'failed' ? 'The film between you could not be found this time.' : 'The film between you keeps developing.'}</span>
+          <button type="button" onClick={() => { setBetweenAway(false); setBetween({ opener: null, invite: null }); }}>{together.state.result ? 'See it' : 'Back to it'}</button>
+          <button type="button" className="between-away-close" aria-label="Dismiss" onClick={() => setBetweenAway(false)}>×</button>
+        </div> : null}
+        {between ? <BetweenUs opener={between.opener} invite={between.invite} brought={betweenSkies} collision={together.state}
+          canSearch={catalogueReachable} canAsk={connection === 'connected'} metadata={metadataByKey} savedKeys={savedKeys}
+          onClose={closeBetween} onCollide={collideSkies} onSave={film => toggleSave(film)}
+          onWatch={(film, opener, record) => { setBetween(null); clearInvite(); openLobby([{ title: film.title, year: film.year, ...(film.tmdbId ? { tmdbId: film.tmdbId } : {}), watchFor: film.watchFor, record }], opener); }}
           onDevelop={request => { setBetween(null); clearInvite(); answerQuestion(request); }} /> : null}
         {collidePick ? <CollidePicker film={collidePick.film} opener={collidePick.opener} groups={partnerGroups()} canSearch={catalogueReachable}
           onClose={() => setCollidePick(null)} onChoose={partner => startCollision(collidePick.film, partner, collidePick.opener)} /> : null}
