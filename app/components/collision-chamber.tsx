@@ -21,6 +21,19 @@ export type CollisionState = {
 
 type Extras = { excludedFilms: readonly ExcludedFilm[]; likedFilms: readonly ExcludedFilm[]; creativeBrief: string; reelFilms: readonly ExcludedFilm[] };
 
+/** What the chamber says when a collision cannot go on. Other rooms that collide can say it their own way. */
+const WORDS = {
+  locked: 'Unlock AFTERIMAGE first, then collide them again.',
+  busy: 'A reel or an Atlas is developing. Collide these two again once it is ready.',
+  unstarted: 'The collision could not start. Try again in a moment.',
+  relocked: 'Unlock AFTERIMAGE again to see this collision.',
+  expired: 'This collision has expired. Collide the two films again.',
+  incomplete: 'The collision came back incomplete. Try again.',
+  unfinished: 'The collision could not be finished.',
+  paused: 'The connection to the companion paused. Try the collision again.',
+};
+export type CollisionWords = typeof WORDS;
+
 function failureMessage(payload: unknown, fallback: string) {
   return payload && typeof payload === 'object' && 'error' in payload && typeof payload.error === 'string' && payload.error.trim()
     ? payload.error.trim().slice(0, 300) : fallback;
@@ -30,11 +43,13 @@ function failureMessage(payload: unknown, fallback: string) {
  * Runs one collision as a job on the companion (or in the page, in the Artifact edition).
  * The job keeps developing when the chamber is closed; reopening shows where it is.
  */
-export function useCollision({ onLocked, onFound }: { onLocked: () => void; onFound: (result: CollisionResult) => void }) {
+export function useCollision({ onLocked, onFound, words }: { onLocked: () => void; onFound?: (result: CollisionResult) => void; words?: Partial<CollisionWords> }) {
   const [state, setState] = useState<CollisionState | null>(null);
   const [open, setOpen] = useState(false);
   const found = useRef(onFound);
   useEffect(() => { found.current = onFound; }, [onFound]);
+  const say = useRef({ ...WORDS, ...words });
+  useEffect(() => { say.current = { ...WORDS, ...words }; }, [words]);
 
   const start = useCallback(async (first: CollisionFilm, second: CollisionFilm, extras: Extras) => {
     const films: [CollisionFilm, CollisionFilm] = [first, second];
@@ -46,13 +61,13 @@ export function useCollision({ onLocked, onFound }: { onLocked: () => void; onFo
         body: JSON.stringify(buildCollisionInput(first, second, extras)), signal: AbortSignal.timeout(15000),
       });
       const payload: unknown = await response.json().catch(() => null);
-      if (response.status === 401) { onLocked(); throw new Error('Unlock AFTERIMAGE first, then collide them again.'); }
-      if (response.status === 409) throw new Error('A reel or an Atlas is developing. Collide these two again once it is ready.');
-      if (response.status !== 202) throw new Error(failureMessage(payload, 'The collision could not start. Try again in a moment.'));
+      if (response.status === 401) { onLocked(); throw new Error(say.current.locked); }
+      if (response.status === 409) throw new Error(say.current.busy);
+      if (response.status !== 202) throw new Error(failureMessage(payload, say.current.unstarted));
       const job = parseJobStart(payload);
       setState(current => current && current.films === films ? { ...current, status: 'developing', jobId: job.jobId } : current);
     } catch (reason) {
-      setState(current => current && current.films === films ? { ...current, status: 'failed', error: reason instanceof Error ? reason.message : 'The collision could not start.' } : current);
+      setState(current => current && current.films === films ? { ...current, status: 'failed', error: reason instanceof Error ? reason.message : say.current.unstarted } : current);
     }
   }, [onLocked]);
 
@@ -67,22 +82,22 @@ export function useCollision({ onLocked, onFound }: { onLocked: () => void; onFo
       let delay = 2000;
       try {
         const response = await apiFetch(`/api/generations/${encodeURIComponent(jobId)}`, { cache: 'no-store', signal: AbortSignal.any([controller.signal, AbortSignal.timeout(12000)]) });
-        if (response.status === 401) { onLocked(); settle({ status: 'failed', error: 'Unlock AFTERIMAGE again to see this collision.' }); return; }
-        if (response.status === 404) { settle({ status: 'failed', error: 'This collision has expired. Collide the two films again.' }); return; }
+        if (response.status === 401) { onLocked(); settle({ status: 'failed', error: say.current.relocked }); return; }
+        if (response.status === 404) { settle({ status: 'failed', error: say.current.expired }); return; }
         if (!response.ok) throw new Error('reconnecting');
         const job: unknown = await response.json();
         if (!job || typeof job !== 'object' || (job as { jobId?: unknown }).jobId !== jobId) throw new Error('unexpected');
         const record = job as Record<string, unknown>;
         if (record.status === 'complete') {
           const result = parseCollision(record.reel);
-          if (!result) { settle({ status: 'failed', error: 'The collision came back incomplete. Try again.' }); return; }
+          if (!result) { settle({ status: 'failed', error: say.current.incomplete }); return; }
           settle({ status: 'complete', result, draft: undefined });
-          found.current(result);
+          found.current?.(result);
           return;
         }
         if (record.status === 'failed') {
           const error = record.error && typeof record.error === 'object' && typeof (record.error as { message?: unknown }).message === 'string'
-            ? String((record.error as { message: string }).message).slice(0, 300) : 'The collision could not be finished.';
+            ? String((record.error as { message: string }).message).slice(0, 300) : say.current.unfinished;
           settle({ status: 'failed', error });
           return;
         }
@@ -92,7 +107,7 @@ export function useCollision({ onLocked, onFound }: { onLocked: () => void; onFo
         failures = 0;
       } catch {
         if (controller.signal.aborted) return;
-        if (++failures >= 5) { settle({ status: 'failed', error: 'The connection to the companion paused. Try the collision again.' }); return; }
+        if (++failures >= 5) { settle({ status: 'failed', error: say.current.paused }); return; }
       }
       if (!controller.signal.aborted) timer = setTimeout(poll, delay);
     };

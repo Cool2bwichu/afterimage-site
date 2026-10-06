@@ -11,7 +11,7 @@ import { CelestialSky, OrbitMark } from './celestial';
 import type { HoldProps } from './film-verbs';
 
 export function ScreeningReel({ films, metadata, selected, onSelect, onOpen, onExplore, likedKeys, savedKeys, afterimageKeys, onLike, onSave, onAfterimage,
-  onResolve, selectedFacets, onBorrow, locked, pending, lightTable, onReplace, onCompare, hold }: {
+  onResolve, selectedFacets, onBorrow, locked, pending, lightTable, onReplace, onCompare, hold, onWatch, heading }: {
   films: RecommendationV2[]; metadata: Record<string, FilmEnrichment>; selected: number;
   onSelect: (index: number) => void; onOpen: (index: number, event: MouseEvent<HTMLButtonElement>) => void;
   onExplore: (index: number, event: MouseEvent<HTMLButtonElement>) => void;
@@ -23,6 +23,10 @@ export function ScreeningReel({ films, metadata, selected, onSelect, onOpen, onE
   locked: boolean; pending: boolean; lightTable: ReactNode; onReplace?: (index: number) => void;
   /** Press and hold (or right-click) a film for its verbs. */
   hold?: (payload: { film: RecommendationV2; index: number }) => HoldProps;
+  /** Into the lobby: watch this film tonight. */
+  onWatch?: (film: RecommendationV2, opener: HTMLElement) => void;
+  /** The billing block's heading and subtitle, when the reel was asked for in a particular way. */
+  heading?: { title: string; subtitle: string };
 }) {
   const [comparing, setComparing] = useState(false);
   const [compareWith, setCompareWith] = useState(1);
@@ -42,6 +46,18 @@ export function ScreeningReel({ films, metadata, selected, onSelect, onOpen, onE
   const details = record?.status === 'matched' ? record : null;
   const still = details?.backdropUrl && !failed.includes(details.backdropUrl) ? details.backdropUrl : null;
   const artwork = still || (details?.posterUrl && !failed.includes(details.posterUrl) ? details.posterUrl : null);
+  // The afterimage: when the screen changes film, the last image lingers for a moment in
+  // its complementary colours, the way an image stays on the eye after you look away.
+  const [ghost, setGhost] = useState<string | null>(null);
+  const lastArtwork = useRef<string | null>(null);
+  useEffect(() => {
+    const previous = lastArtwork.current;
+    lastArtwork.current = artwork;
+    if (!previous || !artwork || previous === artwork) return;
+    const show = window.setTimeout(() => setGhost(previous), 0);
+    const hide = window.setTimeout(() => setGhost(null), 2300);
+    return () => { window.clearTimeout(show); window.clearTimeout(hide); };
+  }, [artwork]);
   function move(event: KeyboardEvent, position: number) {
     const next = event.key === 'ArrowDown' || event.key === 'ArrowRight' ? (position + 1) % films.length
       : event.key === 'ArrowUp' || event.key === 'ArrowLeft' ? (position + films.length - 1) % films.length
@@ -57,6 +73,7 @@ export function ScreeningReel({ films, metadata, selected, onSelect, onOpen, onE
           sizes={still ? '(max-width: 760px) 100vw, 75vw' : undefined}
           alt={`${film.title} ${still ? 'film still' : 'poster'}`} fetchPriority="high" decoding="async"
           onError={() => setFailed(current => [...current, artwork])} /> : <div className="screening-artwork-fallback" aria-hidden="true"><CelestialSky variant="reel" /><div className="screening-empty-aperture"><OrbitMark /></div><p>{pending ? 'Finding the film image' : 'An image yet to come into focus'}</p></div>}
+        {ghost && ghost !== artwork ? <img key={ghost} className="screening-ghost" src={ghost} alt="" aria-hidden="true" decoding="async" /> : null}
         <span className="screening-projector" aria-hidden="true"><i className="screening-beam" /><i className="screening-grain" /></span>
         <div className="screening-frame" aria-hidden="true"><span>{String(index + 1).padStart(2, '0')} / {String(films.length).padStart(2, '0')}</span><i /><span>AFTERIMAGE · YOUR REEL</span></div>
         <div className="screening-caption" key={key}>
@@ -64,11 +81,11 @@ export function ScreeningReel({ films, metadata, selected, onSelect, onOpen, onE
           <h2 id="screening-title">{film.title}</h2>
           <p className="screening-credits"><span>{film.year}</span>{details?.directors.length ? <span>{details.directors.join(', ')}</span> : null}{details?.runtime ? <span>{details.runtime} min</span> : null}</p>
           <p className="screening-reason">{film.reason}</p>
-          <div className="screening-actions"><button type="button" className="screening-read" onClick={event => onOpen(index, event)}>Read the film notes <span aria-hidden="true">↗</span></button><button type="button" aria-pressed={savedKeys.has(key)} onClick={() => onSave(film)}>{savedKeys.has(key) ? 'Saved to watchlist ✓' : 'Save for later +'}</button><LikeButton film={film} liked={likedKeys.has(key)} onToggle={() => onLike(film)} /><button type="button" className="screening-afterimage" aria-pressed={afterimageKeys.has(key)} aria-label={afterimageKeys.has(key) ? `Revisit your afterimage of ${film.title}` : `Watched ${film.title}? Keep what stayed with you`} onClick={event => onAfterimage(film, event.currentTarget)}><span aria-hidden="true">✦</span>{afterimageKeys.has(key) ? 'Afterimage kept' : 'Watched it?'}</button></div>
+          <div className="screening-actions">{onWatch ? <button type="button" className="screening-tonight" onClick={event => onWatch(film, event.currentTarget)}>Watch it tonight <span aria-hidden="true">↗</span></button> : null}<button type="button" className="screening-read" onClick={event => onOpen(index, event)}>Read the film notes <span aria-hidden="true">↗</span></button><button type="button" aria-pressed={savedKeys.has(key)} onClick={() => onSave(film)}>{savedKeys.has(key) ? 'Saved to watchlist ✓' : 'Save for later +'}</button><LikeButton film={film} liked={likedKeys.has(key)} onToggle={() => onLike(film)} /><button type="button" className="screening-afterimage" aria-pressed={afterimageKeys.has(key)} aria-label={afterimageKeys.has(key) ? `Revisit your afterimage of ${film.title}` : `Watched ${film.title}? Keep what stayed with you`} onClick={event => onAfterimage(film, event.currentTarget)}><span aria-hidden="true">✦</span>{afterimageKeys.has(key) ? 'Afterimage kept' : 'Watched it?'}</button></div>
         </div>
       </article>
       <nav className="reel-index" aria-label="Your five films">
-        <header><h3>Your reel</h3><span>Five films, considered together</span></header>
+        <header><h3>{heading?.title ?? 'Your reel'}</h3><span>{heading?.subtitle ?? 'Five films, considered together'}</span></header>
         <ol>{films.map((item, position) => {
           const meta = metadata[movieKey(item.title, item.year)];
           const held = hold?.({ film: item, index: position });

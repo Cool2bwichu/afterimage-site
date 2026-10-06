@@ -24,7 +24,17 @@ import { YourSky } from './components/your-sky';
 import { ReelConstellation } from './components/reel-constellation';
 import { ChartingRoom, announceReady, useDevelopingTitle } from './components/charting';
 import { AfterimageLog, type AfterimageTarget } from './components/afterimage-log';
-import { AFTERIMAGE_JOURNAL_KEY, findAfterimage, parseAfterimages, removeAfterimage, serializeAfterimages, upsertAfterimage, type AfterimageDraft, type AfterimageEntry } from './lib/afterimages';
+import { AFTERIMAGE_JOURNAL_KEY, findAfterimage, localDate, parseAfterimages, removeAfterimage, serializeAfterimages, upsertAfterimage, type AfterimageDraft, type AfterimageEntry } from './lib/afterimages';
+import { Lobby } from './components/lobby';
+import { CheckInCard } from './components/check-in';
+import { CreditsQuestion, RouteStrip } from './components/credits-question';
+import { BlindTable } from './components/blind-table';
+import { BETWEEN_WORDS, BetweenUs } from './components/between-us';
+import { SCREENING_KEY, parseScreening, screeningPhase, serializeScreening, startScreening, type ProgrammeFilm, type Screening } from './lib/screening';
+import { HALF_LIFE_KEY, askLater, dueCheckIn, emptyBook, growingFilms, parseHalfLife, recordReading, serializeHalfLife, stayedRequest, type CheckIn, type HalfLifeBook, type Reading } from './lib/half-life';
+import { BLIND_KEY, emptyBlind, isVeiled, liftVeil, parseBlind, reelArrived, reveal, serializeBlind, wantBlind, type BlindState } from './lib/blind';
+import { parseRoute } from './lib/credits-question';
+import { betweenCollision, decodeInvite, parseBetween, type BetweenSide, type Skies } from './lib/between';
 import { FilmLibrary } from './components/film-library';
 import { ReelComparison } from './components/reel-comparison';
 import { WATCHLIST_KEY, parseWatchlist, toggleWatchlist, type SavedFilm } from './lib/library';
@@ -128,6 +138,17 @@ export default function Home() {
   const [watchlist, setWatchlist] = useState<SavedFilm[]>([]);
   const [afterimages, setAfterimages] = useState<AfterimageEntry[]>([]);
   const [afterimageTarget, setAfterimageTarget] = useState<{ film: AfterimageTarget; opener: HTMLElement | null } | null>(null);
+  // The rooms around the reel: the Lobby and its screening, the journal's half-life,
+  // the veil of a blind reel, and the two entrances that ask in another way.
+  const [screening, setScreening] = useState<Screening | null>(null);
+  const [lobbyOpen, setLobbyOpen] = useState(false);
+  const [lobbyOpener, setLobbyOpener] = useState<HTMLElement | null>(null);
+  const [halfLife, setHalfLife] = useState<HalfLifeBook>(emptyBook);
+  const [checkIn, setCheckIn] = useState<CheckIn | null>(null);
+  const [blind, setBlind] = useState<BlindState>(emptyBlind);
+  const blindRef = useRef(blind);
+  const [creditsQuestion, setCreditsQuestion] = useState<{ opener: HTMLElement | null } | null>(null);
+  const [between, setBetween] = useState<{ opener: HTMLElement | null; invite: BetweenSide | null } | null>(null);
   const [skyOpen, setSkyOpen] = useState(false);
   const [skyOpener, setSkyOpener] = useState<HTMLElement | null>(null);
   const [libraryOpen, setLibraryOpen] = useState(false);
@@ -250,7 +271,19 @@ export default function Home() {
         }
         setLikedFilms(parseLikedFilms(localStorage.getItem(TASTE_STORAGE_KEY)));
         setWatchlist(parseWatchlist(localStorage.getItem(WATCHLIST_KEY)));
-        setAfterimages(parseAfterimages(localStorage.getItem(AFTERIMAGE_JOURNAL_KEY)));
+        const journal = parseAfterimages(localStorage.getItem(AFTERIMAGE_JOURNAL_KEY));
+        setAfterimages(journal);
+        const book = parseHalfLife(localStorage.getItem(HALF_LIFE_KEY));
+        setHalfLife(book);
+        setCheckIn(dueCheckIn(journal, book, localDate()));
+        const veil = parseBlind(localStorage.getItem(BLIND_KEY));
+        blindRef.current = veil; setBlind(veil);
+        // A screening whose lights went down is resumed: in the dark, or with the usher waiting.
+        const tonight = parseScreening(localStorage.getItem(SCREENING_KEY));
+        if (tonight?.lightsDownAt) { setScreening(tonight); setLobbyOpen(true); }
+        else localStorage.removeItem(SCREENING_KEY);
+        const invite = decodeInvite(new URLSearchParams(window.location.search).get('between'));
+        if (invite) setBetween({ opener: null, invite });
         setWelcomeRequested(new URLSearchParams(window.location.search).get('welcome') === '1');
         const requested = new URLSearchParams(window.location.search).get('experience');
         const mode = requested === null ? saved.experience : requested === LIGHT_TABLE_EXPERIENCE ? LIGHT_TABLE_EXPERIENCE : undefined;
@@ -303,6 +336,20 @@ export default function Home() {
   function saveWatchlist(next: SavedFilm[]) {
     try { localStorage.setItem(WATCHLIST_KEY, JSON.stringify(next)); setWatchlist(next); return true; }
     catch { setNotice('This browser could not save your watchlist. Keep this page open and try again.'); return false; }
+  }
+  function saveHalfLife(next: HalfLifeBook) {
+    try { localStorage.setItem(HALF_LIFE_KEY, serializeHalfLife(next)); } catch { /* The answer still counts for this visit. */ }
+    setHalfLife(next);
+  }
+  function saveBlind(next: BlindState) {
+    try { localStorage.setItem(BLIND_KEY, serializeBlind(next)); } catch { /* The veil still holds for this visit. */ }
+    blindRef.current = next; setBlind(next);
+  }
+  function saveScreening(next: Screening | null) {
+    try { if (next) localStorage.setItem(SCREENING_KEY, serializeScreening(next)); else localStorage.removeItem(SCREENING_KEY); }
+    catch { /* The screening still runs while this page is open. */ }
+    setScreening(next);
+    if (!next) setLobbyOpen(false);
   }
   function toggleSave(film: SavedFilm) {
     const record = metadataByKey[movieKey(film.title, film.year)];
@@ -447,10 +494,59 @@ export default function Home() {
     const fromAtlas = atlasTrail.maps.flatMap(map => [map.atlas.anchor, ...map.atlas.neighbors]).find(item => movieKey(item.title, item.year) === key)?.facets;
     return fromReel(result) ?? reels.map(reel => fromReel(reel.state.result)).find(Boolean) ?? fromAtlas;
   }
-  function openAfterimage(film: { title: string; year: string; tmdbId?: number }, opener: HTMLElement | null) {
+  function openAfterimage(film: { title: string; year: string; tmdbId?: number; facets?: FacetMap }, opener: HTMLElement | null) {
     const details = metadataByKey[movieKey(film.title, film.year)];
     const tmdbId = film.tmdbId ?? (details?.status === 'matched' ? details.tmdbId : undefined);
-    setAfterimageTarget({ film: { title: film.title, year: film.year, ...(tmdbId ? { tmdbId } : {}), facets: facetsFor(film) }, opener });
+    setAfterimageTarget({ film: { title: film.title, year: film.year, ...(tmdbId ? { tmdbId } : {}), facets: facetsFor(film) ?? film.facets }, opener });
+  }
+
+  // ——— The Lobby ———
+  function programmeFilm(film: { title: string; year: string; tmdbId?: number; watchFor?: string; facets?: FacetMap; record?: FilmEnrichment }): ProgrammeFilm {
+    const record = film.record ?? metadataByKey[movieKey(film.title, film.year)];
+    const matched = record?.status === 'matched' ? record : null;
+    const watchFor = film.watchFor ?? result?.recommendations.find(item => movieKey(item.title, item.year) === movieKey(film.title, film.year))?.watchFor;
+    const facets = film.facets ?? facetsFor(film);
+    return {
+      title: film.title, year: film.year, runtime: matched?.runtime ?? null,
+      ...(film.tmdbId ?? matched?.tmdbId ? { tmdbId: film.tmdbId ?? matched?.tmdbId } : {}),
+      ...(watchFor ? { watchFor } : {}), ...(facets ? { facets } : {}),
+      ...(matched ? { directors: matched.directors, posterUrl: matched.posterUrl, backdropUrl: matched.backdropUrl ?? null } : {}),
+    };
+  }
+  function openLobby(chosen: Array<{ title: string; year: string; tmdbId?: number; watchFor?: string; facets?: FacetMap; record?: FilmEnrichment }>, opener: HTMLElement | null) {
+    setVerbMenu(null);
+    setLobbyOpener(opener);
+    if (screening?.lightsDownAt && screeningPhase(screening, Date.now()).kind !== 'credits') {
+      setNotice(`${screening.films[0].title} is still showing. Your seat is waiting.`);
+      setLobbyOpen(true);
+      return;
+    }
+    saveScreening(startScreening(chosen.map(programmeFilm)));
+    setLobbyOpen(true);
+  }
+  const openSeat = useCallback(() => setLobbyOpen(true), []);
+  const lobbyCandidates = useMemo(() => {
+    if (!screening || screening.lightsDownAt) return [];
+    const taken = new Set(screening.films.map(film => movieKey(film.title, film.year)));
+    const seen = new Set<string>();
+    return [...(result?.recommendations ?? []), ...[...watchlist].reverse()].filter(film => {
+      const key = movieKey(film.title, film.year);
+      if (taken.has(key) || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    }).slice(0, 6).map(film => programmeFilm(film));
+    // The candidates are read when the lobby is open; lookups arriving later only add running times.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [screening, result, watchlist, metadataByKey]);
+
+  // ——— Half-life ———
+  const growing = useMemo(() => growingFilms(afterimages, halfLife), [afterimages, halfLife]);
+  function answerCheckIn(reading: Reading) {
+    if (checkIn) saveHalfLife(recordReading(halfLife, checkIn.entry, checkIn.checkpoint.id, reading, localDate()));
+  }
+  function laterCheckIn() {
+    if (checkIn) saveHalfLife(askLater(halfLife, checkIn.entry, localDate()));
+    setCheckIn(null);
   }
   function saveAfterimage(draft: AfterimageDraft, options: { like: boolean; unsave: boolean }): string | null {
     let next: AfterimageEntry[];
@@ -479,6 +575,7 @@ export default function Home() {
       if (event.storageArea === localStorage && (event.key === TASTE_STORAGE_KEY || event.key === null)) setLikedFilms(parseLikedFilms(event.newValue));
       if (event.storageArea === localStorage && (event.key === REEL_HISTORY_KEY || event.key === null)) { const next = parseReelHistory(event.newValue); reelsRef.current = next; setReels(next); }
       if (event.storageArea === localStorage && (event.key === AFTERIMAGE_JOURNAL_KEY || event.key === null)) setAfterimages(parseAfterimages(event.newValue));
+      if (event.storageArea === localStorage && (event.key === HALF_LIFE_KEY || event.key === null)) setHalfLife(parseHalfLife(event.newValue));
     };
     window.addEventListener('storage', syncLikes);
     return () => window.removeEventListener('storage', syncLikes);
@@ -598,6 +695,11 @@ export default function Home() {
           }
           setDisplayedInput(acceptedInputForResumedJob(activeJobId, acceptedInputJobId || undefined, acceptedInput));
           setResult(terminal.reel);
+          // A blind reel arrives veiled; a single replacement never takes the veil.
+          if (!replaced) {
+            const veil = reelArrived(blindRef.current, getRecommendationIdentity(terminal.reel));
+            if (veil !== blindRef.current) { blindRef.current = veil; setBlind(veil); try { localStorage.setItem(BLIND_KEY, serializeBlind(veil)); } catch { /* The veil holds for this visit. */ } }
+          }
           setScreeningIndex(replaced?.index ?? 0);
           setReplacementJob(undefined);
           setComposerOpen(false);
@@ -1103,6 +1205,23 @@ export default function Home() {
     setNotice(`Between ${found.films[0].title} and ${found.films[1].title}: ${found.film.title}.`);
   }, []);
   const collision = useCollision({ onLocked: recheckConnection, onFound: collisionFound });
+  // The film between us: two skies brought together are a collision of their own.
+  const [betweenSkies, setBetweenSkies] = useState<Skies | null>(null);
+  // Closed while it develops, the room leaves a way back that outlasts the page it was opened from.
+  const [betweenAway, setBetweenAway] = useState(false);
+  const together = useCollision({ onLocked: recheckConnection, words: BETWEEN_WORDS });
+  function collideSkies(skies: Skies) {
+    const ask = betweenCollision(skies);
+    if (!ask) return;
+    setBetweenSkies(skies);
+    void together.start(ask.films[0], ask.films[1], { excludedFilms, likedFilms, creativeBrief: ask.creativeBrief, reelFilms: ask.reelFilms });
+  }
+  function closeBetween() {
+    const developing = together.state?.status === 'starting' || together.state?.status === 'developing';
+    setBetween(null);
+    clearInvite();
+    setBetweenAway(developing);
+  }
   function startCollision(first: CollisionFilm, second: CollisionFilm, opener: HTMLElement | null) {
     setCollidePick(null);
     if (collision.state && (collision.state.status === 'starting' || collision.state.status === 'developing')) {
@@ -1153,6 +1272,7 @@ export default function Home() {
           }, 60);
         },
       }] : []),
+      { id: 'tonight', label: 'Watch it tonight', detail: 'Into the lobby, then the lights go down', run: opener => openLobby([inReel && reelFilm ? reelFilm : film], opener) },
       { id: 'watched', label: afterimageKeys.has(key) ? 'Your ticket stub' : 'Watched it?', detail: afterimageKeys.has(key) ? 'Revisit what stayed' : 'Keep what stayed, and a ticket stub', run: opener => openAfterimage(film, opener) },
       { id: 'like', label: likedKeys.has(key) ? 'Unlike' : 'Like', run: () => toggleLike({ title: film.title, year: film.year }) },
       { id: 'save', label: savedKeys.has(key) ? 'Remove from watchlist' : 'Save for later', run: () => toggleSave(film) },
@@ -1204,6 +1324,37 @@ export default function Home() {
   const roomLight = result ? filmLight(result.palette, screeningIndex) : ROOM_DEFAULT;
   const roomLoved = Boolean(screenFilm && likedKeys.has(movieKey(screenFilm.title, screenFilm.year)));
 
+  // How the reel was asked for, when an entrance asked in its own way.
+  const route = parseRoute(displayedInput?.creativeBrief);
+  const pair = parseBetween(displayedInput?.creativeBrief);
+  const requestLine = route ? `From ${route.now} to ${route.credits}${route.double ? ', as a double feature' : ''}`
+    : pair ? `Between ${pair.first === 'One of us' ? 'the two of you' : `${pair.first} and ${pair.second}`}` : null;
+  // Blind screening: the reel stays veiled until a film is chosen or the veil is lifted.
+  // Every moment can be said yes to before the veil lifts; then the whole reel shows.
+  const veiled = Boolean(result) && isVeiled(blind, recommendationIdentity);
+  const revealedKeys = useMemo(() => new Set(blind.revealed), [blind]);
+  function chooseBlind(film: { title: string; year: string }, index: number) {
+    saveBlind(reveal(blind, film));
+    setScreeningIndex(index);
+  }
+  function liftBlind() {
+    saveBlind(liftVeil(blind));
+    setNotice('The veil is lifted.');
+    requestAnimationFrame(() => resultsRef.current?.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth', block: 'start' }));
+  }
+  function clearInvite() {
+    const url = new URL(location.href);
+    if (!url.searchParams.has('between')) return;
+    url.searchParams.delete('between');
+    history.replaceState(history.state, '', url);
+  }
+  const activeOpener = () => document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  const checkInCard = checkIn ? <CheckInCard key={`${movieKey(checkIn.entry.title, checkIn.entry.year)}:${checkIn.checkpoint.id}`} checkIn={checkIn}
+    entries={afterimages} book={halfLife} liked={likedKeys.has(movieKey(checkIn.entry.title, checkIn.entry.year))} canDevelop={!reelLocked} growingCount={growing.length}
+    onAnswer={answerCheckIn} onLater={laterCheckIn} onClose={() => setCheckIn(null)}
+    onLike={() => toggleLike({ title: checkIn.entry.title, year: checkIn.entry.year })}
+    onDevelop={() => { const request = stayedRequest(growing); if (request) { setCheckIn(null); answerQuestion(request); } }} /> : null;
+
   const collectionMenu = <CollectionMenu atlasCount={atlasTrail.maps.length} reelCount={reels.length} savedCount={watchlist.length} likedCount={likedFilms.length} starCount={starCount} afterimageCount={afterimages.length} recentAtlas={activeAtlasStop(atlasTrail) ?? undefined} onNavigate={navigateCollection} />;
   const skyLink = <a className={`sky-link${hydrated && !starCount ? ' is-empty' : ''}`} href="#sky" aria-label={`Your sky${hydrated && starCount ? `, ${starCount} films` : ''}`} onClick={event => { if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); navigateCollection('#sky', event.currentTarget); }}>
     <StarGlyph /><span>Your sky</span>{hydrated && starCount ? <small>{starCount}</small> : null}</a>;
@@ -1229,15 +1380,18 @@ export default function Home() {
           </div>}
         </header>
         {showLanding ? <Landing featuredFilm={featuredFilm} onStart={() => enterReel()} onAnswer={answerQuestion} onEyeTest={() => openEyeTest()}
+          onCredits={() => setCreditsQuestion({ opener: activeOpener() })} onBetween={() => setBetween({ opener: activeOpener(), invite: null })}
+          blind={blind.pending} onBlind={on => saveBlind(wantBlind(blind, on))} checkIn={checkInCard}
           canSearch={catalogueReachable} hasDraft={hasSession} hasReel={Boolean(result)} /> : null}
         <div className="reel-workspace" hidden={showLanding}>
         {!hydrated ? <p className="opening" role="status">Opening your reel…</p> : null}
+        {!showLanding && !developing ? checkInCard : null}
         {!result ? <div className="arrival">
           <h2>Find what stays with you.</h2>
           <p className="subtitle">Add films you love, describe what you are searching for,
             or combine both.</p>
         </div> : <section className="request-summary" aria-label="Current reel references">
-          <div className="request-copy"><span className="panel-label">Your reel</span><p>{displayedInput?.creativeBrief || (result.sourceFilms.length ? result.sourceFilms.join(' + ') : Object.values(displayedInput?.selectedFacets ?? {}).map(facet => facet.label).join(' · ') || 'A blend of selected qualities')}</p>
+          <div className="request-copy"><span className="panel-label">{route ? 'The credits question' : pair ? 'The film between us' : 'Your reel'}</span><p>{requestLine || displayedInput?.creativeBrief || (result.sourceFilms.length ? result.sourceFilms.join(' + ') : Object.values(displayedInput?.selectedFacets ?? {}).map(facet => facet.label).join(' · ') || 'A blend of selected qualities')}</p>
           <button type="button" onClick={() => setComposerOpen(!composerOpen)} disabled={reelLocked}>{composerOpen ? 'Close inputs' : 'Refine request'} <span aria-hidden="true">{composerOpen ? '−' : '+'}</span></button>
           </div>
           {result.sourceFilms.length ? <div className="request-references"><span className="panel-label">Reference films</span><p>{result.sourceFilms.join(' · ')}</p></div> : null}
@@ -1247,7 +1401,7 @@ export default function Home() {
           <ChartingRoom variant={replacementJob ? 'replacement' : 'reel'} message={replacementJob ? 'Finding one new film' : leaderMessage}
             detail={result ? 'Your previous reel is still here. You can browse it while you wait.' : 'You can refresh this page; your accepted reel will resume.'}
             elapsed={jobStartedAt !== null ? `${Math.floor(elapsedSeconds / 60)}:${String(elapsedSeconds % 60).padStart(2, '0')}` : null}
-            sources={chartingSources} draft={jobDraft} posterFor={draftPoster} />
+            sources={chartingSources} draft={jobDraft} posterFor={draftPoster} veiled={blind.pending && !replacementJob} />
         ) : null}
 
         {connection !== 'connected' && connection !== 'checking' ? (
@@ -1369,6 +1523,10 @@ export default function Home() {
             />
           </div>
 
+          <label className="blind-toggle">
+            <input type="checkbox" checked={blind.pending} onChange={event => saveBlind(wantBlind(blind, event.target.checked))} disabled={reelLocked} />
+            <span><strong>Blind screening</strong> The reel arrives veiled: no titles, posters or names until you choose.</span>
+          </label>
           <button
             className="develop-button"
             disabled={!ready || reelLocked || connection !== 'connected'}
@@ -1421,6 +1579,9 @@ export default function Home() {
           <section className="results" aria-live="polite" ref={resultsRef}>
             <div className={developing ? "reel-heading" : "sr-only"}><h2>{developing ? 'Your previous reel' : 'Your reel'}</h2><span>Five films, considered together.</span></div>
 
+            {veiled ? <BlindTable key={recommendationIdentity} films={result.recommendations} palette={result.palette} metadata={metadataByKey} revealed={revealedKeys} savedKeys={savedKeys}
+              onReveal={chooseBlind} onLift={liftBlind} onWatch={(film, opener) => openLobby([film], opener)} onSave={toggleSave} /> : <>
+            {route ? <RouteStrip route={route} films={result.recommendations} metadata={metadataByKey} onWatchDouble={opener => openLobby(result.recommendations.slice(0, 2), opener)} /> : null}
             <ReelConstellation key={`constellation-${recommendationIdentity}`} seed={recommendationIdentity} name={result.persona} insight={result.insight} palette={result.palette}
               films={result.recommendations} selected={screeningIndex} onSelect={setScreeningIndex} onNotice={setNotice}
               onOpenSky={opener => navigateCollection('#sky', opener)} hold={holdFilm}
@@ -1432,7 +1593,8 @@ export default function Home() {
               selectedFacets={selectedFacets} onBorrow={lightTableEnabled ? handleSelectFacet : undefined}
               lightTable={selectedRecommendation === null && !atlasTarget ? lightTable : null}
               onOpen={(index, event) => openDossier(index, event.currentTarget)}
-              onExplore={(index, event) => openAtlas(result.recommendations[index], event.currentTarget)} hold={holdFilm} />
+              onExplore={(index, event) => openAtlas(result.recommendations[index], event.currentTarget)} hold={holdFilm}
+              onWatch={(film, opener) => openLobby([film], opener)} heading={pair ? { title: 'Between you', subtitle: 'Five films for both of you' } : undefined} />
             {lightTableEnabled && result.fingerprint ? <details className="reel-fingerprint"><summary>The qualities behind this reel <span>+</span></summary><SearchFingerprint fingerprint={result.fingerprint} insight={result.insight} /></details> : null}
 
             <section className="atlas-entry"><div><h3>Atlas</h3><p>Films are never alone. Explore the connections around a film, and find what carries through.</p></div><button type="button" disabled={developing} onClick={event => openAtlas(result.recommendations[screeningIndex] || result.recommendations[0], event.currentTarget)}>Explore connections ↗</button></section>
@@ -1450,7 +1612,13 @@ export default function Home() {
                 <p><strong>{result.spiritDirector.name}</strong> — {result.spiritDirector.reason}</p>
               </div>
             </div></details>
+            </>}
 
+            <section className="reel-end" aria-label="End of reel">
+              <i className="reel-end-runout" aria-hidden="true" />
+              <h3>End of reel</h3>
+              <p>{veiled ? 'Five moments, unnamed. Say yes to one, or lift the veil.' : 'Five films, and then the lights come up. A reel is never a feed.'}</p>
+            </section>
             <div className="reroll-panel">
               <button
                 type="button"
@@ -1462,6 +1630,10 @@ export default function Home() {
               <p>{lightTableEnabled && result.fingerprint && !displayedInput
                 ? 'This reel resumed from another session. Borrow qualities or start a new search to continue.'
                 : lightTableEnabled && displayedInput?.selectedFacets ? 'Keep this blend and replace all five recommendations.' : 'Keep this prompt and replace all five recommendations.'}</p>
+              <label className="blind-toggle is-quiet">
+                <input type="checkbox" checked={blind.pending} onChange={event => saveBlind(wantBlind(blind, event.target.checked))} disabled={reelLocked} />
+                <span>Develop the next one blind</span>
+              </label>
             </div>
 
             <FilmDossier
@@ -1531,19 +1703,38 @@ export default function Home() {
           watchlist={watchlist} likes={likedFilms} afterimages={afterimages} onRemove={toggleSave} onUnlike={toggleLike}
           onEditAfterimage={(entry, opener) => openAfterimage(entry, opener)} onRemoveAfterimage={entry => forgetAfterimage(entry)}
           onImport={next => { if (!saveWatchlist(next)) throw new Error('The backup could not be saved in this browser.'); }}
-          onExplore={(film, opener) => { setLibraryOpen(false); openAtlas(film, libraryOpener || opener, false, true); }} />
+          onExplore={(film, opener) => { setLibraryOpen(false); openAtlas(film, libraryOpener || opener, false, true); }}
+          onWatch={(film, opener) => openLobby([film], opener)} />
         <YourSky open={skyOpen} opener={skyOpener} onClose={closeSky} reels={reels} atlases={atlasTrail.maps} likes={likedFilms} watchlist={watchlist} afterimages={afterimages}
           metadataByKey={metadataByKey} likedKeys={likedKeys} savedKeys={savedKeys} canExplore={connection === 'connected' && !reelLocked}
           onLike={toggleLike} onSave={toggleSave} onLogAfterimage={(film, opener) => openAfterimage(film, opener)} onNavigate={navigateCollection}
           onCollide={connection === 'connected' ? (film, opener) => setCollidePick({ film, opener }) : undefined}
           onExplore={(film, opener) => { setSkyOpen(false); openAtlas(film, skyOpener || opener, false, true); }}
-          onBegin={() => { setSkyOpen(false); enterReel(); }} />
+          onBegin={() => { setSkyOpen(false); enterReel(); }}
+          halfLife={halfLife} canLookUp={catalogueReachable} onWatch={(film, opener) => openLobby([film], opener)}
+          onDevelop={request => { setSkyOpen(false); answerQuestion(request); }}
+          onDoor={(film, request, opener) => { setSkyOpen(false); openAtlas(film, skyOpener || opener, false, false, request); }} />
         <AfterimageLog key={afterimageTarget ? `afterimage:${movieKey(afterimageTarget.film.title, afterimageTarget.film.year)}` : 'afterimage-closed'} target={afterimageTarget?.film ?? null} opener={afterimageTarget?.opener ?? null}
           existing={afterimageTarget ? findAfterimage(afterimages, afterimageTarget.film) : undefined}
           liked={afterimageTarget ? likedKeys.has(movieKey(afterimageTarget.film.title, afterimageTarget.film.year)) : false}
           saved={afterimageTarget ? savedKeys.has(movieKey(afterimageTarget.film.title, afterimageTarget.film.year)) : false} count={afterimages.length}
           onSave={saveAfterimage} onRemove={() => { if (afterimageTarget) forgetAfterimage(afterimageTarget.film); }} onClose={() => setAfterimageTarget(null)} />
         <FilmVerbs menu={verbMenu} onClose={closeVerbs} />
+        {screening ? <Lobby screening={screening} open={lobbyOpen} opener={lobbyOpener} candidates={lobbyCandidates} kept={afterimageKeys} count={afterimages.length}
+          onOpen={openSeat} onStepOut={() => setLobbyOpen(false)} onChange={saveScreening}
+          onKeep={draft => saveAfterimage(draft, { like: false, unsave: false })} /> : null}
+        {creditsQuestion ? <CreditsQuestion opener={creditsQuestion.opener} onClose={() => setCreditsQuestion(null)}
+          onDevelop={request => { setCreditsQuestion(null); answerQuestion(request); }} /> : null}
+        {betweenAway && !between && together.state ? <div className="between-away" role="status"><StarGlyph />
+          <span>{together.state.result ? <>The film between you: <em>{together.state.result.film.title}</em></> : together.state.status === 'failed' ? 'The film between you could not be found this time.' : 'The film between you keeps developing.'}</span>
+          <button type="button" onClick={() => { setBetweenAway(false); setBetween({ opener: null, invite: null }); }}>{together.state.result ? 'See it' : 'Back to it'}</button>
+          <button type="button" className="between-away-close" aria-label="Dismiss" onClick={() => setBetweenAway(false)}>×</button>
+        </div> : null}
+        {between ? <BetweenUs opener={between.opener} invite={between.invite} brought={betweenSkies} collision={together.state}
+          canSearch={catalogueReachable} canAsk={connection === 'connected'} metadata={metadataByKey} savedKeys={savedKeys}
+          onClose={closeBetween} onCollide={collideSkies} onSave={film => toggleSave(film)}
+          onWatch={(film, opener, record) => { setBetween(null); clearInvite(); openLobby([{ title: film.title, year: film.year, ...(film.tmdbId ? { tmdbId: film.tmdbId } : {}), watchFor: film.watchFor, record }], opener); }}
+          onDevelop={request => { setBetween(null); clearInvite(); answerQuestion(request); }} /> : null}
         {collidePick ? <CollidePicker film={collidePick.film} opener={collidePick.opener} groups={partnerGroups()} canSearch={catalogueReachable}
           onClose={() => setCollidePick(null)} onChoose={partner => startCollision(collidePick.film, partner, collidePick.opener)} /> : null}
         <CollisionChamber state={collision.state} open={collision.open} opener={collisionOpener} metadata={metadataByKey}

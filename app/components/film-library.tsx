@@ -17,11 +17,13 @@ const INTRO: Record<LibraryTab, string> = {
   afterimages: 'What stayed with you after the lights came up. Your notes stay in this browser and are never sent anywhere.',
 };
 
-export function FilmLibrary({ open, opener, onClose, watchlist, likes, afterimages, onRemove, onUnlike, onImport, onExplore, onEditAfterimage, onRemoveAfterimage, tab, onTabChange }: {
+export function FilmLibrary({ open, opener, onClose, watchlist, likes, afterimages, onRemove, onUnlike, onImport, onExplore, onEditAfterimage, onRemoveAfterimage, tab, onTabChange, onWatch }: {
   open: boolean; opener: HTMLElement | null; onClose: () => void; watchlist: SavedFilm[]; likes: LikedFilm[]; afterimages: AfterimageEntry[];
   tab: LibraryTab; onTabChange: (tab: LibraryTab) => void;
   onRemove: (film: SavedFilm) => void; onUnlike: (film: LikedFilm) => void;
   onImport: (films: SavedFilm[]) => void; onExplore: (film: SavedFilm, opener: HTMLElement) => void;
+  /** Into the lobby: watch a saved film tonight. */
+  onWatch?: (film: SavedFilm, opener: HTMLElement) => void;
   onEditAfterimage: (entry: AfterimageEntry, opener: HTMLElement) => void; onRemoveAfterimage: (entry: AfterimageEntry) => void;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
@@ -51,7 +53,7 @@ export function FilmLibrary({ open, opener, onClose, watchlist, likes, afterimag
     </div>
     <p>{INTRO[tab]}</p>
     <label className="library-search">{tab === 'afterimages' ? 'Find an afterimage' : 'Find a saved film'}<input type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder={tab === 'afterimages' ? 'Title, year or a word you wrote' : 'Title or year'} /></label>
-    {hasResults && tab !== 'afterimages' ? <ul className="library-films">{films.map(film => <li key={movieKey(film.title, film.year)}><div><h3>{film.title}</h3><span>{film.year}</span></div><div><button type="button" onClick={event => onExplore(film, event.currentTarget)}>Explore connections</button><button type="button" onClick={() => tab === 'watchlist' ? onRemove(film) : onUnlike(film)} aria-label={`Remove ${film.title} from ${tab === 'watchlist' ? 'watchlist' : 'Likes'}`}>Remove</button></div></li>)}</ul> : null}
+    {hasResults && tab !== 'afterimages' ? <ul className="library-films">{films.map(film => <li key={movieKey(film.title, film.year)}><div><h3>{film.title}</h3><span>{film.year}</span></div><div>{tab === 'watchlist' && onWatch ? <button type="button" className="library-tonight" onClick={event => onWatch(film, event.currentTarget)}>Watch it tonight</button> : null}<button type="button" onClick={event => onExplore(film, event.currentTarget)}>Explore connections</button><button type="button" onClick={() => tab === 'watchlist' ? onRemove(film) : onUnlike(film)} aria-label={`Remove ${film.title} from ${tab === 'watchlist' ? 'watchlist' : 'Likes'}`}>Remove</button></div></li>)}</ul> : null}
     {hasResults && tab === 'afterimages' ? <ol className="library-films library-afterimages">{entries.map(entry => <li key={movieKey(entry.title, entry.year)}>
       <div><h3><StarGlyph />{entry.title}</h3><span>{entry.year} · Watched {new Date(`${entry.watchedOn}T12:00:00`).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}</span>
         <p className="library-afterimage-qualities">{entry.stayed.length ? entry.stayed.map(channel => <em key={channel} style={{ '--channel': CHANNEL_COLORS[channel] } as CSSProperties}>{entry.labels?.[channel] ?? FACET_META[channel].label}</em>) : <em>The whole film</em>}</p>

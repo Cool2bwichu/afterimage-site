@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from 'next';
-import { Cormorant_Garamond, DM_Sans } from 'next/font/google';
+import { Cormorant_Garamond, DM_Mono, DM_Sans } from 'next/font/google';
 import './globals.css';
 import './light-table.css';
 import './atlas.css';
@@ -9,6 +9,7 @@ import './celestial.css';
 import './collections.css';
 import './observatory.css';
 import './encounters.css';
+import './rooms.css';
 import { CelestialProvider } from './components/celestial';
 
 const display = Cormorant_Garamond({
@@ -21,6 +22,13 @@ const display = Cormorant_Garamond({
 const sans = DM_Sans({
   variable: '--font-sans',
   subsets: ['latin'],
+});
+
+// Only the rooms' counters and clocks use it.
+const mono = DM_Mono({
+  variable: '--font-mono',
+  subsets: ['latin'],
+  weight: ['400'],
 });
 
 export const metadata: Metadata = {
@@ -65,7 +73,7 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">
-      <body className={`${display.variable} ${sans.variable}`}><CelestialProvider>{children}</CelestialProvider></body>
+      <body className={`${display.variable} ${sans.variable} ${mono.variable}`}><CelestialProvider>{children}</CelestialProvider></body>
     </html>
   );
 }
