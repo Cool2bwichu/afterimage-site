@@ -84,7 +84,9 @@ function HalfLifeLine({ film }: { film: HalfLifeRecord }) {
 }
 
 export function YourSky({ open, opener, onClose, reels, atlases, likes, watchlist, afterimages, metadataByKey, likedKeys, savedKeys, canExplore,
-  onLike, onSave, onLogAfterimage, onNavigate, onExplore, onBegin, onCollide, halfLife = emptyBook(), canLookUp = false, onDevelop, onDoor, onWatch }: {
+  onLike, onSave, onLogAfterimage, onNavigate, onExplore, onBegin, onCollide, halfLife = emptyBook(), canLookUp = false, onDevelop, onDoor, onWatch, onNotes }: {
+  /** Notes on a viewer: what this history says about the person who made it. */
+  onNotes?: (opener: HTMLElement) => void;
   open: boolean; opener: HTMLElement | null; onClose: () => void;
   reels: SavedReel[]; atlases: AtlasStop[]; likes: LikedFilm[]; watchlist: SavedFilm[]; afterimages: AfterimageEntry[];
   metadataByKey: Record<string, FilmEnrichment>; likedKeys: Set<string>; savedKeys: Set<string>; canExplore: boolean;
@@ -631,6 +633,7 @@ export function YourSky({ open, opener, onClose, reels, atlases, likes, watchlis
         <p className="your-sky-kicker"><StarGlyph />Every film you have met here</p>
         <p className="your-sky-lede">Charted in the order you found them. The brightest are the ones you loved and remembered.</p>
         {counts ? <dl className="your-sky-counts"><div><dt>Stars</dt><dd>{counts.stars}</dd></div><div><dt>Constellations</dt><dd>{counts.constellations}</dd></div><div><dt>Afterimages</dt><dd>{counts.afterimages}</dd></div></dl> : null}
+        {onNotes ? <button type="button" className="notes-door" onClick={event => onNotes(event.currentTarget)}><span>Notes on a viewer</span><strong>Read what your sky says about you</strong><small>The words that return, your light, and what actually stays.</small></button> : null}
         <div className="your-sky-filters" role="group" aria-label="Show stars">{FILTERS.map(item => <button type="button" key={item.id} aria-pressed={filter === item.id} onClick={() => setFilter(item.id)}>{item.label}{counts && item.id !== 'all' ? <span>{item.id === 'liked' ? counts.liked : item.id === 'saved' ? counts.saved : counts.afterimages}</span> : null}</button>)}</div>
         {sky?.constellations.length ? <nav className="your-sky-constellations" aria-label="Constellations"><h3>Constellations</h3><ol>{[...sky.constellations].reverse().map(item => <li key={item.id}><button type="button" onClick={() => selectConstellation(item)}><span className="your-sky-constellation-mark" data-kind={item.kind} aria-hidden="true">{item.palette.length ? item.palette.slice(0, 5).map((color, index) => <i key={index} style={{ backgroundColor: mix(color, .35) }} />) : <i />}</span><span><strong>{item.name}</strong><small>{item.kind === 'reel' ? 'Reel' : 'Atlas'} · {shortDate(item.chartedAt)}</small></span></button></li>)}</ol></nav> : null}
         <details className="your-sky-legend"><summary>How to read your sky <span aria-hidden="true">+</span></summary><ul>

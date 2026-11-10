@@ -8,6 +8,8 @@ The optional Claude companion and static build tools are retained from the Claud
 
 This branch is also an experimental route for the interface itself: the entrance asks one question, the Eye Test finds a reel without typing, reels and Atlases develop on screen while Claude writes them, two films can be collided to find the one between them, a long press shows a film's verbs, the room takes each film's light, and watched films leave ticket stubs. See [docs/encounters.md](docs/encounters.md).
 
+Films, reels and the viewer also have pictures of their own: a plate drawn for every film, a one-sheet poster for every reel, and Notes on a viewer, a reading of your own history. See [docs/persistence-of-vision.md](docs/persistence-of-vision.md).
+
 It also runs as a claude.ai Artifact (`npm run build:artifact`). There the page asks Claude directly on your claude.ai account, with no companion, but without TMDB posters, film details or film search. See [docs/claude.md](docs/claude.md#claudeai-artifact).
 
 ## Local development

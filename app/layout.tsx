@@ -10,6 +10,7 @@ import './collections.css';
 import './observatory.css';
 import './encounters.css';
 import './rooms.css';
+import './vision.css';
 import { CelestialProvider } from './components/celestial';
 
 const display = Cormorant_Garamond({

@@ -6,20 +6,25 @@ import type { RecommendationV2 } from '../lib/reel-state';
 import { StarGlyph } from './celestial';
 import type { HoldProps } from './film-verbs';
 import { saveStarChart } from './star-chart';
+import { OneSheet } from './one-sheet';
+import type { OneSheetData } from '../lib/one-sheet';
 import { useElementSize } from './use-element-size';
 
 /**
  * The reel drawn as a constellation named after its persona. The thread follows the
  * ranking, 01 to 05; its shape is decorative and never measures similarity.
  */
-export function ReelConstellation({ seed, name, insight, palette, films, selected, onSelect, onNotice, onOpenSky, onCollide, hold }: {
+export function ReelConstellation({ seed, name, insight, palette, films, sensibilities = [], director, selected, onSelect, onNotice, onOpenSky, onCollide, hold }: {
   seed: string; name: string; insight: string; palette: string[]; films: RecommendationV2[];
+  /** For the reel's one-sheet: its laurels and whose spirit it is in. */
+  sensibilities?: readonly string[]; director?: string;
   selected: number; onSelect: (index: number) => void; onNotice: (message: string) => void; onOpenSky: (opener: HTMLElement) => void;
   /** Drop one star on another to find the film between them. */
   onCollide?: (first: number, second: number, opener: HTMLElement) => void;
   hold?: (payload: { film: RecommendationV2; index: number }) => HoldProps;
 }) {
   const [saving, setSaving] = useState(false);
+  const [sheet, setSheet] = useState<{ data: OneSheetData; opener: HTMLElement } | null>(null);
   const stars = useRef<Array<HTMLButtonElement | null>>([]);
   const [chart, size] = useElementSize<HTMLDivElement>();
   // A drag from one star toward another: where it began, where the pointer is, and the star beneath it.
@@ -132,8 +137,10 @@ export function ReelConstellation({ seed, name, insight, palette, films, selecte
       </button>; })}
     </div>
     <div className="reel-constellation-actions">
+      <button type="button" className="reel-one-sheet" onClick={event => setSheet({ data: { seed, persona: name, insight, palette, sensibilities, director, films }, opener: event.currentTarget })}>See the one-sheet <span aria-hidden="true">▯</span></button>
       <button type="button" onClick={() => void saveChart()} disabled={saving}>{saving ? 'Drawing your chart…' : 'Save star chart'} <span aria-hidden="true">↓</span></button>
       <a href="#sky" onClick={event => { if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); onOpenSky(event.currentTarget); }}>See it in your sky <span aria-hidden="true">✦</span></a>
     </div>
+    <OneSheet data={sheet?.data ?? null} opener={sheet?.opener ?? null} onClose={() => setSheet(null)} onNotice={onNotice} />
   </section>;
 }

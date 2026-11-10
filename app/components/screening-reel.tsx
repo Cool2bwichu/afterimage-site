@@ -7,11 +7,11 @@ import { FACET_KEYS, type CinematicFacet, type FacetKey, type FacetSource, type 
 import { FacetTab } from './facet-tab';
 import { FilmIdentity } from './film-identity';
 import { LikeButton } from './like-button';
-import { CelestialSky, OrbitMark } from './celestial';
 import type { HoldProps } from './film-verbs';
+import { FilmPlate, useReelMotifs } from './film-plate';
 
 export function ScreeningReel({ films, metadata, selected, onSelect, onOpen, onExplore, likedKeys, savedKeys, afterimageKeys, onLike, onSave, onAfterimage,
-  onResolve, selectedFacets, onBorrow, locked, pending, lightTable, onReplace, onCompare, hold, onWatch, heading }: {
+  onResolve, selectedFacets, onBorrow, locked, pending, lightTable, onReplace, onCompare, hold, onWatch, heading, palette }: {
   films: RecommendationV2[]; metadata: Record<string, FilmEnrichment>; selected: number;
   onSelect: (index: number) => void; onOpen: (index: number, event: MouseEvent<HTMLButtonElement>) => void;
   onExplore: (index: number, event: MouseEvent<HTMLButtonElement>) => void;
@@ -27,6 +27,8 @@ export function ScreeningReel({ films, metadata, selected, onSelect, onOpen, onE
   onWatch?: (film: RecommendationV2, opener: HTMLElement) => void;
   /** The billing block's heading and subtitle, when the reel was asked for in a particular way. */
   heading?: { title: string; subtitle: string };
+  /** The reel's colours, which every film's plate is drawn in. */
+  palette?: readonly string[];
 }) {
   const [comparing, setComparing] = useState(false);
   const [compareWith, setCompareWith] = useState(1);
@@ -41,6 +43,7 @@ export function ScreeningReel({ films, metadata, selected, onSelect, onOpen, onE
     }
   }, [selected]);
   const film = films[index];
+  const motifs = useReelMotifs(films);
   const key = movieKey(film.title, film.year);
   const record = metadata[key];
   const details = record?.status === 'matched' ? record : null;
@@ -58,6 +61,17 @@ export function ScreeningReel({ films, metadata, selected, onSelect, onOpen, onE
     const hide = window.setTimeout(() => setGhost(null), 2300);
     return () => { window.clearTimeout(show); window.clearTimeout(hide); };
   }, [artwork]);
+  // A film with no image shows its plate, and the plate leaves a ghost the same way.
+  const [plateGhost, setPlateGhost] = useState<number | null>(null);
+  const lastIndex = useRef(index);
+  useEffect(() => {
+    const previous = lastIndex.current;
+    lastIndex.current = index;
+    if (previous === index || artwork) return;
+    const show = window.setTimeout(() => setPlateGhost(previous), 0);
+    const hide = window.setTimeout(() => setPlateGhost(null), 2300);
+    return () => { window.clearTimeout(show); window.clearTimeout(hide); };
+  }, [index, artwork]);
   function move(event: KeyboardEvent, position: number) {
     const next = event.key === 'ArrowDown' || event.key === 'ArrowRight' ? (position + 1) % films.length
       : event.key === 'ArrowUp' || event.key === 'ArrowLeft' ? (position + films.length - 1) % films.length
@@ -72,7 +86,8 @@ export function ScreeningReel({ films, metadata, selected, onSelect, onOpen, onE
           srcSet={still ? `${still.replace('/w1280/', '/w780/')} 780w, ${still} 1280w` : undefined}
           sizes={still ? '(max-width: 760px) 100vw, 75vw' : undefined}
           alt={`${film.title} ${still ? 'film still' : 'poster'}`} fetchPriority="high" decoding="async"
-          onError={() => setFailed(current => [...current, artwork])} /> : <div className="screening-artwork-fallback" aria-hidden="true"><CelestialSky variant="reel" /><div className="screening-empty-aperture"><OrbitMark /></div><p>{pending ? 'Finding the film image' : 'An image yet to come into focus'}</p></div>}
+          onError={() => setFailed(current => [...current, artwork])} /> : <div className="screening-artwork-fallback has-plate" key={key}><FilmPlate film={film} palette={palette} index={index} motif={motifs[index]} shape="wide" label={`The plate for ${film.title}: its afterimage, drawn from its qualities`} /><p>{pending ? 'Finding the film image' : 'Plate · drawn from this film’s qualities'}</p></div>}
+        {!artwork && plateGhost !== null && plateGhost !== index && films[plateGhost] ? <FilmPlate key={`ghost-${plateGhost}`} className="screening-ghost" film={films[plateGhost]} palette={palette} index={plateGhost} motif={motifs[plateGhost]} shape="wide" grain={false} ghost={false} /> : null}
         {ghost && ghost !== artwork ? <img key={ghost} className="screening-ghost" src={ghost} alt="" aria-hidden="true" decoding="async" /> : null}
         <span className="screening-projector" aria-hidden="true"><i className="screening-beam" /><i className="screening-grain" /></span>
         <div className="screening-frame" aria-hidden="true"><span>{String(index + 1).padStart(2, '0')} / {String(films.length).padStart(2, '0')}</span><i /><span>AFTERIMAGE · YOUR REEL</span></div>
@@ -92,7 +107,7 @@ export function ScreeningReel({ films, metadata, selected, onSelect, onOpen, onE
           return <li key={movieKey(item.title, item.year)}><button ref={element => { buttons.current[position] = element; }} type="button"
             aria-current={index === position ? 'true' : undefined} aria-label={`Select ${item.title}, film ${position + 1} of ${films.length}`}
             {...held} onClick={() => onSelect(position)} onKeyDown={event => { held?.onKeyDown(event); if (!event.defaultPrevented) move(event, position); }}>
-            <span className="reel-index-number">{String(position + 1).padStart(2, '0')}</span><span><strong>{item.title}</strong><small>{item.year}{meta?.status === 'matched' && meta.runtime ? ` / ${meta.runtime} min` : ''}</small></span><span className="reel-index-mark" aria-hidden="true">{index === position ? '−' : '+'}</span>
+            <span className="reel-index-number">{String(position + 1).padStart(2, '0')}</span><FilmPlate className="reel-index-plate" film={item} palette={palette} index={position} motif={motifs[position]} shape="square" grain={false} ghost={false} /><span><strong>{item.title}</strong><small>{item.year}{meta?.status === 'matched' && meta.runtime ? ` / ${meta.runtime} min` : ''}</small></span><span className="reel-index-mark" aria-hidden="true">{index === position ? '−' : '+'}</span>
           </button></li>;
         })}</ol>
 

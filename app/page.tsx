@@ -21,6 +21,7 @@ import { REEL_HISTORY_KEY, parseReelHistory, rememberReel, serializeReelHistory,
 import { ScreeningReel } from './components/screening-reel';
 import { CelestialSky, MotionToggle, OrbitMark, StarGlyph } from './components/celestial';
 import { YourSky } from './components/your-sky';
+import { ViewerNotes } from './components/viewer-notes';
 import { ReelConstellation } from './components/reel-constellation';
 import { ChartingRoom, announceReady, useDevelopingTitle } from './components/charting';
 import { AfterimageLog, type AfterimageTarget } from './components/afterimage-log';
@@ -151,6 +152,7 @@ export default function Home() {
   const [between, setBetween] = useState<{ opener: HTMLElement | null; invite: BetweenSide | null } | null>(null);
   const [skyOpen, setSkyOpen] = useState(false);
   const [skyOpener, setSkyOpener] = useState<HTMLElement | null>(null);
+  const [notesOpener, setNotesOpener] = useState<HTMLElement | null | undefined>(undefined);
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [libraryOpener, setLibraryOpener] = useState<HTMLElement | null>(null);
   const [screeningIndex, setScreeningIndex] = useState(0);
@@ -1583,10 +1585,10 @@ export default function Home() {
               onReveal={chooseBlind} onLift={liftBlind} onWatch={(film, opener) => openLobby([film], opener)} onSave={toggleSave} /> : <>
             {route ? <RouteStrip route={route} films={result.recommendations} metadata={metadataByKey} onWatchDouble={opener => openLobby(result.recommendations.slice(0, 2), opener)} /> : null}
             <ReelConstellation key={`constellation-${recommendationIdentity}`} seed={recommendationIdentity} name={result.persona} insight={result.insight} palette={result.palette}
-              films={result.recommendations} selected={screeningIndex} onSelect={setScreeningIndex} onNotice={setNotice}
+              films={result.recommendations} sensibilities={result.sensibilities} director={result.spiritDirector.name} selected={screeningIndex} onSelect={setScreeningIndex} onNotice={setNotice}
               onOpenSky={opener => navigateCollection('#sky', opener)} hold={holdFilm}
               onCollide={connection === 'connected' ? (first, second, opener) => startCollision(result.recommendations[first], result.recommendations[second], opener) : undefined} />
-            <ScreeningReel key={recommendationIdentity} films={result.recommendations} metadata={metadataByKey}
+            <ScreeningReel key={recommendationIdentity} films={result.recommendations} metadata={metadataByKey} palette={result.palette}
               selected={screeningIndex} onSelect={setScreeningIndex} onCompare={openComparison} onReplace={displayedInput && connection === 'connected' ? index => void replaceFilm(index) : undefined} pending={enrichmentPending} locked={reelLocked}
               likedKeys={likedKeys} savedKeys={savedKeys} afterimageKeys={afterimageKeys} onLike={toggleLike} onSave={toggleSave} onResolve={resolveFilm}
               onAfterimage={(film, opener) => openAfterimage(film, opener)}
@@ -1618,6 +1620,7 @@ export default function Home() {
               <i className="reel-end-runout" aria-hidden="true" />
               <h3>End of reel</h3>
               <p>{veiled ? 'Five moments, unnamed. Say yes to one, or lift the veil.' : 'Five films, and then the lights come up. A reel is never a feed.'}</p>
+              <button type="button" className="notes-door" onClick={event => setNotesOpener(event.currentTarget)}><span>Notes on a viewer</span><strong>What do your reels say about you?</strong><small>The words that return, your light, and what actually stays.</small></button>
             </section>
             <div className="reroll-panel">
               <button
@@ -1713,7 +1716,11 @@ export default function Home() {
           onBegin={() => { setSkyOpen(false); enterReel(); }}
           halfLife={halfLife} canLookUp={catalogueReachable} onWatch={(film, opener) => openLobby([film], opener)}
           onDevelop={request => { setSkyOpen(false); answerQuestion(request); }}
-          onDoor={(film, request, opener) => { setSkyOpen(false); openAtlas(film, skyOpener || opener, false, false, request); }} />
+          onDoor={(film, request, opener) => { setSkyOpen(false); openAtlas(film, skyOpener || opener, false, false, request); }}
+          onNotes={opener => setNotesOpener(opener)} />
+        <ViewerNotes open={notesOpener !== undefined} opener={notesOpener ?? null} reels={reels} liked={likedFilms} afterimages={afterimages} book={halfLife}
+          canDevelop={connection === 'connected' && !reelLocked} onClose={() => setNotesOpener(undefined)}
+          onDevelop={request => { setNotesOpener(undefined); if (skyOpen) closeSky(); answerQuestion(request); }} />
         <AfterimageLog key={afterimageTarget ? `afterimage:${movieKey(afterimageTarget.film.title, afterimageTarget.film.year)}` : 'afterimage-closed'} target={afterimageTarget?.film ?? null} opener={afterimageTarget?.opener ?? null}
           existing={afterimageTarget ? findAfterimage(afterimages, afterimageTarget.film) : undefined}
           liked={afterimageTarget ? likedKeys.has(movieKey(afterimageTarget.film.title, afterimageTarget.film.year)) : false}

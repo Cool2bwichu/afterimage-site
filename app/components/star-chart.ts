@@ -20,12 +20,12 @@ const IVORY = '#f4efe5';
 const STARLIGHT = '#dec6a0';
 const MUTED = '#a7b6c5';
 
-function fontFamily(variable: string, fallback: string) {
+export function fontFamily(variable: string, fallback: string) {
   const value = getComputedStyle(document.body).getPropertyValue(variable).trim();
   return value ? `${value}, ${fallback}` : fallback;
 }
 
-function spaced(context: CanvasRenderingContext2D, text: string, x: number, y: number, spacing: number, align: 'center' | 'left' = 'center') {
+export function spaced(context: CanvasRenderingContext2D, text: string, x: number, y: number, spacing: number, align: 'center' | 'left' = 'center') {
   const widths = [...text].map(char => context.measureText(char).width);
   const total = widths.reduce((sum, width) => sum + width, 0) + spacing * (text.length - 1);
   let cursor = align === 'center' ? x - total / 2 : x;
@@ -35,7 +35,7 @@ function spaced(context: CanvasRenderingContext2D, text: string, x: number, y: n
   context.textAlign = previous;
 }
 
-function wrap(context: CanvasRenderingContext2D, text: string, maxWidth: number, maxLines: number): string[] {
+export function wrap(context: CanvasRenderingContext2D, text: string, maxWidth: number, maxLines: number): string[] {
   const words = text.split(/\s+/).filter(Boolean);
   const lines: string[] = [];
   let line = '';
