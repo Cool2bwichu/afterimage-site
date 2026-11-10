@@ -1583,10 +1583,10 @@ export default function Home() {
               onReveal={chooseBlind} onLift={liftBlind} onWatch={(film, opener) => openLobby([film], opener)} onSave={toggleSave} /> : <>
             {route ? <RouteStrip route={route} films={result.recommendations} metadata={metadataByKey} onWatchDouble={opener => openLobby(result.recommendations.slice(0, 2), opener)} /> : null}
             <ReelConstellation key={`constellation-${recommendationIdentity}`} seed={recommendationIdentity} name={result.persona} insight={result.insight} palette={result.palette}
-              films={result.recommendations} selected={screeningIndex} onSelect={setScreeningIndex} onNotice={setNotice}
+              films={result.recommendations} sensibilities={result.sensibilities} director={result.spiritDirector.name} selected={screeningIndex} onSelect={setScreeningIndex} onNotice={setNotice}
               onOpenSky={opener => navigateCollection('#sky', opener)} hold={holdFilm}
               onCollide={connection === 'connected' ? (first, second, opener) => startCollision(result.recommendations[first], result.recommendations[second], opener) : undefined} />
-            <ScreeningReel key={recommendationIdentity} films={result.recommendations} metadata={metadataByKey}
+            <ScreeningReel key={recommendationIdentity} films={result.recommendations} metadata={metadataByKey} palette={result.palette}
               selected={screeningIndex} onSelect={setScreeningIndex} onCompare={openComparison} onReplace={displayedInput && connection === 'connected' ? index => void replaceFilm(index) : undefined} pending={enrichmentPending} locked={reelLocked}
               likedKeys={likedKeys} savedKeys={savedKeys} afterimageKeys={afterimageKeys} onLike={toggleLike} onSave={toggleSave} onResolve={resolveFilm}
               onAfterimage={(film, opener) => openAfterimage(film, opener)}

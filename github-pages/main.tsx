@@ -12,6 +12,7 @@ import '../app/collections.css';
 import '../app/observatory.css';
 import '../app/encounters.css';
 import '../app/rooms.css';
+import '../app/vision.css';
 import './fonts.css';
 import { CelestialProvider } from '../app/components/celestial';
 import Home from '../app/page';
