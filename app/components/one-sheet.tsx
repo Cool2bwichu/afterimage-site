@@ -212,6 +212,8 @@ export function OneSheet({ data, opener, onClose, onNotice }: { data: OneSheetDa
   return <dialog ref={dialog} className="one-sheet" aria-labelledby="one-sheet-title" onCancel={event => { event.preventDefault(); onClose(); }} onClick={event => { if (event.target === dialog.current) onClose(); }}>
     <div className="one-sheet-body">
       <div className="one-sheet-poster">
+        {/* A picture drawn on a canvas in this browser; there is nothing for an image optimiser to fetch. */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
         {picture ? <img src={picture} alt={sheetDescription(data)} width={WIDTH} height={HEIGHT} />
           : <p role="status">{failed ? 'The one-sheet could not be drawn in this browser.' : 'Printing the one-sheet…'}</p>}
       </div>

@@ -276,9 +276,14 @@ export function plateMarkup(input: PlateInput, { shape = 'poster', id, grain = t
   const d = plateDesign(input);
   const { width: w, height: h } = PLATE_SIZE[shape];
   const uid = id ?? `plate-${d.seed.toString(36)}-${shape}`;
-  // A wide plate sits behind a film's title, so its figure is drawn a little to the right.
-  const reach = shape === 'wide' && offset ? w * 1.3 : w;
-  const draw = (salt: string) => MOTIFS[d.motif]({ w: reach, h, d, id: `${uid}${salt}`, random: seededRandom(d.seed) });
+  // A wide plate sits behind a film's title, so its picture keeps to the right: a single
+  // figure is drawn in the right-hand two thirds, and a field that fills the frame is
+  // stretched so its centre lands there.
+  const aside = shape === 'wide' && offset;
+  const single = d.motif === 'window' || d.motif === 'duet' || d.motif === 'eclipse' || d.motif === 'iris';
+  const reach = !aside ? w : single ? w * 0.64 : w * 1.3;
+  const shift = aside && single ? w * 0.36 : 0;
+  const draw = (salt: string) => `<g transform="translate(${n(shift)} 0)">${MOTIFS[d.motif]({ w: reach, h, d, id: `${uid}${salt}`, random: seededRandom(d.seed) })}</g>`;
   const figure = draw('');
   // The ghost is the figure again in its complementary colours, slipped a little to one side
   // and blurred: the picture your eye would keep if you looked away.

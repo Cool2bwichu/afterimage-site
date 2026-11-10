@@ -204,14 +204,16 @@ function decadeSection(reels: readonly NotesReel[], liked: NotesInput['liked'], 
   const enough = keptYears.length >= MIN_KEPT_YEARS;
   const median = (years: readonly number[]) => years.length ? years[Math.floor((years.length - 1) / 2)] : null;
   const centre = enough ? median(keptYears) : null;
-  if (!enough || centre === null) return { items, centre, enough, reading: `The films you keep need to number ${spell(MIN_KEPT_YEARS)} before they have a centre. You have ${spell(keptYears.length)}; Like or log ${plural(MIN_KEPT_YEARS - keptYears.length, 'more film')}.` };
-  const busiest = [...items].sort((a, b) => b.kept - a.kept)[0];
+  if (!enough || centre === null) return { items, centre, enough, reading: `The films you keep need to number ${spell(MIN_KEPT_YEARS)} before they have a centre. You have ${keptYears.length ? spell(keptYears.length) : 'none'}; Like or log ${plural(MIN_KEPT_YEARS - keptYears.length, 'more film')}.` };
+  const ranked = [...items].sort((a, b) => b.kept - a.kept);
+  // Only a decade that holds strictly more than every other is worth naming.
+  const busiest = ranked[0].kept > (ranked[1]?.kept ?? 0) ? ranked[0] : null;
   const keptDecades = items.filter(item => item.kept > 0);
   const gap = items.find(item => item.kept === 0 && item.decade > keptDecades[0].decade && item.decade < keptDecades[keptDecades.length - 1].decade);
   const offeredCentre = median(offeredYears);
   const pull = offeredCentre !== null && Math.abs(offeredCentre - centre) >= 8
     ? ` The films you are offered sit ${spell(Math.abs(offeredCentre - centre))} years ${offeredCentre > centre ? 'later' : 'earlier'} than the ones you keep.` : '';
-  return { items, centre, enough, reading: `The films you keep centre on ${centre}, and the ${busiest.decade}s hold more of them than any other decade.${gap ? ` Between them lies a decade you have kept nothing from: the ${gap.decade}s.` : ''}${pull}` };
+  return { items, centre, enough, reading: `The films you keep centre on ${centre}${busiest ? `, and the ${busiest.decade}s hold more of them than any other decade` : `, spread from the ${keptDecades[0].decade}s to the ${keptDecades[keptDecades.length - 1].decade}s`}.${gap ? ` In the middle is a decade you have kept nothing from: the ${gap.decade}s.` : ''}${pull}` };
 }
 
 /** Everything the notes say, from one browser's history. */
@@ -228,14 +230,17 @@ export function viewerNotes(input: NotesInput): ViewerNotes {
   const lines = [...input.afterimages].filter(entry => entry.note.trim()).sort((a, b) => a.watchedOn.localeCompare(b.watchedOn) || a.loggedAt.localeCompare(b.loggedAt))
     .slice(-MAX_LINES).map(entry => ({ title: entry.title, year: entry.year, note: entry.note.trim(), watchedOn: entry.watchedOn, stayed: [...entry.stayed] }));
 
-  const headline = stays.enough ? stays.reading
+  const staying = stays.enough ? leader(stays.stayed) : null;
+  const firstWord = wordNotes.recurring ? wordNotes.items[0].word : null;
+  // The cover line joins the two strongest findings; each section then says its own in full.
+  const headline = firstWord && staying ? `“${firstWord.replace(/^./, letter => letter.toUpperCase())}” keeps coming back. What stays is ${CHANNEL_PHRASE[staying]}.`
+    : stays.enough ? stays.reading
     : wordNotes.recurring ? wordNotes.reading
     : directors.items[0]?.reels.length >= 2 ? directors.reading
     : reels.length ? `${plural(reels.length, 'reel')} and ${plural(watched.size, 'film')} watched. The notes have begun; they sharpen with every film you tell the site about.`
     : 'Nothing has been written yet. Develop a reel, watch a film, and say what stayed.';
 
   const top = wordNotes.recurring ? wordNotes.items.slice(0, 5).map(item => item.word) : [];
-  const staying = stays.enough ? leader(stays.stayed) : null;
   const grew = input.afterimages.filter(entry => halfLife.stronger.includes(entry.title));
   const references = [...new Map(grew.map(entry => [movieKey(entry.title, entry.year), `${entry.title} (${entry.year})`])).values()].slice(0, 3);
   const request = top.length || staying || references.length ? {
