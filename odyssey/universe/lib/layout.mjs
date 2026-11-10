@@ -88,16 +88,35 @@ function placeGalaxies({ galaxies, galaxyOf, edges, random }) {
   let total = 0;
   galaxies.forEach((g, a) => { cx += x[a] * g.size; cz += z[a] * g.size; total += g.size; });
   cx /= total; cz /= total;
-  return galaxies.map((g, a) => ({
-    g: g.g,
-    radius: radius[a],
-    x: x[a] - cx,
-    y: gaussian(random) * 38,
-    z: z[a] - cz,
-    tiltX: (random() - 0.5) * 0.9,
-    tiltZ: (random() - 0.5) * 0.9,
-    twist: (1.5 + random() * 0.9) * (random() < 0.5 ? -1 : 1),
-  }));
+  // Turn the whole sky so its long axis runs left to right: screens are wide.
+  let sxx = 0;
+  let szz = 0;
+  let sxz = 0;
+  galaxies.forEach((g, a) => {
+    const dx = x[a] - cx;
+    const dz = z[a] - cz;
+    sxx += g.size * dx * dx; szz += g.size * dz * dz; sxz += g.size * dx * dz;
+  });
+  const turn = -0.5 * Math.atan2(2 * sxz, sxx - szz);
+  const cosT = Math.cos(turn);
+  const sinT = Math.sin(turn);
+  let reach = 0;
+  for (let a = 0; a < n; a += 1) reach = Math.max(reach, Math.hypot(x[a] - cx, z[a] - cz) + radius[a]);
+  return galaxies.map((g, a) => {
+    const dx = x[a] - cx;
+    const dz = z[a] - cz;
+    return {
+      g: g.g,
+      radius: radius[a],
+      x: dx * cosT - dz * sinT,
+      // Depth: the families do not sit on a table; they hang at different heights.
+      y: gaussian(random) * reach * 0.11,
+      z: dx * sinT + dz * cosT,
+      tiltX: (random() - 0.5) * 1.3,
+      tiltZ: (random() - 0.5) * 1.3,
+      twist: (1.7 + random() * 1.1) * (random() < 0.5 ? -1 : 1),
+    };
+  });
 }
 
 /** Orders a galaxy's arms round the disc so that related arms are neighbours. */
@@ -153,8 +172,22 @@ function shapeGalaxy({ galaxy, members, armOf, centrality, edges, random }) {
   const pz = new Float64Array(members.length);
   const homeX = new Float64Array(members.length);
   const homeZ = new Float64Array(members.length);
+
+  // The films the whole family turns on make the core: a bright, crowded bulge.
+  const ranking = [...members].sort((a, b) => centrality[b] - centrality[a]);
+  const coreCount = Math.max(3, Math.round(members.length * 0.13));
+  const inCore = new Set(ranking.slice(0, coreCount));
+  ranking.slice(0, coreCount).forEach((film, rank) => {
+    const reach = 0.02 + 0.15 * Math.sqrt((rank + 0.5) / coreCount);
+    const angle = random() * TAU;
+    const at = local.get(film);
+    homeX[at] = px[at] = Math.cos(angle) * reach;
+    homeZ[at] = pz[at] = Math.sin(angle) * reach;
+  });
+
   const byArm = new Map();
   for (const film of members) {
+    if (inCore.has(film)) continue;
     const id = armOf[film];
     if (!byArm.has(id)) byArm.set(id, []);
     byArm.get(id).push(film);
@@ -164,8 +197,11 @@ function shapeGalaxy({ galaxy, members, armOf, centrality, edges, random }) {
     const span = wedge.get(id) || { centre: 0, half: Math.PI };
     ranked.forEach((film, rank) => {
       // The most typical films of an arm sit nearest the core.
-      const reach = 0.07 + 0.93 * ((rank + 0.5) / ranked.length) ** 0.72;
-      const angle = span.centre + (random() * 2 - 1) * span.half * (0.55 + 0.45 * reach);
+      const reach = 0.16 + 0.84 * ((rank + 0.5) / ranked.length) ** 0.8;
+      // An arm keeps roughly the same width along its length, so it narrows
+      // in angle as it runs out; its edges are soft, not cut.
+      const spread = span.half * Math.min(1, 0.55 / (0.25 + reach)) * 0.9;
+      const angle = span.centre + Math.max(-1.6, Math.min(1.6, gaussian(random))) * spread;
       const at = local.get(film);
       homeX[at] = px[at] = Math.cos(angle) * reach;
       homeZ[at] = pz[at] = Math.sin(angle) * reach;
@@ -180,10 +216,10 @@ function shapeGalaxy({ galaxy, members, armOf, centrality, edges, random }) {
     inner.push([local.get(a), local.get(b), w]);
     if (w > heaviest) heaviest = w;
   }
-  const spacing = 1.15 / Math.sqrt(members.length);
+  const spacing = 0.9 / Math.sqrt(members.length);
   for (let step = 0; step < 70; step += 1) {
     for (const [a, b, w] of inner) {
-      const pull = 0.035 * (w / heaviest);
+      const pull = 0.014 * (w / heaviest);
       const dx = px[b] - px[a];
       const dz = pz[b] - pz[a];
       px[a] += dx * pull; pz[a] += dz * pull;
@@ -202,8 +238,8 @@ function shapeGalaxy({ galaxy, members, armOf, centrality, edges, random }) {
       }
     }
     for (let a = 0; a < members.length; a += 1) {
-      px[a] += (homeX[a] - px[a]) * 0.06;
-      pz[a] += (homeZ[a] - pz[a]) * 0.06;
+      px[a] += (homeX[a] - px[a]) * 0.1;
+      pz[a] += (homeZ[a] - pz[a]) * 0.1;
       const r = Math.hypot(px[a], pz[a]);
       if (r > 1) { px[a] /= r; pz[a] /= r; }
     }

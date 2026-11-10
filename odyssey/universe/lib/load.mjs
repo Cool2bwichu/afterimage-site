@@ -38,9 +38,13 @@ export function loadAtlas(atlasRoot) {
   const labels = harvest.labels;
 
   const predicatesByFilmId = new Map(Object.values(predicates.films).map(f => [f.filmId, f]));
+  // Register postings are positions in discovery.json's film order, not ids.
+  const discovery = readOptional(atlasRoot, 'atlas/static/discovery.json', { filmOrder: [] });
   const registersByFilmId = new Map();
   for (const [id, posting] of Object.entries(registers.postings)) {
-    for (const filmId of posting) {
+    for (const position of posting) {
+      const filmId = discovery.filmOrder[position];
+      if (!filmId) continue;
       if (!registersByFilmId.has(filmId)) registersByFilmId.set(filmId, []);
       registersByFilmId.get(filmId).push(id);
     }

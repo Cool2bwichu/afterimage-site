@@ -43,6 +43,7 @@ const SKY_SETTINGS = {
 };
 
 const WIKIMEDIA = 'https://upload.wikimedia.org/wikipedia/';
+const NEAR = 10; // neighbours kept per film for passages
 
 /** The Wikipedia lead, trimmed to a sentence or two and cleared of bracketed asides. */
 function synopsis(text) {
@@ -72,6 +73,7 @@ export function compileUniverse(root) {
   const membership = {};
   const arms = {};
   const galaxies = {};
+  let near = null;
   for (const sky of SKIES) {
     const t0 = Date.now();
     const indexes = sky === 'white' ? LIGHT_IDS.map(id => model.index[id]) : [model.index[sky]];
@@ -89,6 +91,13 @@ export function compileUniverse(root) {
     positions[sky] = laid.positions;
     membership[sky] = formed.galaxyOf;
     arms[sky] = formed.armOf;
+    if (sky === 'white') {
+      // Each film's nearest neighbours in white light: the roads a passage travels.
+      near = new Uint16Array(count * NEAR).fill(0xffff);
+      formed.graph.lists.forEach((list, film) => {
+        list.slice(0, NEAR).forEach((entry, at) => { near[film * NEAR + at] = entry.i; });
+      });
+    }
     galaxies[sky] = named.map((galaxy, at) => {
       const shape = laid.shapes[at];
       const takenArms = new Set();
@@ -105,7 +114,7 @@ export function compileUniverse(root) {
         typical: galaxy.typical,
         top: galaxy.top.map(entry => [entry.trait, Math.round(entry.share * 100)]),
         arms: galaxy.arms.map(arm => {
-          const name = nameArm({ arm, galaxy, traits, taken: takenArms });
+          const name = nameArm({ arm, galaxy, traits, taken: takenArms, films });
           takenArms.add(name);
           // Where the arm's label goes: the middle of its films.
           const at3 = [0, 0, 0];
@@ -196,12 +205,14 @@ export function compileUniverse(root) {
     positions: Object.fromEntries(SKIES.map(sky => [sky, encodeArray(Float32Array.from(positions[sky], v => Math.round(v * 10) / 10))])),
     membership: Object.fromEntries(SKIES.map(sky => [sky, encodeArray(membership[sky])])),
     arms: Object.fromEntries(SKIES.map(sky => [sky, encodeArray(arms[sky])])),
+    near: { k: NEAR, white: encodeArray(near) },
     galaxies,
     constellations: constellations.map(c => ({ name: c.name, traits: c.traits, stars: c.stars })),
     registers: registerIds.map(id => ({
       id,
       label: atlas.registers[id].label,
       blurb: atlas.registers[id].blurb,
+      hue: atlas.registers[id].treatment?.hue || '#f4efe5',
     })),
     beats: BEATS.map(beat => ({ id: beat.id, phrase: beat.phrase, verb: beat.verb, ...(beat.ending ? { ending: 1 } : {}) })),
     arcs: ARCS.map(arc => ({ id: arc.id, name: arc.name, line: arc.line })),

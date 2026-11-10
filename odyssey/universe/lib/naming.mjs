@@ -5,11 +5,14 @@ import { GALAXY_NAMES } from '../authored/galaxies.mjs';
 
 const LEADING = 8;
 
-function fit(rule, labels) {
+function fit(rule, labels, shares) {
   let score = 0;
   for (const wanted of rule.has) {
     const rank = labels.indexOf(wanted.toLowerCase());
     if (rank < 0 || rank >= LEADING) return 0;
+    // A rule may ask that its traits truly dominate the family (`share`), so
+    // one director's name is not given to a galaxy he only leads.
+    if (rule.share && shares[rank] < rule.share) return 0;
     score += 1 / (rank + 1);
   }
   // A rule that asks for more is a better description when it fits.
@@ -60,8 +63,9 @@ export function nameGalaxies({ lightId, galaxies, traits }) {
   const pairs = [];
   galaxies.forEach((galaxy, at) => {
     const labels = galaxy.top.map(entry => traits[entry.trait].label.toLowerCase());
+    const shares = galaxy.top.map(entry => entry.share);
     rules.forEach((rule, ruleAt) => {
-      const score = fit(rule, labels);
+      const score = fit(rule, labels, shares);
       if (score > 0) pairs.push({ at, ruleAt, score });
     });
   });
@@ -84,7 +88,7 @@ export function nameGalaxies({ lightId, galaxies, traits }) {
 }
 
 /** Names an arm by what sets it apart inside its galaxy. */
-export function nameArm({ arm, galaxy, traits, taken }) {
+export function nameArm({ arm, galaxy, traits, taken, films = null }) {
   const lead = galaxy.top[0] ? galaxy.top[0].trait : -1;
   const shorts = [];
   for (const entry of arm.top) {
@@ -100,6 +104,13 @@ export function nameArm({ arm, galaxy, traits, taken }) {
     shorts[0],
   ].filter(Boolean);
   for (const option of options) if (!taken.has(option)) return option;
+  // Nothing sets this arm apart in words: name it after the film it turns on.
+  if (films && arm.lead && arm.lead.length) {
+    for (const film of arm.lead) {
+      const option = `Around ${films[film].title}`;
+      if (!taken.has(option)) return option;
+    }
+  }
   let n = 2;
   const base = options[0] || 'Arm';
   while (taken.has(`${base} ${n}`)) n += 1;
