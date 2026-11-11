@@ -15,8 +15,10 @@ const EPSILON = 1e-9;
  * @param {Float32Array|number[]} input.idf     per-trait rarity, 0..1
  * @param {(Float32Array|null)[]} [input.curves] optional dense curve per film (z-scored)
  * @param {number} [input.curveWeight]
+ * @param {{lambda: number, median: number}} [input.scale] fixed shrinkage, so
+ *   that adding films later never changes how the charted ones compare
  */
-export function buildLightIndex({ count, ptr, idx, raw, idf, curves = null, curveWeight = 0 }) {
+export function buildLightIndex({ count, ptr, idx, raw, idf, curves = null, curveWeight = 0, scale = null }) {
   const nnz = ptr[count];
   const weight = new Float32Array(nnz);
   const norm2 = new Float32Array(count);
@@ -29,9 +31,15 @@ export function buildLightIndex({ count, ptr, idx, raw, idf, curves = null, curv
     }
     norm2[i] = sum;
   }
-  const positive = Array.from(norm2).filter(v => v > EPSILON).sort((a, b) => a - b);
-  const median = positive.length ? positive[positive.length >> 1] : 1;
-  const lambda = SHRINK * median;
+  let median;
+  let lambda;
+  if (scale) {
+    ({ median, lambda } = scale);
+  } else {
+    const positive = Array.from(norm2).filter(v => v > EPSILON).sort((a, b) => a - b);
+    median = positive.length ? positive[positive.length >> 1] : 1;
+    lambda = SHRINK * median;
+  }
   const evidence = new Float32Array(count);
   for (let i = 0; i < count; i += 1) {
     const scale = 1 / Math.sqrt(norm2[i] + lambda);
@@ -138,7 +146,7 @@ export function buildLightIndex({ count, ptr, idx, raw, idf, curves = null, curv
     return false;
   };
 
-  return { count, evidence, scores, sim, shared, traits, carriers, has, hasCurve: i => Boolean(curves && curves[i]) };
+  return { count, evidence, scores, sim, shared, traits, carriers, has, scale: { median, lambda }, hasCurve: i => Boolean(curves && curves[i]) };
 }
 
 /** The k highest entries of a score array: [{ i, sim }], strongest first. */
