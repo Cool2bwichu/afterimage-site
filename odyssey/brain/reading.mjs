@@ -118,6 +118,18 @@ export function normaliseReading(raw, vocabulary) {
   };
 }
 
+/**
+ * Brings a reading that was cleaned earlier (kept in a browser, or by the
+ * companion) back through the same checks, so nothing stored is trusted more
+ * than something just written.
+ */
+export function reviveReading(stored, vocabulary) {
+  if (!stored || typeof stored !== 'object') return null;
+  const axes = {};
+  for (const axis of AXES) if (stored.axes && stored.axes[axis] >= 0) axes[axis] = stored.axes[axis];
+  return normaliseReading({ ...stored, ...(stored.tags && typeof stored.tags === 'object' ? stored.tags : {}), axes }, vocabulary);
+}
+
 /** A reading's slug: the address of the star it becomes. */
 export const readingSlug = reading => slugOf(reading.title, reading.year);
 

@@ -1,0 +1,4 @@
+html, body { margin: 0; height: 100%; background: #05080e; overflow: hidden; }
+.odyssey { position: fixed; inset: 0; overflow: hidden; background: #05080e; color: #f4efe5; font-family: 'DM Sans', system-ui, sans-serif; }
+.cosmos { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+.labels, .app { position: absolute; inset: 0; pointer-events: none; }
