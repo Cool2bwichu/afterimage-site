@@ -1,7 +1,7 @@
 // The tools of the voyage: plotting a course, reading your own sky, the
 // hidden constellations, the nebulae, collisions, passages, and the
 // Navigator's own controls.
-import { LIGHT_IDS, lightById } from '../engine/lights.mjs';
+import { lightById } from '../engine/lights.mjs';
 import { gravity, taste } from '../engine/voyage.mjs';
 import { h, icon, replace, plural } from './dom.mjs';
 import { poster } from './posters.mjs';
@@ -236,7 +236,10 @@ export function createPanels(app) {
   // ── Collide two films.
   function renderCollide(data) {
     heading.textContent = 'Collision';
-    if (data && data.a !== undefined) memo.collide = { a: data.a, b: -1, between: [], result: null, state: 'idle', note: '' };
+    if (data && data.a !== undefined) {
+      const b = data.b ?? -1;
+      memo.collide = { a: data.a, b, between: b >= 0 ? app.between(data.a, b) : [], result: null, state: 'idle', note: '' };
+    }
     const c = memo.collide;
     if (!c) { replace(body, note('Choose a star first, then collide it with another.')); return; }
     const choose = () => app.searchView.open({ title: `Collide ${films[c.a].t} with…`, pick: star => { if (star === c.a) return; c.b = star; c.result = null; c.note = ''; c.between = app.between(c.a, c.b); open('collide'); run(); } });
@@ -281,7 +284,7 @@ export function createPanels(app) {
   // ── A passage between two films.
   function renderPassage(data) {
     heading.textContent = 'Passage';
-    if (data && data.a !== undefined) memo.passage = { a: data.a, b: -1 };
+    if (data && data.a !== undefined) memo.passage = { a: data.a, b: data.b ?? -1 };
     const p = memo.passage;
     if (!p) { replace(body, note('Choose a star first, then a passage from it to another.')); return; }
     const choose = () => app.searchView.open({ title: `A passage from ${films[p.a].t} to…`, pick: star => { if (star === p.a) return; p.b = star; app.plotPassage(p.a, p.b); open('passage'); } });

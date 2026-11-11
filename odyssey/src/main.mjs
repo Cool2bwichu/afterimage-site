@@ -7,7 +7,7 @@ import { createLabels } from './cosmos/labels.mjs';
 import { createStore } from './ui/store.mjs';
 import { configurePosters } from './ui/posters.mjs';
 import { createPilot } from './nav/pilot.mjs';
-import { createApp } from './ui/app.mjs';
+import { createApp, OVERVIEW } from './ui/app.mjs';
 
 const root = document.getElementById('odyssey');
 const veil = document.getElementById('veil');
@@ -47,8 +47,8 @@ async function boot() {
     say('This browser cannot draw the universe.', 'The Odyssey needs WebGL2, which every current browser has. Try another browser, or turn hardware acceleration on.');
     return;
   }
-  const overviewDistance = cosmos.reachOf('white') * (small ? 2.9 : 1.85);
-  cosmos.camera.jumpTo({ target: [0, -30, 0], distance: overviewDistance * 1.25, yaw: 0.5, pitch: 0.95 });
+  const overviewDistance = cosmos.reachOf('white') * (small ? OVERVIEW.reachSmall : OVERVIEW.reach);
+  cosmos.camera.jumpTo({ target: [0, -30, 0], distance: overviewDistance * 1.25, yaw: 0.5, pitch: OVERVIEW.pitch, bias: OVERVIEW.bias });
 
   // The deeper notes on each film are only read by the Navigator; they follow later.
   const depth = [];

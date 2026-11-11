@@ -16,6 +16,8 @@ const IVORY = [0.96, 0.94, 0.9];
 const STARLIGHT = [0.87, 0.78, 0.63];
 const SILVER = [0.61, 0.73, 0.73];
 const PALE = [0.8, 0.88, 1];
+// The whole universe in one look: how far back, how steeply, and how far the camera leans toward the viewer.
+export const OVERVIEW = { reach: 2.0, reachSmall: 3.4, pitch: 0.95, bias: 0.125 };
 
 export function createApp({ root, universe, depth, cosmos, labels, pilot, store, search, small, reducedMotion }) {
   const state = {
@@ -66,6 +68,7 @@ export function createApp({ root, universe, depth, cosmos, labels, pilot, store,
     root.style.setProperty('--inset-left', `${left}px`);
     root.style.setProperty('--inset-right', `${right}px`);
     labels.setInsets({ left, right, bottom: below });
+    cosmos.camera.setBias(state.focus < 0 && state.galaxy < 0 ? OVERVIEW.bias : 0);
     // The star you are at sits in the middle of the sky that is left uncovered.
     if (small) cosmos.camera.setCentre(0, Math.min(0.55, below / Math.max(height, 1)));
     else cosmos.camera.setCentre((left - right) / Math.max(width, 1), 0);
@@ -247,7 +250,7 @@ export function createApp({ root, universe, depth, cosmos, labels, pilot, store,
     if (state.focus >= 0) {
       const star = state.focus;
       cosmos.setSky(sky, { around: cosmos.positionOf(star) });
-      camera.flyTo({ follow: () => cosmos.positionOf(star), target: cosmos.restingPlace(star), duration: 2.9, lift: 1.5 });
+      camera.flyTo({ follow: () => cosmos.positionOf(star), hold: true, target: cosmos.restingPlace(star), duration: 2.9, lift: 1.5 });
     } else if (state.galaxy >= 0) {
       state.galaxy = -1;
       app.dossier?.hide();
@@ -265,7 +268,7 @@ export function createApp({ root, universe, depth, cosmos, labels, pilot, store,
 
   function overview(duration) {
     const reach = cosmos.reachOf(state.sky);
-    cosmos.camera.flyTo({ target: [0, -30, 0], distance: reach * (small ? 2.9 : 1.85), pitch: 0.95, ...(duration ? { duration } : {}) });
+    cosmos.camera.flyTo({ target: [0, -30, 0], distance: reach * (small ? OVERVIEW.reachSmall : OVERVIEW.reach), pitch: OVERVIEW.pitch, ...(duration ? { duration } : {}) });
   }
 
   function goHome() {
@@ -577,6 +580,7 @@ export function createApp({ root, universe, depth, cosmos, labels, pilot, store,
   state.restoring = false;
   drawWake();
   root.style.setProperty('--light', lightById(state.sky).color);
+  frameCosmos();
 
   window.addEventListener('hashchange', () => { if (!writingAddress) followAddress(); });
   window.addEventListener('resize', () => requestAnimationFrame(frameCosmos));

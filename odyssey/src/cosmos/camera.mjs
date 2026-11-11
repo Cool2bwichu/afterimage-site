@@ -40,7 +40,7 @@ function panAt(table, e) {
 }
 
 export function createCamera({ reducedMotion = false } = {}) {
-  const state = { x: 0, y: 0, z: 0, distance: 4300, yaw: 0.5, pitch: 0.98, cx: 0, cy: 0 };
+  const state = { x: 0, y: 0, z: 0, distance: 4300, yaw: 0.5, pitch: 0.98, cx: 0, cy: 0, bias: 0 };
   const goal = { ...state };
   let flight = null;
   let follow = null; // () => [x, y, z] | null: a point the target stays locked to
@@ -57,11 +57,18 @@ export function createCamera({ reducedMotion = false } = {}) {
   let width = 1;
   let height = 1;
 
+  const aim = [0, 0, 0];
+  // Seen from above at a slant, the near half of the sky looms and the far half shrinks. A bias
+  // draws the whole camera back toward the viewer, so a wide view sits evenly in the frame.
   function eyeOf(s, out = eye) {
     const cp = Math.cos(s.pitch);
-    out[0] = s.x + s.distance * cp * Math.sin(s.yaw);
-    out[1] = s.y + s.distance * Math.sin(s.pitch);
-    out[2] = s.z + s.distance * cp * Math.cos(s.yaw);
+    const back = s.bias * s.distance * clamp((s.distance - 500) / 1500, 0, 1); // only when far out
+    aim[0] = s.x + back * Math.sin(s.yaw);
+    aim[1] = s.y;
+    aim[2] = s.z + back * Math.cos(s.yaw);
+    out[0] = aim[0] + s.distance * cp * Math.sin(s.yaw);
+    out[1] = aim[1] + s.distance * Math.sin(s.pitch);
+    out[2] = aim[2] + s.distance * cp * Math.cos(s.yaw);
     return out;
   }
 
@@ -74,7 +81,7 @@ export function createCamera({ reducedMotion = false } = {}) {
    * Flies to a new view. Any field left out keeps its present goal.
    * @param {{ target?: number[], distance?: number, yaw?: number, pitch?: number, duration?: number, swoop?: number, lift?: number, follow?: Function }} to
    *   swoop: a turn added on the way; lift: how far to pull back mid-flight (worked out from the journey when left out);
-   *   follow: a moving point to arrive at and stay with
+   *   follow: a moving point to arrive at and stay with; hold: stay on that point throughout
    */
   function flyTo(to = {}) {
     const from = { ...state };
@@ -89,13 +96,14 @@ export function createCamera({ reducedMotion = false } = {}) {
     const travel = Math.hypot(end.x - from.x, end.y - from.y, end.z - from.z);
     const span = from.distance + end.distance;
     const duration = reducedMotion ? 0.001 : (to.duration ?? clamp(1.05 + travel / 1100 + Math.abs(Math.log(end.distance / from.distance)) * 0.28, 1.1, 3.4));
-    Object.assign(goal, end, { cx: goal.cx, cy: goal.cy });
+    Object.assign(goal, end, { cx: goal.cx, cy: goal.cy, bias: goal.bias });
     // How far the camera pulls back mid-flight: nothing for a step, a wide arc for a crossing.
     const lift = to.lift ?? clamp((travel / Math.max(span, 1)) * 0.55 - 0.08, 0, 1.6);
     flight = {
       from, end, duration, elapsed: 0, lift,
       pan: panTable(from.distance, end.distance, lift),
       yawDelta: angleDelta(from.yaw, end.yaw),
+      hold: Boolean(to.hold && to.follow), // stay on the followed point all the way, wherever it goes
     };
     follow = to.follow || null;
     idle = 0;
@@ -108,6 +116,7 @@ export function createCamera({ reducedMotion = false } = {}) {
     if (to.distance !== undefined) goal.distance = to.distance;
     if (to.yaw !== undefined) goal.yaw = to.yaw;
     if (to.pitch !== undefined) goal.pitch = to.pitch;
+    if (to.bias !== undefined) goal.bias = to.bias;
     settle();
     Object.assign(state, goal);
     flight = null;
@@ -115,6 +124,9 @@ export function createCamera({ reducedMotion = false } = {}) {
 
   /** Where the target sits on screen, in clip units (-1..1). Eased. */
   function setCentre(cx, cy) { goal.cx = cx; goal.cy = cy; }
+
+  /** How far the camera stands back toward the viewer, as a share of its distance. Eased. */
+  function setBias(value) { goal.bias = value; }
 
   function setFollow(source) { follow = source; }
 
@@ -129,7 +141,7 @@ export function createCamera({ reducedMotion = false } = {}) {
       const tx = locked ? locked[0] : end.x;
       const ty = locked ? locked[1] : end.y;
       const tz = locked ? locked[2] : end.z;
-      const along = panAt(flight.pan, e);
+      const along = flight.hold ? 1 : panAt(flight.pan, e);
       state.x = lerp(from.x, tx, along);
       state.y = lerp(from.y, ty, along);
       state.z = lerp(from.z, tz, along);
@@ -156,6 +168,7 @@ export function createCamera({ reducedMotion = false } = {}) {
     const kc = 1 - Math.exp(-dt * 5);
     state.cx = lerp(state.cx, goal.cx, kc);
     state.cy = lerp(state.cy, goal.cy, kc);
+    state.bias = lerp(state.bias, goal.bias, 1 - Math.exp(-dt * 2.2));
   }
 
   function resize(w, h) { width = Math.max(1, w); height = Math.max(1, h); }
@@ -165,7 +178,7 @@ export function createCamera({ reducedMotion = false } = {}) {
     eyeOf(state, eye);
     const far = Math.max(state.distance * 6, 24000);
     perspective(proj, FOV, width / height, Math.max(0.5, state.distance * 0.02), far, state.cx, state.cy);
-    lookAt(view, eye, [state.x, state.y, state.z], [0, 1, 0]);
+    lookAt(view, eye, aim, [0, 1, 0]);
     multiply(viewProj, proj, view);
     basis.right[0] = view[0]; basis.right[1] = view[4]; basis.right[2] = view[8];
     basis.up[0] = view[1]; basis.up[1] = view[5]; basis.up[2] = view[9];
@@ -221,7 +234,7 @@ export function createCamera({ reducedMotion = false } = {}) {
   }
 
   return {
-    state, goal, flyTo, jumpTo, setCentre, setFollow, update, resize, frame, orbit, pan, zoom, cancelFlight,
+    state, goal, flyTo, jumpTo, setCentre, setBias, setFollow, update, resize, frame, orbit, pan, zoom, cancelFlight,
     get flying() { return Boolean(flight); },
     get following() { return Boolean(follow); },
     touch() { idle = 0; },

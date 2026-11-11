@@ -38,7 +38,7 @@ export function createLabels({ root, cosmos, universe, small = false, onStar, on
         h('span.lbl-galaxy-count', `${galaxy.size} films`));
       galaxyLayer.append(element);
       return { galaxy, element, visible: false };
-    });
+    }).sort((a, b) => b.galaxy.size - a.galaxy.size); // where two names would cross, the larger galaxy keeps its
     arms = [];
     for (const galaxy of universe.galaxies[sky] || []) {
       for (const arm of galaxy.arms || []) {
@@ -83,10 +83,12 @@ export function createLabels({ root, cosmos, universe, small = false, onStar, on
       const scale = clamp(radiusPx / 150, 0.62, 1.5);
       const y = p.y + radiusPx * 0.74 + 8;
       if (opacity <= 0.02 || p.x < left - 40 || p.x > right + 40 || y < -40 || y > floor + 30) { show(entry, false); continue; }
+      const wide = (galaxy.name.length * 11.5 + 30) * scale;
+      const box = [p.x - wide / 2, y - 27 * scale, p.x + wide / 2, y + 27 * scale];
+      if (crosses(fixed, ...box)) { show(entry, false); continue; }
+      fixed.push(box);
       place(element, p.x, y, scale);
       show(entry, true, opacity);
-      const wide = (galaxy.name.length * 11.5 + 30) * scale;
-      fixed.push([p.x - wide / 2, y - 27 * scale, p.x + wide / 2, y + 27 * scale]);
     }
     for (const entry of arms) {
       const { galaxy, arm, element } = entry;
@@ -145,7 +147,8 @@ export function createLabels({ root, cosmos, universe, small = false, onStar, on
     const cardMode = !hidden && distance < (small ? 330 : 440);
     const titleMode = !hidden && distance < 1500;
     const budgetCards = cardMode ? (small ? 9 : 24) : 0;
-    const budgetTitles = small ? 10 : 30;
+    // Close in, many stars are named; from further out, only the best known.
+    const budgetTitles = Math.round((small ? 10 : 30) * (1 - 0.55 * clamp((distance - 300) / 900, 0, 1)));
     const target = cosmos.camera.state;
     const G = universe.galaxyOf[cosmos.sky];
     const m = view.viewProj;

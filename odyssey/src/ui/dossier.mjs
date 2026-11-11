@@ -1,7 +1,7 @@
 // The dossier: what is known of the star you have reached, and the six rays
 // that lead away from it. Everything here says where it came from: the chart
 // (computed), the encyclopedia, or Claude reading as the Navigator.
-import { LIGHT_IDS, lightById } from '../engine/lights.mjs';
+import { lightById } from '../engine/lights.mjs';
 import { UNLIT } from '../engine/universe.mjs';
 import { traitsOf } from '../engine/voyage.mjs';
 import { h, icon, replace, plural } from './dom.mjs';
