@@ -62,7 +62,12 @@ export function createApp({ root, universe, depth, cosmos, labels, pilot, store,
     const { width, height } = cosmos.size;
     const right = app.dossier?.width() || 0;
     const left = app.panels?.width() || 0;
-    if (small) cosmos.camera.setCentre(0, Math.min(0.55, (app.dossier?.height() || app.panels?.height() || 0) / Math.max(height, 1)));
+    const below = small ? Math.max(app.dossier?.height() || 0, app.panels?.height() || 0) : 0;
+    root.style.setProperty('--inset-left', `${left}px`);
+    root.style.setProperty('--inset-right', `${right}px`);
+    labels.setInsets({ left, right, bottom: below });
+    // The star you are at sits in the middle of the sky that is left uncovered.
+    if (small) cosmos.camera.setCentre(0, Math.min(0.55, below / Math.max(height, 1)));
     else cosmos.camera.setCentre((left - right) / Math.max(width, 1), 0);
   }
   app.frameCosmos = frameCosmos;
@@ -479,9 +484,9 @@ export function createApp({ root, universe, depth, cosmos, labels, pilot, store,
       focusStar(star, { quiet: true, drifting: true });
     } else {
       const next = driftNext(universe, star, marks.visited, state.sky);
-      if (next < 0) { stopDrift(); return; }
-      const light = state.sky === 'white' ? closestLight(universe, star, next).light : state.sky;
-      focusStar(next, { quiet: true, drifting: true, light });
+      if (!next) { stopDrift(); return; }
+      const light = next.light === 'white' ? closestLight(universe, star, next.star).light : next.light;
+      focusStar(next.star, { quiet: true, drifting: true, light });
     }
     driftTimer = setTimeout(driftStep, reducedMotion ? 9000 : 8200);
   }
@@ -574,6 +579,7 @@ export function createApp({ root, universe, depth, cosmos, labels, pilot, store,
   root.style.setProperty('--light', lightById(state.sky).color);
 
   window.addEventListener('hashchange', () => { if (!writingAddress) followAddress(); });
+  window.addEventListener('resize', () => requestAnimationFrame(frameCosmos));
   window.addEventListener('keydown', event => {
     if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) return;
     const typing = /^(input|textarea|select)$/i.test(event.target.tagName || '') || event.target.isContentEditable;

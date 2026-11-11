@@ -9,6 +9,36 @@ const MAX_DISTANCE = 7600;
 const MIN_PITCH = 0.06;
 const MAX_PITCH = 1.5;
 
+/**
+ * How far along its path a flight has moved its target, for each step of its
+ * zoom. The ground covered at any moment is in proportion to how much is in
+ * view, so a descent crosses the sky while it is still high and an ascent
+ * rises before it travels: where you are going stays in sight all the way.
+ */
+function panTable(from, to, lift) {
+  const steps = 48;
+  const table = new Float32Array(steps + 1);
+  const a = Math.log(from);
+  const b = Math.log(to);
+  let sum = 0;
+  let before = from;
+  for (let n = 1; n <= steps; n += 1) {
+    const e = n / steps;
+    const now = Math.exp(lerp(a, b, e)) * (1 + lift * Math.sin(Math.PI * e));
+    sum += (before + now) / 2;
+    table[n] = sum;
+    before = now;
+  }
+  for (let n = 1; n <= steps; n += 1) table[n] /= sum;
+  return table;
+}
+
+function panAt(table, e) {
+  const f = clamp(e, 0, 1) * (table.length - 1);
+  const n = Math.min(table.length - 2, Math.floor(f));
+  return lerp(table[n], table[n + 1], f - n);
+}
+
 export function createCamera({ reducedMotion = false } = {}) {
   const state = { x: 0, y: 0, z: 0, distance: 4300, yaw: 0.5, pitch: 0.98, cx: 0, cy: 0 };
   const goal = { ...state };
@@ -42,7 +72,9 @@ export function createCamera({ reducedMotion = false } = {}) {
 
   /**
    * Flies to a new view. Any field left out keeps its present goal.
-   * @param {{ target?: number[], distance?: number, yaw?: number, pitch?: number, duration?: number, swoop?: number }} to
+   * @param {{ target?: number[], distance?: number, yaw?: number, pitch?: number, duration?: number, swoop?: number, lift?: number, follow?: Function }} to
+   *   swoop: a turn added on the way; lift: how far to pull back mid-flight (worked out from the journey when left out);
+   *   follow: a moving point to arrive at and stay with
    */
   function flyTo(to = {}) {
     const from = { ...state };
@@ -58,10 +90,11 @@ export function createCamera({ reducedMotion = false } = {}) {
     const span = from.distance + end.distance;
     const duration = reducedMotion ? 0.001 : (to.duration ?? clamp(1.05 + travel / 1100 + Math.abs(Math.log(end.distance / from.distance)) * 0.28, 1.1, 3.4));
     Object.assign(goal, end, { cx: goal.cx, cy: goal.cy });
+    // How far the camera pulls back mid-flight: nothing for a step, a wide arc for a crossing.
+    const lift = to.lift ?? clamp((travel / Math.max(span, 1)) * 0.55 - 0.08, 0, 1.6);
     flight = {
-      from, end, duration, elapsed: 0,
-      // How far the camera pulls back mid-flight: nothing for a step, a wide arc for a crossing.
-      lift: clamp((travel / Math.max(span, 1)) * 0.55 - 0.08, 0, 1.6),
+      from, end, duration, elapsed: 0, lift,
+      pan: panTable(from.distance, end.distance, lift),
       yawDelta: angleDelta(from.yaw, end.yaw),
     };
     follow = to.follow || null;
@@ -96,9 +129,10 @@ export function createCamera({ reducedMotion = false } = {}) {
       const tx = locked ? locked[0] : end.x;
       const ty = locked ? locked[1] : end.y;
       const tz = locked ? locked[2] : end.z;
-      state.x = lerp(from.x, tx, e);
-      state.y = lerp(from.y, ty, e);
-      state.z = lerp(from.z, tz, e);
+      const along = panAt(flight.pan, e);
+      state.x = lerp(from.x, tx, along);
+      state.y = lerp(from.y, ty, along);
+      state.z = lerp(from.z, tz, along);
       state.distance = Math.exp(lerp(Math.log(from.distance), Math.log(end.distance), e)) * (1 + flight.lift * Math.sin(Math.PI * e));
       state.yaw = from.yaw + flight.yawDelta * e;
       state.pitch = lerp(from.pitch, end.pitch, e);

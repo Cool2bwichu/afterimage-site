@@ -1,13 +1,19 @@
 // Posters are the faces of the stars. A charted film's poster is shown from
-// Wikimedia Commons where the chart recorded one; until it loads, and wherever
-// there is none, the film wears a plate made from its own two colours.
+// Wikimedia where the chart recorded one; until it loads, and wherever there is
+// none, the film wears a plate made from its own two colours.
+//
+// Posters are fetched a few at a time, the ones in view first, and a refusal
+// is tried again a little later: an image host is a shared thing, and a sky
+// full of faces should not arrive as one burst.
 //
 // A build that cannot reach outside images (the claude.ai edition) carries
 // small thumbnails in sheets instead: `configurePosters` points at them.
 import { h } from './dom.mjs';
 
 const COMMONS = 'https://upload.wikimedia.org/wikipedia/';
-let sheets = null; // { url(n), columns, rows, index: { slug: [sheet, cell] } }
+const AT_ONCE = 6;
+const TRIES = 3;
+let sheets = null; // { files, columns, rows, index: { slug: [sheet, cell] } }
 let imageBase = COMMONS;
 
 /**
@@ -23,19 +29,102 @@ export function hasPoster(film) {
   return Boolean(film.p || film.pu);
 }
 
-/** The address of a film's poster, or '' when it has none (or only a thumbnail in a sheet). */
-export function posterUrl(film) {
+/**
+ * The address of a film's poster, or '' when it has none (or only a thumbnail in a sheet).
+ * @param {object} film
+ * @param {'small' | 'large'} [size] small: a face in the sky or a row; large: the dossier
+ */
+export function posterUrl(film, size = 'small') {
   if (sheets) return '';
   if (film.pu) return film.pu; // a poster found for a star charted later
-  return film.p ? `${imageBase}${film.p}` : '';
+  if (!film.p) return '';
+  // A free image is recorded at a generous width; ask for one nearer the size it is shown at.
+  const path = film.p.replace(/\/(\d+)px-([^/]+)$/, (whole, width, name) => (Number(width) > 500 ? `/${size === 'large' ? 500 : 250}px-${name}` : whole));
+  return `${imageBase}${path}`;
+}
+
+// ── Fetching, a few at a time.
+const known = new Map(); // address → 'here' | 'gone' | [holders waiting on the first fetch]
+const waiting = [];      // jobs not yet started, first in view first served
+let active = 0;
+
+const watcher = typeof IntersectionObserver === 'function'
+  ? new IntersectionObserver(entries => {
+    for (const entry of entries) {
+      if (!entry.isIntersecting) continue;
+      watcher.unobserve(entry.target);
+      const job = jobs.get(entry.target);
+      if (job) { jobs.delete(entry.target); want(job); }
+    }
+  }, { rootMargin: '160px' })
+  : null;
+const jobs = new WeakMap(); // holder → job, until it comes into view
+
+function reveal(job) {
+  if (job.shown) return;
+  job.shown = true;
+  const image = h('img.poster-image', { alt: `Poster of ${job.title}`, decoding: 'async', referrerpolicy: 'no-referrer', draggable: 'false' });
+  image.addEventListener('load', () => job.holder.classList.add('has-image'), { once: true });
+  image.addEventListener('error', () => image.remove(), { once: true });
+  image.src = job.url; // already fetched once: this comes from the browser's cache
+  job.holder.append(image);
+}
+
+function want(job) {
+  const state = known.get(job.url);
+  if (state === 'here') { reveal(job); return; }
+  if (state === 'gone') return;
+  if (Array.isArray(state)) { state.push(job); return; }
+  known.set(job.url, [job]);
+  if (job.eager) waiting.unshift(job); else waiting.push(job);
+  pump();
+}
+
+function pump() {
+  while (active < AT_ONCE && waiting.length) {
+    const job = waiting.shift();
+    const holders = known.get(job.url);
+    // A face that left the sky before its turn is not worth the request.
+    if (Array.isArray(holders) && !holders.some(entry => entry.holder.isConnected)) {
+      known.delete(job.url);
+      for (const entry of holders) if (watcher) { jobs.set(entry.holder, entry); watcher.observe(entry.holder); }
+      continue;
+    }
+    fetchImage(job);
+  }
+}
+
+function fetchImage(job) {
+  active += 1;
+  const probe = new Image();
+  probe.decoding = 'async';
+  probe.referrerPolicy = 'no-referrer';
+  const done = ok => {
+    active -= 1;
+    const holders = known.get(job.url);
+    if (ok) {
+      known.set(job.url, 'here');
+      if (Array.isArray(holders)) for (const entry of holders) reveal(entry);
+    } else if ((job.tries += 1) < TRIES) {
+      // Refused, most likely for asking too fast: wait, then take a place at the back.
+      setTimeout(() => { waiting.push(job); pump(); }, 1800 * 2 ** job.tries + Math.random() * 900);
+    } else {
+      known.set(job.url, 'gone');
+    }
+    pump();
+  };
+  probe.onload = () => done(true);
+  probe.onerror = () => done(false);
+  probe.src = job.url;
 }
 
 /**
  * A poster element: the plate underneath, the image over it once it arrives.
  * @param {object} film
- * @param {{ words?: boolean, eager?: boolean }} [options] words: set the title on the plate
+ * @param {{ words?: boolean, eager?: boolean, size?: 'small' | 'large' }} [options]
+ *   words: set the title on the plate; eager: fetch ahead of the others; size: how large it will be shown
  */
-export function poster(film, { words = true, eager = false } = {}) {
+export function poster(film, { words = true, eager = false, size = 'small' } = {}) {
   const element = h('span.poster', { style: { '--hi': film.hi || '#dec6a0', '--lo': film.lo || '#101923' } });
   const plate = h('span.poster-plate', { 'aria-hidden': 'true' });
   if (words) plate.append(h('span.poster-plate-title', film.t), h('span.poster-plate-year', String(film.y || '')));
@@ -61,13 +150,12 @@ export function poster(film, { words = true, eager = false } = {}) {
     return element;
   }
 
-  const url = posterUrl(film);
+  const url = posterUrl(film, size);
   if (url) {
-    const image = h('img.poster-image', { alt: `Poster of ${film.t}`, loading: eager ? 'eager' : 'lazy', decoding: 'async', referrerpolicy: 'no-referrer', draggable: 'false' });
-    image.addEventListener('load', () => element.classList.add('has-image'), { once: true });
-    image.addEventListener('error', () => image.remove(), { once: true });
-    image.src = url;
-    element.append(image);
+    const job = { holder: element, url, title: film.t, eager, tries: 0, shown: false };
+    if (known.get(url) === 'here') reveal(job);
+    else if (watcher) { jobs.set(element, job); watcher.observe(element); }
+    else want(job);
   }
   return element;
 }

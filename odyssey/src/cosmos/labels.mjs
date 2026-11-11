@@ -6,8 +6,8 @@ import { h } from '../ui/dom.mjs';
 import { poster } from '../ui/posters.mjs';
 import { clamp } from './math.mjs';
 
-const CARD_W = 60;
-const CARD_H = 86;
+const CARD_W = 64;
+const CARD_H = 95;
 const SELECT_EVERY = 0.16; // seconds between choosing which stars are named
 
 export function createLabels({ root, cosmos, universe, small = false, onStar, onGalaxy, onArm }) {
@@ -22,6 +22,8 @@ export function createLabels({ root, cosmos, universe, small = false, onStar, on
   let hidden = false;
   let sinceSelect = 1;
   const context = { focus: -1, hover: -1, rays: new Map(), highlight: null, loved: new Set(), lit: null };
+  const insets = { left: 0, right: 0, bottom: 0 }; // the parts of the sky that panels cover
+  const fixed = [];  // boxes of the galaxy and arm names now showing: star names keep clear of them
   const shown = new Map(); // star → { element, kind, rank }
   const leaving = new Set();
   const scratch = {};
@@ -42,12 +44,21 @@ export function createLabels({ root, cosmos, universe, small = false, onStar, on
       for (const arm of galaxy.arms || []) {
         const element = h('button.lbl-arm', { type: 'button', tabindex: '-1', onclick: () => onArm?.(galaxy.g, arm.arm) }, arm.name);
         armLayer.append(element);
-        arms.push({ galaxy, arm, element, visible: false });
+        arms.push({ galaxy, arm, element, visible: false, wide: arm.name.length * 8.4 + 18 });
       }
     }
+    // Where two names would cross, the larger arm keeps its name.
+    arms.sort((a, b) => b.arm.size - a.arm.size);
   }
 
+  const crosses = (boxes, l, t, r, b) => { for (const box of boxes) if (l < box[2] && r > box[0] && t < box[3] && b > box[1]) return true; return false; };
+
   const place = (element, x, y, scale = 1) => { element.style.transform = `translate3d(${x.toFixed(1)}px, ${y.toFixed(1)}px, 0) translate(-50%, -50%) scale(${scale.toFixed(3)})`; };
+  // A card grows and shrinks with its distance; the words under it stay one size.
+  const steady = (entry, scale) => {
+    const inverse = Math.round(1000 / scale) / 1000;
+    if (entry.inverse !== inverse) { entry.inverse = inverse; entry.element.style.setProperty('--steady', String(inverse)); }
+  };
 
   function show(entry, on, opacity = 1) {
     if (on !== entry.visible) { entry.visible = on; entry.element.classList.toggle('on', on); }
@@ -58,6 +69,10 @@ export function createLabels({ root, cosmos, universe, small = false, onStar, on
   function updateGalaxies(view) {
     const moving = cosmos.transitioning || sky !== cosmos.sky;
     const { width, height } = cosmos.size;
+    const left = insets.left;
+    const right = width - insets.right;
+    const floor = height - insets.bottom;
+    fixed.length = 0;
     for (const entry of galaxies) {
       const { galaxy, element } = entry;
       const p = moving || hidden ? null : cosmos.projectPoint(galaxy.centre[0], galaxy.centre[1], galaxy.centre[2], scratch);
@@ -65,10 +80,13 @@ export function createLabels({ root, cosmos, universe, small = false, onStar, on
       const radiusPx = (galaxy.radius * view.focal) / p.depth;
       // A galaxy's name is for seeing it whole: it fades as you enter.
       const opacity = clamp((radiusPx - 26) / 30, 0, 1) * clamp((height * 0.62 - radiusPx) / (height * 0.2), 0, 1);
-      if (opacity <= 0.02 || p.x < -200 || p.x > width + 200 || p.y < -200 || p.y > height + 200) { show(entry, false); continue; }
       const scale = clamp(radiusPx / 150, 0.62, 1.5);
-      place(element, p.x, p.y + radiusPx * 0.74 + 8, scale);
+      const y = p.y + radiusPx * 0.74 + 8;
+      if (opacity <= 0.02 || p.x < left - 40 || p.x > right + 40 || y < -40 || y > floor + 30) { show(entry, false); continue; }
+      place(element, p.x, y, scale);
       show(entry, true, opacity);
+      const wide = (galaxy.name.length * 11.5 + 30) * scale;
+      fixed.push([p.x - wide / 2, y - 27 * scale, p.x + wide / 2, y + 27 * scale]);
     }
     for (const entry of arms) {
       const { galaxy, arm, element } = entry;
@@ -76,9 +94,13 @@ export function createLabels({ root, cosmos, universe, small = false, onStar, on
       if (!p) { show(entry, false); continue; }
       const radiusPx = (galaxy.radius * view.focal) / p.depth;
       const opacity = clamp((radiusPx - height * 0.26) / (height * 0.12), 0, 1) * clamp((height * 2.6 - radiusPx) / (height * 0.8), 0, 1);
-      if (opacity <= 0.02 || p.x < -100 || p.x > width + 100 || p.y < -60 || p.y > height + 60) { show(entry, false); continue; }
-      place(element, p.x, p.y - 26);
-      show(entry, true, opacity * 0.9);
+      const y = p.y - 26;
+      if (opacity <= 0.02 || p.x < left - 20 || p.x > right + 20 || y < 56 || y > floor - 10) { show(entry, false); continue; }
+      const box = [p.x - entry.wide / 2, y - 10, p.x + entry.wide / 2, y + 10];
+      if (crosses(fixed, ...box)) { show(entry, false); continue; }
+      fixed.push(box);
+      place(element, p.x, y);
+      show(entry, true, opacity * 0.78);
     }
   }
 
@@ -139,7 +161,9 @@ export function createLabels({ root, cosmos, universe, small = false, onStar, on
       if (w <= 0.5) continue;
       const x = ((m[0] * pos[0] + m[4] * pos[1] + m[8] * pos[2] + m[12]) / w * 0.5 + 0.5) * width;
       const y = (0.5 - (m[1] * pos[0] + m[5] * pos[1] + m[9] * pos[2] + m[13]) / w * 0.5) * height;
-      if (x < -40 || x > width + 40 || y < -60 || y > height + 40) continue;
+      if (x < insets.left - 24 || x > width - insets.right + 24 || y < -60 || y > height - insets.bottom + 30) continue;
+      // The instruments sit along the top and the bottom: only the star you are at is named under them.
+      if (i !== context.focus && (y < (cardMode ? 104 : 62) || y > height - insets.bottom - (small ? 70 : 96))) continue;
       const away = Math.hypot(pos[0] - target.x, pos[1] - target.y, pos[2] - target.z) / distance;
       if (!special && !lit && away > 2.4) continue;
       const film = universe.films[i];
@@ -153,8 +177,8 @@ export function createLabels({ root, cosmos, universe, small = false, onStar, on
     }
     candidates.sort((a, b) => b.priority - a.priority);
 
-    const placed = [];
-    const collides = (l, t, r, b) => { for (const box of placed) if (l < box[2] && r > box[0] && t < box[3] && b > box[1]) return true; return false; };
+    const placed = fixed.map(box => box);
+    const collides = (l, t, r, b) => crosses(placed, l, t, r, b);
     const next = new Map();
     let cards = 0;
     let titles = 0;
@@ -166,9 +190,10 @@ export function createLabels({ root, cosmos, universe, small = false, onStar, on
       let kind = null;
       if (cards < budgetCards && (near || special)) {
         const scale = cardScale(star, w, distance);
-        const cw = CARD_W * scale;
-        const ch = (CARD_H + 20) * scale;
-        const box = [x - cw / 2 - 3, y - ch / 2 - 3, x + cw / 2 + 3, y + ch / 2 + 3];
+        // A card is its poster with the title beneath, which runs a little wider.
+        const half = (Math.max(CARD_W, 92) * scale) / 2;
+        const tall = (CARD_H * scale) / 2;
+        const box = [x - half - 2, y - tall - 3, x + half + 2, y + tall + 25 * scale];
         if (special || !collides(...box)) { placed.push(box); kind = 'card'; cards += 1; }
       }
       if (!kind && titles < budgetTitles && (titleMode || special || context.highlight)) {
@@ -199,7 +224,7 @@ export function createLabels({ root, cosmos, universe, small = false, onStar, on
   const scratchPos = [0, 0, 0];
   function cardScale(star, depth, distance) {
     const base = clamp(distance / depth, 0.5, 1.3) * clamp(210 / distance, 0.62, 1.12);
-    return star === context.focus ? Math.max(base * 1.32, 1.08) : base;
+    return star === context.focus ? Math.max(base * 1.5, 1.2) : base;
   }
 
   function updateStars(view) {
@@ -209,7 +234,8 @@ export function createLabels({ root, cosmos, universe, small = false, onStar, on
       if (!p) { entry.element.style.opacity = '0'; continue; }
       if (entry.kind === 'card') {
         const scale = cardScale(star, p.depth, distance);
-        place(entry.element, p.x, p.y + 9 * scale, scale);
+        place(entry.element, p.x, p.y, scale);
+        steady(entry, scale);
         entry.element.style.opacity = '';
       } else {
         const size = cosmos.sizeAt(star, p.depth);
@@ -233,6 +259,8 @@ export function createLabels({ root, cosmos, universe, small = false, onStar, on
   return {
     /** What the labels should favour: the focused star, the ends of its rays (star → colour), a lit set. */
     setContext(next) { Object.assign(context, next); sinceSelect = 1; },
+    /** How much of the sky is covered by panels, in pixels from each edge: nothing is named under them. */
+    setInsets(next) { Object.assign(insets, next); sinceSelect = 1; },
     setHidden(value) { hidden = value; root.classList.toggle('hidden', value); sinceSelect = 1; },
     rebuild() { buildSky(); },
     stop() { off(); },

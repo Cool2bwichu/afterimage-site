@@ -1,0 +1,211 @@
+// The instruments around the sky: where you are, the light you are seeing
+// by, the Navigator's state, your wake, and whatever needs saying.
+import { ALL_LIGHTS, lightById } from '../engine/lights.mjs';
+import { UNLIT } from '../engine/universe.mjs';
+import { h, icon, replace, plural } from './dom.mjs';
+import { poster } from './posters.mjs';
+
+export function createHud(app) {
+  const { universe, state, store, pilot, cosmos, films } = app;
+
+  // ── Top: the name of the place, and the tools.
+  const crumbs = h('div.crumbs', { 'aria-live': 'polite' });
+  const brand = h('button.brand', { type: 'button', title: 'Back to the whole universe (H)', onclick: () => app.goHome() },
+    h('span.brand-mark', 'AFTERIMAGE'), h('span.brand-sub', 'The Odyssey'));
+
+  const tool = (name, label, glyph, action, extra = {}) => {
+    const count = h('span.tool-count');
+    const button = h('button.tool', { type: 'button', title: label, 'aria-label': label, onclick: action, ...extra }, icon(glyph), h('span.tool-label', label), count);
+    return { button, count, name };
+  };
+  const tools = {
+    search: tool('search', 'Find a film', 'search', () => app.searchView.open()),
+    course: tool('course', 'Plot a course', 'compass', () => app.panels.toggle('course')),
+    sky: tool('sky', 'Your sky', 'heart', () => app.panels.toggle('sky')),
+    figures: tool('figures', 'Constellations', 'constellation', () => app.panels.toggle('figures')),
+    nebulae: tool('nebulae', 'Nebulae', 'nebula', () => app.panels.toggle('nebulae')),
+    drift: tool('drift', 'Drift', 'drift', () => (state.drift ? app.stopDrift() : app.startDrift())),
+  };
+  const navDot = h('span.nav-dot');
+  const navLabel = h('span.nav-label', 'Finding the Navigator');
+  const navChip = h('button.nav-chip', { type: 'button', 'aria-haspopup': 'dialog', onclick: () => app.panels.toggle('navigator') }, navDot, navLabel);
+  const top = h('header.hud-top', h('div.hud-left', brand, crumbs), h('nav.hud-tools', { 'aria-label': 'Tools' }, Object.values(tools).map(entry => entry.button), navChip));
+
+  // ── Bottom: the dial of lights.
+  const dialButtons = ALL_LIGHTS.map((light, n) => h('button.dial-light', {
+    type: 'button', style: { '--c': light.color }, title: `${light.name}: ${light.asks} (${n})`, 'aria-label': `${light.name}: ${light.asks}`,
+    onclick: () => app.setSky(light.id),
+  }, h('span.dial-swatch'), h('span.dial-name', light.name)));
+  const dialLine = h('p.dial-line');
+  const dial = h('div.dial', { role: 'group', 'aria-label': 'The light the universe is seen by' }, h('div.dial-lights', dialButtons), dialLine);
+
+  // ── Things said in passing.
+  const captionText = h('p.caption-text');
+  const caption = h('div.caption', { 'aria-live': 'polite' }, captionText);
+  let captionTimer = 0;
+
+  const toasts = h('div.toasts', { 'aria-live': 'polite' });
+  const workingText = h('span.working-text');
+  const working = h('div.working', { hidden: true }, h('span.working-pulse'), workingText,
+    h('button.working-stop', { type: 'button', onclick: () => { pilot.cancel('tool'); api.working(''); } }, 'Stop'));
+
+  const currentLabel = h('span.current-label');
+  const currentNote = h('span.current-note');
+  const current = h('div.current', { hidden: true }, h('span.current-dot'), h('span.current-text', currentLabel, currentNote),
+    h('button.current-close', { type: 'button', 'aria-label': 'Put the lights back', onclick: () => app.setCurrent(null) }, icon('close', 15)));
+
+  // ── A voyage being followed.
+  const voyageName = h('span.voyage-name');
+  const voyageStop = h('span.voyage-stop');
+  const voyagePrev = h('button.voyage-step', { type: 'button', 'aria-label': 'Previous stop', onclick: () => app.voyageTo(Math.max(0, (state.voyage?.at ?? 0) - 1)) }, icon('back', 16));
+  const voyageNext = h('button.voyage-step.next', { type: 'button', onclick: () => app.voyageTo(Math.min((state.voyage?.stops.length || 1) - 1, (state.voyage?.at ?? -1) + 1)) }, h('span', 'Next'), icon('arrow', 16));
+  const voyage = h('div.voyage', { hidden: true },
+    h('button.voyage-open', { type: 'button', title: 'Show the whole voyage', onclick: () => app.panels.open(state.voyage?.kind === 'passage' ? 'passage' : 'course') }, voyageName, voyageStop),
+    voyagePrev, voyageNext,
+    h('button.voyage-end', { type: 'button', 'aria-label': 'End this voyage', onclick: () => app.endVoyage() }, icon('close', 15)));
+
+  // ── The wake: where you have been.
+  const wakeList = h('div.wake-list');
+  const wakeLog = h('p.wake-log');
+  const wake = h('div.wake', { 'aria-label': 'Your wake' }, wakeList, wakeLog);
+
+  const zoom = h('div.zoom',
+    h('button', { type: 'button', 'aria-label': 'Closer', onclick: () => cosmos.camera.zoom(0.62) }, icon('plus', 16)),
+    h('button', { type: 'button', 'aria-label': 'Further', onclick: () => cosmos.camera.zoom(1.6) }, icon('minus', 16)),
+    h('button', { type: 'button', 'aria-label': 'The whole universe', onclick: () => app.goHome() }, icon('home', 16)));
+
+  const bottom = h('footer.hud-bottom', wake, h('div.hud-centre', caption, voyage, dial), zoom);
+  const layer = h('div.hud', top, h('div.hud-notices', current, working, toasts), bottom);
+  app.root.querySelector('#app').append(layer);
+
+  function place() {
+    const sky = state.sky;
+    const parts = [];
+    const light = lightById(sky);
+    parts.push(h('span.crumb.crumb-light', { style: { '--c': light.color } }, light.name));
+    let g = -1;
+    let armName = '';
+    if (state.focus >= 0) {
+      g = universe.galaxyOf[sky][state.focus];
+      if (g !== UNLIT) {
+        const galaxy = universe.galaxies[sky][g];
+        const armIndex = universe.armOf[sky][state.focus];
+        const arm = galaxy && galaxy.arms.find(entry => entry.arm === armIndex);
+        armName = arm ? arm.name : '';
+      }
+    } else if (state.galaxy >= 0) g = state.galaxy;
+    if (g >= 0 && g !== UNLIT && universe.galaxies[sky][g]) {
+      const galaxy = universe.galaxies[sky][g];
+      parts.push(h('button.crumb', { type: 'button', onclick: () => app.openGalaxy(galaxy.g) }, galaxy.name));
+      if (armName) parts.push(h('span.crumb.crumb-arm', armName));
+    } else if (state.focus >= 0) {
+      parts.push(h('span.crumb.crumb-arm', 'beyond the lit galaxies'));
+    }
+    replace(crumbs, parts.flatMap((part, n) => (n ? [h('span.crumb-sep', '›'), part] : [part])));
+  }
+
+  function lights() {
+    ALL_LIGHTS.forEach((light, n) => {
+      const on = light.id === state.sky;
+      dialButtons[n].classList.toggle('on', on);
+      dialButtons[n].setAttribute('aria-pressed', String(on));
+    });
+    const light = lightById(state.sky);
+    replace(dialLine, h('strong', light.asks), state.sky === 'white' ? ' · all six lights together' : ` · alike in ${light.short}`);
+  }
+
+  function logbook() {
+    const visited = app.marks.visited.size;
+    const stars = store.state.wake.slice(-7).map(app.starOf).filter(i => i >= 0);
+    const unique = stars.filter((star, n) => stars.indexOf(star) === n);
+    replace(wakeList, unique.map(star => h('button.wake-star', {
+      type: 'button', title: `${films[star].t} (${films[star].y})`, class: star === state.focus ? 'on' : '',
+      onclick: () => app.focusStar(star),
+    }, poster(films[star], { words: false }))));
+    const found = state.found.size;
+    const beyond = universe.count - universe.base;
+    const parts = [];
+    if (visited) parts.push(plural(visited, 'star'));
+    if (found) parts.push(plural(found, 'constellation'));
+    if (beyond) parts.push(`${beyond.toLocaleString('en')} beyond the chart`);
+    wakeLog.textContent = parts.join(' · ');
+    wake.classList.toggle('empty', !visited);
+  }
+
+  function counts() {
+    const loved = app.marks.loved.size;
+    tools.sky.count.textContent = loved ? String(loved) : '';
+    tools.figures.count.textContent = state.found.size ? String(state.found.size) : '';
+    tools.drift.button.classList.toggle('on', state.drift);
+    tools.drift.button.setAttribute('aria-pressed', String(state.drift));
+    for (const entry of Object.values(tools)) entry.button.classList.toggle('open', state.tool?.name === entry.name);
+  }
+
+  function navigator() {
+    const status = pilot.status;
+    navChip.dataset.mode = status.mode;
+    navLabel.textContent = status.label;
+    navChip.title = status.detail || status.label;
+  }
+
+  function lit() {
+    const set = state.current;
+    current.hidden = !set;
+    if (!set) return;
+    current.style.setProperty('--c', set.colour || '#dec6a0');
+    currentLabel.textContent = set.label;
+    currentNote.textContent = ` · ${plural(set.stars.size, 'film')}${set.kind === 'trait' ? '' : set.note ? ` · ${set.note}` : ''}`;
+  }
+
+  function journey() {
+    const v = state.voyage;
+    voyage.hidden = !v;
+    if (!v) return;
+    voyageName.textContent = v.name;
+    voyageStop.textContent = v.at >= 0 ? `Stop ${v.at + 1} of ${v.stops.length}` : `${v.stops.length} stops`;
+    voyagePrev.disabled = v.at <= 0;
+    voyageNext.disabled = v.at >= v.stops.length - 1;
+    voyageNext.firstChild.textContent = v.at < 0 ? 'Begin' : 'Next';
+  }
+
+  const api = {
+    /** A line said in passing, in a light's colour. */
+    caption(text, colour = '#f4efe5', hold = 4200) {
+      clearTimeout(captionTimer);
+      captionText.textContent = text;
+      caption.style.setProperty('--c', colour);
+      caption.classList.add('on');
+      captionTimer = setTimeout(() => caption.classList.remove('on'), hold);
+    },
+    /** Something worth stopping for. */
+    toast(text, { detail = '', action = '', onAction = null, tone = '', hold = 7000 } = {}) {
+      const close = () => { item.classList.remove('on'); setTimeout(() => item.remove(), 400); };
+      const item = h('div.toast', { class: tone ? `tone-${tone}` : '' },
+        h('div.toast-body', h('p.toast-text', text), detail ? h('p.toast-detail', detail) : null),
+        action ? h('button.toast-action', { type: 'button', onclick: () => { close(); onAction?.(); } }, action) : null,
+        h('button.toast-close', { type: 'button', 'aria-label': 'Dismiss', onclick: close }, icon('close', 14)));
+      toasts.append(item);
+      while (toasts.children.length > 3) toasts.firstChild.remove();
+      requestAnimationFrame(() => item.classList.add('on'));
+      setTimeout(close, hold);
+    },
+    /** A long call in progress, with a way to stop it. Empty text clears it. */
+    working(text) {
+      working.hidden = !text;
+      workingText.textContent = text;
+    },
+    setEntered(on) { layer.classList.toggle('entered', on); },
+    update(what) {
+      if (!what || what === 'focus' || what === 'sky') place();
+      if (!what || what === 'sky') lights();
+      if (!what || what === 'focus' || what === 'marks' || what === 'deep') logbook();
+      if (!what || what === 'marks' || what === 'drift' || what === 'tool' || what === 'focus') counts();
+      if (!what || what === 'navigator') navigator();
+      if (!what || what === 'current') lit();
+      if (!what || what === 'voyage' || what === 'focus') journey();
+    },
+  };
+  app.on(api.update);
+  api.update();
+  return api;
+}

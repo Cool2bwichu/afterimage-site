@@ -544,7 +544,7 @@ export function createCosmos({ canvas, universe, reducedMotion = false, small = 
   function draw(now) {
     if (!running) return;
     const seconds = now / 1000;
-    const dt = Math.min(0.05, last ? seconds - last : 0.016);
+    const dt = Math.min(0.1, last ? seconds - last : 0.016);
     last = seconds;
     clock += dt;
 
