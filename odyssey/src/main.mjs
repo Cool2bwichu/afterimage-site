@@ -35,6 +35,8 @@ async function boot() {
     fetchJson(dataUrl('universe')),
     config.posters ? fetchJson(config.posters).catch(() => null) : null,
   ]);
+  // Inside claude.ai a page can show only what was published with it.
+  if (config.edition === 'claude') configurePosters({ outside: false });
   if (posters) {
     const base = config.posterBase || './';
     const tiers = Object.fromEntries(Object.entries(posters.tiers).map(([name, tier]) => [name, { ...tier, files: tier.files.map(file => (file ? `${base}${file}` : null)) }]));

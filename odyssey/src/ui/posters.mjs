@@ -18,18 +18,20 @@ const TRIES = 3;
 // A film's number n is its place in both tiers: sheet floor(n / cells), cell n % cells.
 let sheets = null;
 let imageBase = COMMONS;
+let outside = true; // whether images may be asked of other hosts at all
 
 /**
- * @param {{ sheets?: { tiers: Record<string, { files: string[], columns: number, rows: number }>, index: Record<string, number> }, base?: string }} config
+ * @param {{ sheets?: { tiers: Record<string, { files: string[], columns: number, rows: number }>, index: Record<string, number> }, base?: string, outside?: boolean }} config
  */
 export function configurePosters(config = {}) {
   if (config.sheets) sheets = config.sheets;
   if (config.base) imageBase = config.base;
+  if (config.outside === false) outside = false;
 }
 
 export function hasPoster(film) {
   if (sheets) return sheets.index[film.s] !== undefined;
-  return Boolean(film.p || film.pu);
+  return outside && Boolean(film.p || film.pu);
 }
 
 /**
@@ -38,7 +40,7 @@ export function hasPoster(film) {
  * @param {'small' | 'large'} [size] small: a face in the sky or a row; large: the dossier
  */
 export function posterUrl(film, size = 'small') {
-  if (sheets) return '';
+  if (sheets || !outside) return '';
   if (film.pu) return film.pu; // a poster found for a star charted later
   if (!film.p) return '';
   // A free image is recorded at a generous width; ask for one nearer the size it is shown at.
