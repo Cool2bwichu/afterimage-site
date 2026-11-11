@@ -179,8 +179,9 @@ export function createApp({ root, universe, depth, cosmos, labels, pilot, store,
       refresh('arrival');
     }
   }
-  app.readArrival = (fresh = false) => { if (state.focus >= 0) readArrival(state.focus, { fresh }); };
-  app.stopArrival = () => { pilot.cancel('arrival'); state.arrivalState = 'idle'; refresh('arrival'); };
+  let arrivalTimer = 0;
+  app.readArrival = (fresh = false) => { clearTimeout(arrivalTimer); if (state.focus >= 0) readArrival(state.focus, { fresh }); };
+  app.stopArrival = () => { clearTimeout(arrivalTimer); pilot.cancel('arrival'); state.arrivalState = 'idle'; refresh('arrival'); };
 
   /**
    * Goes to a star.
@@ -221,11 +222,20 @@ export function createApp({ root, universe, depth, cosmos, labels, pilot, store,
     updateAddress();
     checkConstellations();
     refresh('focus');
-    if (!how.quiet && state.readArrivals) readArrival(star);
-    else { const kept = pilot.cachedArrival(star); if (kept) applyArrival(star, kept, true); else { state.arrivalState = pilot.connected ? 'idle' : 'offline'; refresh('arrival'); } }
+    clearTimeout(arrivalTimer);
+    const kept = pilot.cachedArrival(star);
+    if (kept) applyArrival(star, kept, true);
+    else if (!how.quiet && state.readArrivals && pilot.connected) {
+      // Asked a moment after arriving, so passing through a star on the way to another asks nothing.
+      state.arrivalState = 'asking';
+      refresh('arrival');
+      arrivalTimer = setTimeout(() => { if (state.focus === star) readArrival(star); }, how.instant ? 250 : 1100);
+    } else if (!how.quiet && state.readArrivals) readArrival(star);
+    else { state.arrivalState = pilot.connected ? 'idle' : 'offline'; refresh('arrival'); }
   }
 
   function blur() {
+    clearTimeout(arrivalTimer);
     pilot.cancel('arrival');
     state.focus = -1;
     state.galaxy = -1;
@@ -506,35 +516,47 @@ export function createApp({ root, universe, depth, cosmos, labels, pilot, store,
     refresh('drift');
   }
 
-  // ── The address bar remembers where you are.
-  let writingAddress = false;
+  // ── The address remembers where you are, as one plain name: star-<film>, galaxy-<n> or
+  // light-<light>, with "--<light>" after a star or a galaxy seen under one light.
+  let written = null;
+  function addressOf() {
+    const light = state.sky !== 'white' ? state.sky : '';
+    if (state.focus >= 0) return `star-${slugOf(state.focus)}${light ? `--${light}` : ''}`;
+    if (state.galaxy >= 0) return `galaxy-${state.galaxy}${light ? `--${light}` : ''}`;
+    return light ? `light-${light}` : '';
+  }
+
   function updateAddress() {
-    const parts = [];
-    if (state.focus >= 0) parts.push('star', slugOf(state.focus));
-    else if (state.galaxy >= 0) parts.push('galaxy', String(state.galaxy));
-    if (state.sky !== 'white') parts.push('light', state.sky);
-    const hash = parts.length ? `#/${parts.join('/')}` : '';
-    if (hash === window.location.hash || (!hash && !window.location.hash)) return;
-    writingAddress = true;
-    try { window.history.replaceState(null, '', hash || window.location.pathname + window.location.search); } catch { /* a sandboxed frame may refuse */ }
-    writingAddress = false;
+    const name = addressOf();
+    if (name === window.location.hash.replace(/^#/, '')) return;
+    written = name;
+    try {
+      if (name) window.location.replace(`#${name}`);
+      else window.history.replaceState(null, '', window.location.pathname + window.location.search);
+    } catch { /* a sandboxed frame may refuse */ }
   }
 
   function readAddress() {
-    const parts = window.location.hash.replace(/^#\/?/, '').split('/').filter(Boolean);
+    let raw = window.location.hash.replace(/^#/, '');
+    try { raw = decodeURIComponent(raw); } catch { /* keep it as written */ }
+    const [place, light = ''] = raw.split('--');
     const found = {};
-    for (let n = 0; n + 1 < parts.length; n += 2) found[parts[n]] = decodeURIComponent(parts[n + 1]);
+    if (place.startsWith('star-')) found.star = place.slice(5);
+    else if (place.startsWith('galaxy-')) found.galaxy = place.slice(7);
+    else if (place.startsWith('light-')) found.light = place.slice(6);
+    if (light) found.light = light;
     return found;
   }
 
   function followAddress({ instant = false } = {}) {
     const address = readAddress();
-    const sky = lightById(address.light) && address.light ? address.light : null;
-    if (sky && sky !== state.sky && ALL_LIGHTS.some(light => light.id === sky)) {
+    const sky = address.light && ALL_LIGHTS.some(light => light.id === address.light) ? address.light : null;
+    if (sky && sky !== state.sky) {
       state.sky = sky;
       root.style.setProperty('--light', lightById(sky).color);
       cosmos.setSky(sky, { immediate: true });
       labels.rebuild();
+      refresh('sky');
     }
     if (address.star && starOf(address.star) >= 0) { focusStar(starOf(address.star), { instant }); return true; }
     if (address.galaxy !== undefined && (universe.galaxies[state.sky] || [])[Number(address.galaxy)]) { openGalaxy(Number(address.galaxy)); return true; }
@@ -582,8 +604,13 @@ export function createApp({ root, universe, depth, cosmos, labels, pilot, store,
   root.style.setProperty('--light', lightById(state.sky).color);
   frameCosmos();
 
-  window.addEventListener('hashchange', () => { if (!writingAddress) followAddress(); });
+  window.addEventListener('hashchange', () => { if (window.location.hash.replace(/^#/, '') !== written) followAddress(); });
   window.addEventListener('resize', () => requestAnimationFrame(frameCosmos));
+  // The Navigator may come aboard after a star was reached: read that star then.
+  listeners.add(what => {
+    if (what !== 'navigator' || !pilot.connected || state.focus < 0 || !state.readArrivals) return;
+    if (state.arrivalState === 'waiting' || state.arrivalState === 'offline') readArrival(state.focus);
+  });
   window.addEventListener('keydown', event => {
     if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) return;
     const typing = /^(input|textarea|select)$/i.test(event.target.tagName || '') || event.target.isContentEditable;

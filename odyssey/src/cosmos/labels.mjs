@@ -82,7 +82,8 @@ export function createLabels({ root, cosmos, universe, small = false, onStar, on
       const opacity = clamp((radiusPx - 26) / 30, 0, 1) * clamp((height * 0.62 - radiusPx) / (height * 0.2), 0, 1);
       const scale = clamp(radiusPx / 150, 0.62, 1.5);
       const y = p.y + radiusPx * 0.74 + 8;
-      if (opacity <= 0.02 || p.x < left - 40 || p.x > right + 40 || y < -40 || y > floor + 30) { show(entry, false); continue; }
+      // A name that would run under the instruments along the top is not shown at all.
+      if (opacity <= 0.02 || p.x < left - 40 || p.x > right + 40 || y - 27 * scale < 58 || y > floor + 30) { show(entry, false); continue; }
       const wide = (galaxy.name.length * 11.5 + 30) * scale;
       const box = [p.x - wide / 2, y - 27 * scale, p.x + wide / 2, y + 27 * scale];
       if (crosses(fixed, ...box)) { show(entry, false); continue; }

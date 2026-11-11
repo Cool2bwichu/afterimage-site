@@ -17,6 +17,7 @@
   },
   "devDependencies": {
     "afinn-165": "2.0.2",
+    "sharp": "0.35.5",
     "vite": "8.0.13"
   }
 }

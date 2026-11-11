@@ -34,7 +34,11 @@ async function boot() {
     fetchJson(dataUrl('universe.json')),
     config.posters ? fetchJson(config.posters).catch(() => null) : null,
   ]);
-  if (posters) configurePosters({ sheets: { ...posters, files: posters.files.map(file => `${config.posterBase || './'}${file}`) } });
+  if (posters) {
+    const base = config.posterBase || './';
+    const tiers = Object.fromEntries(Object.entries(posters.tiers).map(([name, tier]) => [name, { ...tier, files: tier.files.map(file => `${base}${file}`) }]));
+    configurePosters({ sheets: { tiers, index: posters.index } });
+  }
 
   const universe = openUniverse(bundle);
   const search = createSearch(universe);
@@ -66,11 +70,12 @@ async function boot() {
   window.__odyssey = { app, universe, cosmos, pilot, store };
 
   // Set out: straight to the star the address names, or by way of the threshold.
-  const named = /^#\/?(star|galaxy)\//.test(window.location.hash);
+  const named = /^#(star|galaxy)-/.test(window.location.hash);
   if (named) {
     app.entrance.skip();
     if (!app.followAddress({ instant: true })) app.entrance.show();
   } else {
+    app.followAddress({ instant: true }); // an address may name a light alone
     app.entrance.show();
     cosmos.camera.flyTo({ distance: overviewDistance, duration: 3.2 });
   }

@@ -7,17 +7,20 @@
 // full of faces should not arrive as one burst.
 //
 // A build that cannot reach outside images (the claude.ai edition) carries
-// small thumbnails in sheets instead: `configurePosters` points at them.
+// thumbnails in sheets instead: `configurePosters` points at them, and a sheet
+// is fetched only when one of its faces comes into view.
 import { h } from './dom.mjs';
 
 const COMMONS = 'https://upload.wikimedia.org/wikipedia/';
 const AT_ONCE = 6;
 const TRIES = 3;
-let sheets = null; // { files, columns, rows, index: { slug: [sheet, cell] } }
+// Sheets of thumbnails, in two sizes: { tiers: { small: { files, columns, rows }, large: {…} }, index: { slug: n } }.
+// A film's number n is its place in both tiers: sheet floor(n / cells), cell n % cells.
+let sheets = null;
 let imageBase = COMMONS;
 
 /**
- * @param {{ sheets?: { files: string[], columns: number, rows: number, index: Record<string, [number, number]> }, base?: string }} config
+ * @param {{ sheets?: { tiers: Record<string, { files: string[], columns: number, rows: number }>, index: Record<string, number> }, base?: string }} config
  */
 export function configurePosters(config = {}) {
   if (config.sheets) sheets = config.sheets;
@@ -25,7 +28,7 @@ export function configurePosters(config = {}) {
 }
 
 export function hasPoster(film) {
-  if (sheets) return Boolean(sheets.index[film.s]);
+  if (sheets) return sheets.index[film.s] !== undefined;
   return Boolean(film.p || film.pu);
 }
 
@@ -41,6 +44,15 @@ export function posterUrl(film, size = 'small') {
   // A free image is recorded at a generous width; ask for one nearer the size it is shown at.
   const path = film.p.replace(/\/(\d+)px-([^/]+)$/, (whole, width, name) => (Number(width) > 500 ? `/${size === 'large' ? 500 : 250}px-${name}` : whole));
   return `${imageBase}${path}`;
+}
+
+/** Where a film's thumbnail sits in the sheets, or null. */
+function sheetPlace(film, size) {
+  const n = sheets.index[film.s];
+  if (n === undefined) return null;
+  const tier = sheets.tiers[size] || sheets.tiers.small;
+  const cells = tier.columns * tier.rows;
+  return { url: tier.files[Math.floor(n / cells)], cell: n % cells, columns: tier.columns, rows: tier.rows };
 }
 
 // ── Fetching, a few at a time.
@@ -63,6 +75,22 @@ const jobs = new WeakMap(); // holder → job, until it comes into view
 function reveal(job) {
   if (job.shown) return;
   job.shown = true;
+  if (job.place) {
+    // One thumbnail of a sheet that has already arrived.
+    const { url, cell, columns, rows } = job.place;
+    const column = cell % columns;
+    const row = Math.floor(cell / columns);
+    job.holder.append(h('span.poster-image.poster-sheet', {
+      role: 'img', 'aria-label': `Poster of ${job.title}`,
+      style: {
+        backgroundImage: `url("${url}")`,
+        backgroundSize: `${columns * 100}% ${rows * 100}%`,
+        backgroundPosition: `${columns > 1 ? (column / (columns - 1)) * 100 : 0}% ${rows > 1 ? (row / (rows - 1)) * 100 : 0}%`,
+      },
+    }));
+    requestAnimationFrame(() => job.holder.classList.add('has-image'));
+    return;
+  }
   const image = h('img.poster-image', { alt: `Poster of ${job.title}`, decoding: 'async', referrerpolicy: 'no-referrer', draggable: 'false' });
   image.addEventListener('load', () => job.holder.classList.add('has-image'), { once: true });
   image.addEventListener('error', () => image.remove(), { once: true });
@@ -130,29 +158,10 @@ export function poster(film, { words = true, eager = false, size = 'small' } = {
   if (words) plate.append(h('span.poster-plate-title', film.t), h('span.poster-plate-year', String(film.y || '')));
   element.append(plate);
 
-  if (sheets) {
-    const place = sheets.index[film.s];
-    if (place) {
-      const [sheet, cell] = place;
-      const column = cell % sheets.columns;
-      const row = Math.floor(cell / sheets.columns);
-      const image = h('span.poster-image.poster-sheet', {
-        role: 'img', 'aria-label': `Poster of ${film.t}`,
-        style: {
-          backgroundImage: `url("${sheets.files[sheet]}")`,
-          backgroundSize: `${sheets.columns * 100}% ${sheets.rows * 100}%`,
-          backgroundPosition: `${sheets.columns > 1 ? (column / (sheets.columns - 1)) * 100 : 0}% ${sheets.rows > 1 ? (row / (sheets.rows - 1)) * 100 : 0}%`,
-        },
-      });
-      element.append(image);
-      element.classList.add('has-image');
-    }
-    return element;
-  }
-
-  const url = posterUrl(film, size);
+  const place = sheets ? sheetPlace(film, size) : null;
+  const url = place ? place.url : posterUrl(film, size);
   if (url) {
-    const job = { holder: element, url, title: film.t, eager, tries: 0, shown: false };
+    const job = { holder: element, url, place, title: film.t, eager, tries: 0, shown: false };
     if (known.get(url) === 'here') reveal(job);
     else if (watcher) { jobs.set(element, job); watcher.observe(element); }
     else want(job);

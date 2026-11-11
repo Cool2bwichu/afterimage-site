@@ -38,13 +38,13 @@ const fail = (code, message) => new NavigatorError(code, message || COPY[code] |
 
 // ── Claude inside the page (the claude.ai edition).
 function inPageAsk(sample, onUnavailable) {
-  return async function ask({ op, system, user, effort, onText, signal }) {
+  return async function ask({ op, system, user, onText, signal }) {
     const lasting = op === 'arrival' || op === 'chart' || op === 'collision';
     try {
+      // The model is the one the owner named; if this viewer cannot use it, the most capable tier answers.
       return await sample.json(`${system}\n\n${user}`, {
         model: NAVIGATOR_MODEL,
         modelTier: 'complex',
-        effort,
         signal,
         cache: lasting ? { gcTime: 12 * HOUR } : true,
         ...(onText ? { onText: ({ text }) => onText(text) } : {}),
