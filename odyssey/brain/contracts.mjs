@@ -56,6 +56,33 @@ export const SCHEMAS = {
   sky: object({ name: S, reading: S, blind: S, next: { type: 'array', items: reading({ why: S }) } }),
 };
 
+/**
+ * The same shapes for a transport that holds a reply to a schema in which every
+ * field is present and nothing is null (the companion's structured output).
+ * Where the open shape allows null or a missing field, the strict one carries
+ * the field with an empty title, which the normalisers below read as absent.
+ */
+export function strictSchema(op) {
+  const strict = node => {
+    if (node.anyOf) return strict(node.anyOf.find(option => option.type !== 'null'));
+    if (node.type === 'object') {
+      return {
+        type: 'object',
+        properties: Object.fromEntries(Object.entries(node.properties).map(([key, value]) => [key, strict(value)])),
+        required: Object.keys(node.properties),
+        additionalProperties: false,
+      };
+    }
+    if (node.type === 'array') return { type: 'array', items: strict(node.items) };
+    return { ...node };
+  };
+  if (!SCHEMAS[op]) throw new NavigatorError('bad_input', 'That is not something the Navigator does.');
+  return strict(SCHEMAS[op]);
+}
+
+/** Said to the model alongside a strict schema, so the two do not contradict each other. */
+export const STRICT_NOTE = 'This reply is held to a fixed structure in which every field must be present. Where the instructions above say to leave a field out, or to give null, give that field with an empty title ("") and zeros instead. A film with an empty title is read as no film.';
+
 // How hard the model should think for each kind of answer.
 export const EFFORT = { arrival: 'low', deepfield: 'low', chart: 'low', course: 'medium', collision: 'medium', sky: 'medium' };
 

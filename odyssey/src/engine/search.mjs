@@ -14,7 +14,13 @@ const ARTICLE = /^(the|a|an|le|la|les|il|lo|el|los|las|der|die|das|un|une) /;
 
 /** A slug for a film: "paris-texas-1984". */
 export function slugOf(title, year) {
-  const base = fold(title).replace(/ /g, '-') || 'film';
+  let base = fold(title).replace(/ /g, '-');
+  if (!base) {
+    // A title with no Latin letters or digits still needs an address of its own.
+    let hash = 2166136261;
+    for (const char of String(title || '')) { hash ^= char.codePointAt(0); hash = Math.imul(hash, 16777619); }
+    base = `film-${(hash >>> 0).toString(36)}`;
+  }
   return year ? `${base}-${year}` : base;
 }
 
@@ -71,6 +77,7 @@ export function createSearch(universe) {
   function exact(title, year) {
     refresh();
     const q = fold(title);
+    if (!q) return -1; // a title with nothing to compare (another script) is only ever matched by its slug
     const bare = q.replace(ARTICLE, '');
     let best = -1;
     for (const entry of entries) {

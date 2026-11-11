@@ -70,16 +70,25 @@ export function createNavigator({ universe, depth = null, ask, vocabulary = buil
   async function deepField(star, { count = 8, already = [], onStar, signal } = {}) {
     need(star, 'That');
     const charted = universe.model.neighbours('white', star, 40).map(n => n.i);
-    let emitted = 0;
+    // Each star is told once, by name: a transport may start an answer over, and the second
+    // telling must not skip or repeat what the first already gave.
+    const told = new Set();
+    const tell = stars => {
+      if (!onStar) return;
+      for (const reading of stars) {
+        const key = `${reading.title.toLowerCase()}|${reading.year}`;
+        if (told.has(key)) continue;
+        told.add(key);
+        onStar(reading, told.size - 1);
+      }
+    };
     const raw = await ask({
       op: 'deepfield', ...deepFieldPrompt({ universe, depth, vocabulary, star, charted, count, already }),
       schema: SCHEMAS.deepfield, effort: EFFORT.deepfield, signal,
-      onText: draftReader(onStar && (draft => {
-        for (; emitted < draft.stars.length; emitted += 1) onStar(draft.stars[emitted], emitted);
-      }), draft => normaliseDeepField(draft, vocabulary, true)),
+      onText: draftReader(onStar && (draft => tell(draft.stars)), draft => normaliseDeepField(draft, vocabulary, true)),
     });
     const result = normaliseDeepField(raw, vocabulary);
-    if (onStar) for (; emitted < result.stars.length; emitted += 1) onStar(result.stars[emitted], emitted);
+    tell(result.stars);
     return result;
   }
 
@@ -159,6 +168,33 @@ export function settleReadings({ universe, search, vocabulary, readings, from, s
     fresh.forEach((entry, n) => { entry.star = added[n]; });
   }
   return settled;
+}
+
+/**
+ * Puts back stars that were found earlier (a browser's own, or the companion's
+ * commons) in one step, in the order given, so a star sighted from another in
+ * the same list is still drawn to it.
+ * @param {object} input
+ * @param {Array<{ reading: object, from?: string, source?: string, extra?: object }>} input.entries
+ *   reading: a clean reading; from: the slug of the star it was sighted from
+ * @returns {Array<{ entry: object, star: number }>} the entries that became new stars
+ */
+export function restoreStars({ universe, search, vocabulary, entries }) {
+  const kept = [];
+  const taken = new Set();
+  for (const entry of entries) {
+    const slug = readingSlug(entry.reading);
+    if (taken.has(slug) || universe.indexOfSlug(slug) >= 0 || search.exact(entry.reading.title, entry.reading.year) >= 0) continue;
+    taken.add(slug);
+    kept.push({ entry, star: -1 });
+  }
+  if (kept.length) {
+    const added = universe.addStars(kept.map(({ entry }) => starFromReading(entry.reading, universe, vocabulary, {
+      fromSlug: typeof entry.from === 'string' ? entry.from : '', source: entry.source || 'deepfield', extra: entry.extra || {},
+    })));
+    kept.forEach((item, n) => { item.star = added[n]; });
+  }
+  return kept;
 }
 
 export { filmName, readingSlug };

@@ -1,7 +1,10 @@
 import { timingSafeEqual } from 'node:crypto';
+import { existsSync } from 'node:fs';
 import { createServer } from 'node:http';
-import { resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
+import { gzip } from 'node:zlib';
 
 import { createEnrichmentPost } from '../app/lib/enrichment-route.ts';
 import { createFilmSearchGet } from '../app/lib/film-search-route.ts';
@@ -13,6 +16,7 @@ import { ClaudeEngine, resolveClaudeConfig } from './lib/claude-engine.mjs';
 import { createFilmMetadataProvider } from './lib/film-metadata.mjs';
 import { GenerationCoordinator } from './lib/generation-coordinator.mjs';
 import { JOB_ID_PATTERN, JobStore } from './lib/job-store.mjs';
+import { ODYSSEY_DATA_DIRECTORY, createOdyssey, modelName } from './lib/odyssey.mjs';
 import { validateReplacementInput } from './lib/replacement-contract.mjs';
 import { validateV2Input } from './lib/v2-contract.mjs';
 
@@ -21,7 +25,8 @@ import { validateV2Input } from './lib/v2-contract.mjs';
 //   site that runs its own server routes (bearer AFTERIMAGE_BRIDGE_SECRET).
 // - `/api/*` mirrors those server routes for a static site, such as the GitHub
 //   Pages build, calling from the browser (bearer AFTERIMAGE_SITE_PASSPHRASE,
-//   allowed origins only). It also serves film search and film details.
+//   allowed origins only). It also serves film search and film details, and
+//   `/api/odyssey/*`, the Navigator behind the Odyssey (see lib/odyssey.mjs).
 const MAX_BODY_BYTES = 384 * 1024; // Bounded 500-film taste history, including Unicode titles.
 const DEVELOPMENT_SECRET = 'afterimage-local-development';
 const JOB_DIRECTORY_CONFIGURATION_ERROR = 'AFTERIMAGE_JOB_DIR must target persistent storage in production.';
@@ -47,6 +52,9 @@ const OPERATIONS = {
   'GET /api/films/search': 'filmSearch', 'POST /api/films/enrich': 'filmDetails',
 };
 const JOB_PATH = /^\/(?:v2|api)\/generations\/([^/]+)$/;
+const ODYSSEY_PATH = '/api/odyssey/';
+const ODYSSEY_JOB_PATH = /^\/api\/odyssey\/jobs\/([^/]+)$/;
+const compress = promisify(gzip);
 const LOCAL_ORIGIN = /^http:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?$/;
 // A metadata address for the in-process catalogue; it is never requested over the network.
 const IN_PROCESS_METADATA_URL = 'https://companion.invalid/api/films/enrich';
@@ -162,6 +170,7 @@ export function parseAllowedOrigins(value = '') {
 export function createCompanionServer({
   engine,
   generationCoordinator,
+  odyssey = null,
   films = createFilmRoutes(),
   secret = process.env.AFTERIMAGE_BRIDGE_SECRET || (process.env.NODE_ENV === 'production' ? '' : DEVELOPMENT_SECRET),
   passphrase = process.env.AFTERIMAGE_SITE_PASSPHRASE || '',
@@ -181,6 +190,67 @@ export function createCompanionServer({
     }
   }
   const originAllowed = (origin) => allowedOrigins.includes(origin) || (!production && !allowedOrigins.length && LOCAL_ORIGIN.test(origin));
+
+  // The Odyssey: the browser names an operation and its films; the prompt is written here.
+  async function answerOdyssey({ request, response, url, send, cors }) {
+    if (!odyssey) {
+      send(503, { error: 'This companion does not carry the Odyssey\'s chart.', code: 'ODYSSEY_NOT_CONFIGURED' });
+      return;
+    }
+    const route = request.method + ' ' + url.pathname;
+    if (route === 'GET /api/odyssey/status') {
+      const status = await engine.status();
+      const described = engine.describe();
+      send(200, {
+        connected: status.connected,
+        ...(status.reason ? { reason: status.reason } : {}),
+        model: described.model,
+        modelName: modelName(described.model),
+        ...odyssey.status(),
+      });
+      return;
+    }
+    if (route === 'POST /api/odyssey/jobs') {
+      const body = await readJson(request);
+      const status = await engine.status();
+      if (!status.connected) {
+        const messages = NOT_CONNECTED[engine.describe().auth] || NOT_CONNECTED.api;
+        send(503, { error: messages[status.reason] || messages.missing, code: 'CLAUDE_NOT_CONNECTED' });
+        return;
+      }
+      const started = odyssey.start(body);
+      send(started.result ? 200 : 202, started);
+      return;
+    }
+    if (route === 'GET /api/odyssey/commons') {
+      const number = (name) => (/^\d{1,12}$/.test(url.searchParams.get(name) || '') ? Number(url.searchParams.get(name)) : undefined);
+      const since = number('since');
+      const limit = number('limit');
+      const body = Buffer.from(JSON.stringify(odyssey.commons({ ...(since ? { since } : {}), ...(limit ? { limit } : {}) })));
+      // The one large answer: a few hundred readings. Sent packed to a browser that can unpack it.
+      const packed = body.length > 2048 && /\bgzip\b/.test(String(request.headers['accept-encoding'] || ''));
+      const payload = packed ? await compress(body) : body;
+      response.writeHead(200, {
+        'Content-Type': 'application/json; charset=utf-8',
+        'Cache-Control': 'no-store',
+        'X-Content-Type-Options': 'nosniff',
+        'Referrer-Policy': 'no-referrer',
+        ...cors,
+        Vary: 'Origin, Accept-Encoding',
+        ...(packed ? { 'Content-Encoding': 'gzip' } : {}),
+      });
+      response.end(payload);
+      return;
+    }
+    const jobId = request.method === 'GET' ? url.pathname.match(ODYSSEY_JOB_PATH)?.[1] : undefined;
+    if (jobId !== undefined) {
+      const job = odyssey.job(jobId);
+      if (job) send(200, job);
+      else send(404, { error: 'This reading is no longer available.', code: 'JOB_NOT_FOUND' });
+      return;
+    }
+    send(404, { error: 'Not found.' });
+  }
 
   return createServer(async (request, response) => {
     const url = new URL(request.url || '/', 'http://localhost');
@@ -240,6 +310,11 @@ export function createCompanionServer({
     }
 
     try {
+      if (url.pathname.startsWith(ODYSSEY_PATH)) {
+        await answerOdyssey({ request, response, url, send, cors });
+        return;
+      }
+
       const jobId = request.method === 'GET' ? url.pathname.match(JOB_PATH)?.[1] : undefined;
       if (jobId !== undefined) {
         const job = JOB_ID_PATTERN.test(jobId) ? generationCoordinator.get(jobId) : null;
@@ -317,6 +392,10 @@ export function createCompanionServer({
         send(502, { error: 'Claude is busy or unreachable right now.', code: 'CLAUDE_UNAVAILABLE' });
         return;
       }
+      if (error.code === 'UNKNOWN_STAR') {
+        send(400, { error: 'The companion does not know that star.', code: 'UNKNOWN_STAR', slug: error.slug });
+        return;
+      }
       const status = error.code === 'BAD_REQUEST' || error instanceof SyntaxError ? 400 : 500;
       send(status, {
         error: status === 500
@@ -344,6 +423,42 @@ export async function createGenerationProtocol({ engine, directory, log = () => 
   });
 }
 
+// A film charted from memory, asked of the catalogue: its poster, identifier and running time.
+function catalogueLookup(client) {
+  return async ({ title, year }) => {
+    const found = await client.enrichOne({ key: 'odyssey', title, year: String(year) });
+    if (found.status === 'unavailable') throw new Error('The catalogue could not be asked.');
+    return found.status === 'matched' ? { poster: found.posterUrl, imdb: found.imdbId, runtime: found.runtime } : null;
+  };
+}
+
+// The Odyssey's Navigator, when this companion carries the Odyssey's chart. It asks Claude the
+// same way the reels do. A companion without the chart, or one that cannot open it, still serves
+// everything else and says plainly that the Odyssey is not here.
+export async function createOdysseyService({ engine, env = process.env, production = env.NODE_ENV === 'production', log = () => {} }) {
+  const dataDirectory = env.AFTERIMAGE_ODYSSEY_DATA || ODYSSEY_DATA_DIRECTORY;
+  if (!engine?.runner || !existsSync(join(dataDirectory, 'universe.json'))) return null;
+  // Stars charted from memory are worth keeping: in production they need a place that outlives a deploy.
+  const storeDirectory = env.AFTERIMAGE_ODYSSEY_DIR || (production ? '' : fileURLToPath(new URL('./data/odyssey', import.meta.url)));
+  if (!storeDirectory) log({ code: 'ODYSSEY_STORE_NOT_CONFIGURED' });
+  const concurrency = Number(env.AFTERIMAGE_ODYSSEY_CONCURRENCY);
+  try {
+    return await createOdyssey({
+      runner: engine.runner,
+      dataDirectory,
+      storeDirectory,
+      verify: env.TMDB_READ_TOKEN
+        ? catalogueLookup(createTmdbClient({ token: env.TMDB_READ_TOKEN, ...(env.TMDB_API_BASE ? { baseUrl: env.TMDB_API_BASE } : {}) }))
+        : null,
+      ...(Number.isInteger(concurrency) && concurrency >= 1 && concurrency <= 6 ? { maxActive: concurrency } : {}),
+      log,
+    });
+  } catch {
+    log({ code: 'ODYSSEY_UNAVAILABLE' });
+    return null;
+  }
+}
+
 export async function startCompanionServer(options = {}) {
   const port = Number(process.env.PORT || 8788);
   const log = options.log ?? console.log;
@@ -356,7 +471,8 @@ export async function startCompanionServer(options = {}) {
   const directory = configuredDirectory || fileURLToPath(new URL('./data/generation-jobs', import.meta.url));
   const generationCoordinator = options.generationCoordinator ??
     await createGenerationProtocol({ engine, directory, log: record });
-  const server = createCompanionServer({ ...options, engine, generationCoordinator, films });
+  const odyssey = options.odyssey !== undefined ? options.odyssey : await createOdysseyService({ engine, log: record });
+  const server = createCompanionServer({ ...options, engine, generationCoordinator, odyssey, films });
   await new Promise((resolveListen, reject) => {
     server.once('error', reject);
     server.listen(port, '0.0.0.0', resolveListen);
@@ -366,12 +482,17 @@ export async function startCompanionServer(options = {}) {
     shutdown ??= (async () => {
       if (server.listening) await new Promise((resolveClose) => server.close(() => resolveClose()));
       await generationCoordinator.whenIdle();
+      await odyssey?.whenIdle();
     })();
     return shutdown;
   };
   const described = engine.describe();
   log(`AFTERIMAGE Claude companion listening on port ${port} (${described.model}, ${described.reasoningEffort} effort, ${described.auth === 'subscription' ? 'Claude subscription through Claude Code' : 'Anthropic API key'})`);
   if (described.auth === 'subscription') record({ code: 'CLAUDE_TOKEN_SHAPE', ...tokenShape(process.env.CLAUDE_CODE_OAUTH_TOKEN) });
+  if (odyssey) {
+    const held = odyssey.status();
+    log(`The Odyssey's Navigator is ready: ${held.films} films on the chart, ${held.beyond} charted beyond it.`);
+  }
   return server;
 }
 

@@ -138,9 +138,10 @@ export const readingSlug = reading => slugOf(reading.title, reading.year);
  * @param {object} reading   from normaliseReading
  * @param {object} universe  the open universe (traits are looked up by label, a few may be added)
  * @param {object} vocabulary
- * @param {{ from?: number, source?: string, extra?: object }} [options]
+ * @param {{ from?: number, fromSlug?: string, source?: string, extra?: object }} [options]
+ *   from: the star it was sighted from; fromSlug: the same by slug, when that star may not exist yet
  */
-export function starFromReading(reading, universe, vocabulary, { from, source = 'deepfield', extra = {} } = {}) {
+export function starFromReading(reading, universe, vocabulary, { from, fromSlug, source = 'deepfield', extra = {} } = {}) {
   const rows = Object.fromEntries(LIGHT_IDS.map(light => [light, []]));
   const add = (light, trait, weight) => { if (trait >= 0) rows[light].push([trait, weight]); };
 
@@ -188,5 +189,5 @@ export function starFromReading(reading, universe, vocabulary, { from, source = 
     ...(AXES.some(axis => reading.axes[axis] >= 0) ? { ax: AXES.map(axis => reading.axes[axis]) } : {}),
     ...extra,
   };
-  return { film, rows, ...(Number.isInteger(from) ? { from } : {}) };
+  return { film, rows, ...(Number.isInteger(from) ? { from } : typeof fromSlug === 'string' && fromSlug ? { fromSlug } : {}) };
 }

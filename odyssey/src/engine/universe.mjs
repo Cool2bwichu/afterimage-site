@@ -182,9 +182,10 @@ export function openUniverse(bundle) {
 
     /**
      * Appends stars charted after the fact.
-     * @param {Array<{ film: object, rows: Record<string, Array<[number, number]>>, from?: number }>} stars
+     * @param {Array<{ film: object, rows: Record<string, Array<[number, number]>>, from?: number, fromSlug?: string }>} stars
      *   film: a record with the bundle's short keys; rows: [traitId, weight 0..1] per light;
-     *   from: the star it was sighted from, if any (they are drawn together in white light)
+     *   from: the star it was sighted from, if any (they are drawn together in white light);
+     *   fromSlug: the same by slug, for a star that may be earlier in this very list
      * @returns {number[]} the new stars' indexes (an existing slug returns its index)
      */
     addStars(stars) {
@@ -197,7 +198,8 @@ export function openUniverse(bundle) {
         films.push(star.film);
         slugs.set(star.film.s, i);
         curves.push(null);
-        if (Number.isInteger(star.from) && star.from >= 0 && star.from < i) links.push([star.from, i, 0.6]);
+        const from = Number.isInteger(star.from) ? star.from : (typeof star.fromSlug === 'string' ? universe.indexOfSlug(star.fromSlug) : -1);
+        if (from >= 0 && from < i) links.push([from, i, 0.6]);
         fresh.push({ i, star });
         added.push(i);
       }
