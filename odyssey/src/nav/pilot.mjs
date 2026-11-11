@@ -17,6 +17,7 @@ const UNAVAILABLE = new Set(['not_granted', 'sampling_disabled', 'not_declared',
 const COPY = {
   offline: 'The Navigator is not connected, so this part of the voyage is closed. The chart itself still works.',
   unavailable: 'Claude is not available in this view, so the Navigator is silent. The chart itself still works.',
+  declined: 'You chose not to let this page ask Claude, so the Navigator is silent. Reload the page if you change your mind. The chart itself still works.',
   busy: 'Claude is busy, or a usage limit has been reached. Try again in a little while.',
   session_expired: 'Your Claude session has ended. Reload the page to continue with the Navigator.',
   refused: 'Claude declined to answer that.',
@@ -38,15 +39,19 @@ const fail = (code, message) => new NavigatorError(code, message || COPY[code] |
 
 // ── Claude inside the page (the claude.ai edition).
 function inPageAsk(sample, onUnavailable) {
-  return async function ask({ op, system, user, onText, signal }) {
+  return async function ask({ op, system, user, onText, signal, fresh = false }) {
+    // What is true of a film does not change by the hour: an arrival, a charted film and a
+    // collision are kept for the day, and asked again only when the voyager says so. A course
+    // is plotted anew every time it is asked for. The rest is kept for a few minutes.
     const lasting = op === 'arrival' || op === 'chart' || op === 'collision';
+    const cache = op === 'course' ? false : lasting ? { gcTime: 12 * HOUR, ...(fresh ? { refresh: true } : {}) } : true;
     try {
       // The model is the one the owner named; if this viewer cannot use it, the most capable tier answers.
       return await sample.json(`${system}\n\n${user}`, {
         model: NAVIGATOR_MODEL,
         modelTier: 'complex',
         signal,
-        cache: lasting ? { gcTime: 12 * HOUR } : true,
+        cache,
         ...(onText ? { onText: ({ text }) => onText(text) } : {}),
       });
     } catch (error) {
@@ -57,7 +62,7 @@ function inPageAsk(sample, onUnavailable) {
         const kept = readPartial(error.text);
         if (kept !== undefined) return kept;
       }
-      if (UNAVAILABLE.has(code)) { onUnavailable(); throw fail('unavailable'); }
+      if (UNAVAILABLE.has(code)) { onUnavailable(code); throw fail(code === 'not_granted' ? 'declined' : 'unavailable'); }
       if (code === 'rate_limited') throw fail('busy');
       if (code === 'session_expired') throw fail('session_expired');
       if (code === 'refused') throw fail('refused');
@@ -125,7 +130,9 @@ function createRemote({ url, passphrase }) {
  * @param {object} input.store        the voyager's store
  * @param {(status: object) => void} [input.onStatus]
  */
-export function createPilot({ universe, depth, search, store, onStatus = () => {} }) {
+export function createPilot({ universe, depth, search, store, edition = 'site', onStatus = () => {} }) {
+  // Inside claude.ai a page asks Claude itself and can reach nothing else, so there is no companion to connect.
+  const canConnect = edition !== 'claude';
   const vocabulary = buildVocabulary(universe.bundle.traits);
   let status = { mode: 'connecting', connected: false, label: 'Finding the Navigator', detail: '' };
   let local = null;   // a Navigator that asks Claude from this page
@@ -133,7 +140,9 @@ export function createPilot({ universe, depth, search, store, onStatus = () => {
   const running = new Map(); // kind → AbortController
 
   const setStatus = next => { status = next; onStatus(status); };
-  const offline = detail => setStatus({ mode: 'offline', connected: false, label: 'Navigator not connected', detail: detail || COPY.offline });
+  const offline = detail => setStatus(canConnect
+    ? { mode: 'offline', connected: false, label: 'Navigator not connected', detail: detail || COPY.offline }
+    : { mode: 'offline', connected: false, label: 'Navigator not available', detail: detail || COPY.unavailable });
 
   function begin(kind) {
     running.get(kind)?.abort();
@@ -142,7 +151,7 @@ export function createPilot({ universe, depth, search, store, onStatus = () => {
     return controller;
   }
   const finish = (kind, controller) => { if (running.get(kind) === controller) running.delete(kind); };
-  const need = () => { if (!local && !remote) throw fail('offline'); };
+  const need = () => { if (!local && !remote) throw fail(canConnect ? 'offline' : 'unavailable'); };
   const slugOf = star => universe.films[star].s;
   const starOf = slug => universe.indexOfSlug(slug);
 
@@ -189,9 +198,9 @@ export function createPilot({ universe, depth, search, store, onStatus = () => {
     let sample = null;
     try { sample = await claude.use('sample'); } catch { sample = null; }
     if (!sample) return false;
-    const ask = inPageAsk(sample, () => {
+    const ask = inPageAsk(sample, code => {
       local = null;
-      setStatus({ mode: 'offline', connected: false, label: 'Navigator not allowed here', detail: COPY.unavailable });
+      setStatus({ mode: 'offline', connected: false, label: code === 'not_granted' ? 'Navigator not allowed' : 'Navigator not available', detail: code === 'not_granted' ? COPY.declined : COPY.unavailable });
     });
     local = createNavigator({ universe, depth, ask, vocabulary });
     setStatus({ mode: 'inpage', connected: true, label: 'Navigator · Opus 5.5', detail: 'Claude reads the chart from inside this page, on your own Claude account.' });
@@ -210,6 +219,7 @@ export function createPilot({ universe, depth, search, store, onStatus = () => {
 
   async function find() {
     if (await findInPage()) return status;
+    if (!canConnect) { offline(); return status; }
     const config = store.state.companion || (typeof window !== 'undefined' && window.ODYSSEY_COMPANION) || null;
     if (config && config.url) {
       try { await findCompanion(config); loadCommons(); return status; } catch (error) { offline(explain(error)); return status; }
@@ -269,14 +279,14 @@ export function createPilot({ universe, depth, search, store, onStatus = () => {
     try {
       let result;
       if (local) {
-        result = await local.arrival(star, { onDraft, signal: controller.signal });
+        result = await local.arrival(star, { onDraft, signal: controller.signal, fresh });
       } else {
         const adopt = raw => {
           const deep = (raw.deep || []).map(reading => reviveReading(reading, vocabulary)).filter(Boolean);
           if (deep.length) settleReadings({ universe, search, vocabulary, readings: deep, source: 'commons' });
           return rayIn(raw);
         };
-        result = adopt(await remoteRun('arrival', { star: slugOf(star) }, { signal: controller.signal, onDraft: onDraft && (draft => onDraft(adopt(draft))) }, [star]));
+        result = adopt(await remoteRun('arrival', { star: slugOf(star), ...(fresh ? { fresh: true } : {}) }, { signal: controller.signal, onDraft: onDraft && (draft => onDraft(adopt(draft))) }, [star]));
       }
       if (result.essence || result.rays.length) store.keepArrival(slugOf(star), rayOut(result));
       return result;
@@ -368,6 +378,7 @@ export function createPilot({ universe, depth, search, store, onStatus = () => {
     vocabulary,
     get status() { return status; },
     get connected() { return Boolean(local || remote); },
+    canConnect,
     find, connect, disconnect, restore, explain,
     arrival, cachedArrival, deepField, chart, course, collide, sky,
     cancel(kind) { running.get(kind)?.abort(); running.delete(kind); },

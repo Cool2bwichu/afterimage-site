@@ -25,12 +25,14 @@ export function createPanels(app) {
     h('header.sheet-top', heading, h('button.sheet-close', { type: 'button', 'aria-label': 'Close', onclick: () => close() }, icon('close', 18))),
     body);
   app.root.querySelector('#app').append(sheet);
+  sheet.addEventListener('transitionend', event => { if (event.target === sheet && event.propertyName === 'height') app.frameCosmos(); });
 
   const memo = { course: null, courseText: '', courseState: 'idle', courseNote: '', sky: null, skyState: 'idle', skyNote: '', collide: null, passage: null, deeper: false };
 
   const note = (...children) => h('p.panel-note', ...children);
-  const needNavigator = what => h('p.nav-off', `${what} needs the Navigator, and it is not connected.`,
-    h('button.quiet', { type: 'button', onclick: () => open('navigator') }, 'Connect'));
+  const needNavigator = what => (pilot.canConnect
+    ? h('p.nav-off', `${what} needs the Navigator, and it is not connected.`, h('button.quiet', { type: 'button', onclick: () => open('navigator') }, 'Connect'))
+    : h('p.nav-off', `${what} needs the Navigator, and Claude is not answering in this view.`));
   const reading = (text, stop) => h('div.reading', h('span.reading-pulse'), h('span', text), stop ? h('button.quiet', { type: 'button', onclick: stop }, 'Stop') : null);
 
   function filmRow(star, { light = null, kicker = '', bodyNode = null, onGo = null, index = null }) {
@@ -314,12 +316,14 @@ export function createPanels(app) {
     const status = pilot.status;
     const nodes = [
       h('div.nav-status', { dataset: { mode: status.mode } }, h('span.nav-dot'), h('div', h('p.nav-status-label', status.label), h('p.nav-status-detail', status.detail))),
-      note('The chart is computed: 2,204 films, placed by what they are recorded as sharing. The Navigator is Claude Opus 5.5, who has seen the films. It reads each star as you arrive, plots courses, names the film between two films, and charts films the chart does not hold.'),
+      note(`The chart is computed: ${universe.base.toLocaleString('en')} films, placed by what they are recorded as sharing. The Navigator is Claude Opus 5.5, who has seen the films. It reads each star as you arrive, plots courses, names the film between two films, and charts films the chart does not hold.`),
     ];
     if (pilot.connected) {
-      nodes.push(h('label.check', h('input', { type: 'checkbox', checked: state.readArrivals, onchange: event => { state.readArrivals = event.target.checked; } }), h('span', 'Read every star I arrive at')));
+      nodes.push(h('label.check', h('input', { type: 'checkbox', checked: state.readArrivals, onchange: event => { state.readArrivals = event.target.checked; store.set('readArrivals', state.readArrivals); } }), h('span', 'Read every star I arrive at')));
       if (status.mode === 'inpage') nodes.push(note('Claude answers from inside this page, on your own Claude account, so each reading uses a little of your usage. Drifting never asks it anything.'));
       if (status.mode === 'companion') nodes.push(h('button.act', { type: 'button', onclick: () => { pilot.disconnect(); renderNavigator(); } }, h('span', 'Disconnect the companion')));
+    } else if (status.mode !== 'connecting' && !pilot.canConnect) {
+      nodes.push(note('Here the Navigator is Claude itself, asked from inside this page on the account of whoever is looking. It answers when the page is open in Claude, you are signed in, and you allow it the first time it asks.'));
     } else if (status.mode !== 'connecting') {
       const url = h('input.panel-input', { type: 'url', placeholder: 'https://your-companion.example', 'aria-label': 'Companion address', value: store.state.companion?.url || '' });
       const pass = h('input.panel-input', { type: 'password', placeholder: 'Passphrase', 'aria-label': 'Companion passphrase', autocomplete: 'off' });

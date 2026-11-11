@@ -21,9 +21,10 @@ export { NavigatorError };
  * @param {object} input
  * @param {object} input.universe  an open universe
  * @param {object[]|null} [input.depth]  depth.json's films, for richer cards
- * @param {(request: { op, system, user, schema, effort, onText, signal }) => Promise<any>} input.ask
+ * @param {(request: { op, system, user, schema, effort, onText, signal, fresh }) => Promise<any>} input.ask
  *   sends one prompt and resolves with the parsed JSON answer; `onText`, when
- *   given, should be called with the whole answer text so far as it streams
+ *   given, should be called with the whole answer text so far as it streams;
+ *   `fresh` asks for a new answer where an earlier one may have been kept
  */
 export function createNavigator({ universe, depth = null, ask, vocabulary = buildVocabulary(universe.bundle.traits) }) {
   const draftReader = (handler, normalise) => (handler ? text => {
@@ -49,13 +50,13 @@ export function createNavigator({ universe, depth = null, ask, vocabulary = buil
    * Arrival at a star: the six rays read, an essence, and a film from beyond the chart.
    * @returns {Promise<{ essence, rays: Array<{ light, star, claim, watch }>, beyond }>}
    */
-  async function arrival(star, { onDraft, signal } = {}) {
+  async function arrival(star, { onDraft, signal, fresh = false } = {}) {
     need(star, 'That');
     const candidates = candidatesFor(star);
     if (!Object.keys(candidates).length) throw new NavigatorError('unlit', 'The chart has nothing near this star to read it against.');
     const raw = await ask({
       op: 'arrival', ...arrivalPrompt({ universe, depth, star, candidates }),
-      schema: SCHEMAS.arrival, effort: EFFORT.arrival, signal,
+      schema: SCHEMAS.arrival, effort: EFFORT.arrival, signal, fresh,
       onText: draftReader(onDraft, draft => normaliseArrival(draft, candidates, true)),
     });
     return normaliseArrival(raw, candidates);

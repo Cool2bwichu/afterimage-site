@@ -35,7 +35,7 @@ export function createApp({ root, universe, depth, cosmos, labels, pilot, store,
     voyage: null,         // a course or passage being followed: { kind, name, stops: [...], at }
     drift: false,
     entered: false,
-    readArrivals: true,
+    readArrivals: store.state.readArrivals,
     found: new Set(),     // constellations found so far
   };
   const listeners = new Set();

@@ -33,6 +33,8 @@ export function createDossier(app) {
     h('button.sheet-close', { type: 'button', 'aria-label': 'Leave this star', onclick: () => app.blur() }, icon('close', 18)),
     scroll);
   app.root.querySelector('#app').append(sheet);
+  // The sky is framed again once the sheet has finished growing or shrinking.
+  sheet.addEventListener('transitionend', event => { if (event.target === sheet && event.propertyName === 'height') app.frameCosmos(); });
 
   let shownStar = -1;
   let parts = null; // the live sections of a star's dossier
@@ -198,8 +200,10 @@ export function createDossier(app) {
       }
       if (film.x) nodes.push(h('p.synopsis', firstSentences(film.x)), h('p.essence-by', source(deep ? 'memory' : 'book')));
       if (status === 'offline') {
-        nodes.push(h('p.nav-off', 'The Navigator is not connected, so no one is reading this star to you. What you see is the chart.',
-          h('button.quiet', { type: 'button', onclick: () => app.panels.open('navigator') }, 'Connect')));
+        nodes.push(pilot.canConnect
+          ? h('p.nav-off', 'The Navigator is not connected, so no one is reading this star to you. What you see is the chart.',
+            h('button.quiet', { type: 'button', onclick: () => app.panels.open('navigator') }, 'Connect'))
+          : h('p.nav-off', 'Claude is not answering in this view, so no one is reading this star to you. What you see is the chart.'));
       } else if (status === 'waiting') {
         nodes.push(h('p.nav-off', 'Finding the Navigator…'));
       } else if (status === 'idle' && pilot.connected) {
@@ -262,7 +266,7 @@ export function createDossier(app) {
     } else {
       nodes.push(h('button.act.act-deeper', { type: 'button', disabled: !pilot.connected, onclick: () => app.lookDeeper(star) },
         icon('deeper', 17), h('span', found.length ? 'Look deeper still' : 'Look deeper')));
-      if (!pilot.connected) nodes.push(h('p.nav-off', 'This needs the Navigator.', h('button.quiet', { type: 'button', onclick: () => app.panels.open('navigator') }, 'Connect')));
+      if (!pilot.connected) nodes.push(h('p.nav-off', 'This needs the Navigator.', pilot.canConnect ? h('button.quiet', { type: 'button', onclick: () => app.panels.open('navigator') }, 'Connect') : null));
     }
     replace(parts.deeper, nodes);
   }

@@ -12,7 +12,8 @@ import { createApp, OVERVIEW } from './ui/app.mjs';
 const root = document.getElementById('odyssey');
 const veil = document.getElementById('veil');
 const config = window.ODYSSEY || {};
-const dataUrl = name => `${config.data || './data/'}${name}`;
+// A build may name each file outright (the claude.ai edition names them for their contents).
+const dataUrl = name => config[name] || `${config.data || './data/'}${name}.json`;
 
 function say(text, detail = '') {
   if (!veil) return;
@@ -31,12 +32,12 @@ async function boot() {
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   const [bundle, posters] = await Promise.all([
-    fetchJson(dataUrl('universe.json')),
+    fetchJson(dataUrl('universe')),
     config.posters ? fetchJson(config.posters).catch(() => null) : null,
   ]);
   if (posters) {
     const base = config.posterBase || './';
-    const tiers = Object.fromEntries(Object.entries(posters.tiers).map(([name, tier]) => [name, { ...tier, files: tier.files.map(file => `${base}${file}`) }]));
+    const tiers = Object.fromEntries(Object.entries(posters.tiers).map(([name, tier]) => [name, { ...tier, files: tier.files.map(file => (file ? `${base}${file}` : null)) }]));
     configurePosters({ sheets: { tiers, index: posters.index } });
   }
 
@@ -56,10 +57,10 @@ async function boot() {
 
   // The deeper notes on each film are only read by the Navigator; they follow later.
   const depth = [];
-  fetchJson(dataUrl('depth.json')).then(file => { for (const film of file.films || []) depth.push(film); }).catch(() => {});
+  fetchJson(dataUrl('depth')).then(file => { for (const film of file.films || []) depth.push(film); }).catch(() => {});
 
   let app = null;
-  const pilot = createPilot({ universe, depth, search, store, onStatus: () => app?.refresh('navigator') });
+  const pilot = createPilot({ universe, depth, search, store, edition: config.edition || 'site', onStatus: () => app?.refresh('navigator') });
   const labels = createLabels({
     root: document.getElementById('labels'), cosmos, universe, small,
     onStar: star => app?.focusStar(star),

@@ -86,6 +86,8 @@ export function createLabels({ root, cosmos, universe, small = false, onStar, on
       if (opacity <= 0.02 || p.x < left - 40 || p.x > right + 40 || y - 27 * scale < 58 || y > floor + 30) { show(entry, false); continue; }
       const wide = (galaxy.name.length * 11.5 + 30) * scale;
       const box = [p.x - wide / 2, y - 27 * scale, p.x + wide / 2, y + 27 * scale];
+      // Beside an open panel a name is shown whole or not at all.
+      if ((insets.left > 0 && box[0] < left + 6) || (insets.right > 0 && box[2] > right - 6)) { show(entry, false); continue; }
       if (crosses(fixed, ...box)) { show(entry, false); continue; }
       fixed.push(box);
       place(element, p.x, y, scale);
@@ -98,8 +100,9 @@ export function createLabels({ root, cosmos, universe, small = false, onStar, on
       const radiusPx = (galaxy.radius * view.focal) / p.depth;
       const opacity = clamp((radiusPx - height * 0.26) / (height * 0.12), 0, 1) * clamp((height * 2.6 - radiusPx) / (height * 0.8), 0, 1);
       const y = p.y - 26;
-      if (opacity <= 0.02 || p.x < left - 20 || p.x > right + 20 || y < 56 || y > floor - 10) { show(entry, false); continue; }
+      if (opacity <= 0.02 || p.x < left - 20 || p.x > right + 20 || y < 84 || y > floor - 10) { show(entry, false); continue; }
       const box = [p.x - entry.wide / 2, y - 10, p.x + entry.wide / 2, y + 10];
+      if ((insets.left > 0 && box[0] < left + 6) || (insets.right > 0 && box[2] > right - 6)) { show(entry, false); continue; }
       if (crosses(fixed, ...box)) { show(entry, false); continue; }
       fixed.push(box);
       place(element, p.x, y);
@@ -183,6 +186,11 @@ export function createLabels({ root, cosmos, universe, small = false, onStar, on
 
     const placed = fixed.map(box => box);
     const collides = (l, t, r, b) => crosses(placed, l, t, r, b);
+    // Nothing but the star you are at runs under the edge of an open panel.
+    const edgeLeft = insets.left > 0 ? insets.left + 6 : -Infinity;
+    const edgeRight = insets.right > 0 ? width - insets.right - 6 : Infinity;
+    const floorLine = height - insets.bottom - (small ? 62 : 84); // the dial and the wake sit below this
+    const focusBox = [];
     const next = new Map();
     let cards = 0;
     let titles = 0;
@@ -190,6 +198,10 @@ export function createLabels({ root, cosmos, universe, small = false, onStar, on
       if (cards >= budgetCards && titles >= budgetTitles) break;
       const { star, x, y, w } = candidate;
       const special = star === context.focus || context.rays.has(star) || star === context.hover || star === hoverFromLabel;
+      // The star you are at and the one under your hand are always shown. The ends of the rays
+      // give way to nothing but the focused star's own card and the edge of a panel.
+      const forced = star === context.focus || star === context.hover || star === hoverFromLabel;
+      const free = box => forced || (box[0] >= edgeLeft && box[2] <= edgeRight && box[3] <= floorLine && (special ? !crosses(focusBox, ...box) : !collides(...box)));
       const near = candidate.away < 1.7;
       let kind = null;
       if (cards < budgetCards && (near || special)) {
@@ -198,13 +210,16 @@ export function createLabels({ root, cosmos, universe, small = false, onStar, on
         const half = (Math.max(CARD_W, 92) * scale) / 2;
         const tall = (CARD_H * scale) / 2;
         const box = [x - half - 2, y - tall - 3, x + half + 2, y + tall + 25 * scale];
-        if (special || !collides(...box)) { placed.push(box); kind = 'card'; cards += 1; }
+        if (free(box)) {
+          placed.push(box); kind = 'card'; cards += 1;
+          if (star === context.focus) focusBox.push(box);
+        }
       }
       if (!kind && titles < budgetTitles && (titleMode || special || context.highlight)) {
         const film = universe.films[star];
         const tw = Math.min(190, film.t.length * 6.4 + 34);
         const box = [x - tw / 2, y + 6, x + tw / 2, y + 26];
-        if (special || !collides(...box)) { placed.push(box); kind = 'title'; titles += 1; }
+        if (free(box)) { placed.push(box); kind = 'title'; titles += 1; }
       }
       if (kind) next.set(star, { kind, rank: next.size });
     }

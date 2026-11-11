@@ -33,6 +33,7 @@ export function createStore() {
     sky: typeof saved.sky === 'string' ? saved.sky : 'white',
     entered: Boolean(saved.entered),
     companion: saved.companion && typeof saved.companion === 'object' ? saved.companion : null,
+    readArrivals: saved.readArrivals !== false, // whether the Navigator reads each star on arrival
   };
   let timer = 0;
 
@@ -43,7 +44,7 @@ export function createStore() {
       window.localStorage.setItem(KEY, JSON.stringify({
         loved: [...state.loved], seen: [...state.seen], wake: state.wake.slice(-MAX_WAKE),
         found: state.found.slice(-MAX_READINGS), arrivals, sky: state.sky, entered: state.entered,
-        companion: state.companion,
+        companion: state.companion, readArrivals: state.readArrivals,
       }));
     } catch { /* a full or forbidden store: the voyage simply is not remembered */ }
   }
