@@ -210,6 +210,40 @@ test('the deep field arrives a star at a time, fills the commons, and a found st
   assert.ok(runner.calls.at(-1).content.includes('The Lamp of Saint Orrin'));
 });
 
+test('an arrival that points beyond the chart hands that star over whole', async () => {
+  const lights = { S: 'story', F: 'feeling', I: 'image', D: 'idea', W: 'world', H: 'hands' };
+  const runner = fakeRunner({
+    deepfield: DEEP,
+    // The two found films share a maker, so each is offered as a companion of the other.
+    arrival: request => {
+      const code = /^([SFIDWH]\d+)\. Nine Tides at Carrow \(1981\)/m.exec(request.content)?.[1];
+      return {
+        essence: 'A keeper and the lamp he will not put out.',
+        rays: code ? [{ light: lights[code[0]], pick: code, claim: 'The same hand made both.', watch: '' }] : [],
+        beyond: { title: '', year: 0, why: '' },
+      };
+    },
+  });
+  const odyssey = await createOdyssey({
+    runner,
+    verify: async film => (film.title === 'Nine Tides at Carrow' ? { poster: 'https://image.tmdb.org/t/p/w500/tides.jpg', imdb: 'tt0000002', runtime: 88 } : null),
+  });
+  await ask(odyssey, 'deepfield', { star: CHARTED.s, count: 2 });
+
+  const arrival = await ask(odyssey, 'arrival', { star: 'the-lamp-of-saint-orrin-1974' });
+  assert.equal(arrival.status, 'done');
+  assert.deepEqual(arrival.result.rays.map(ray => ray.slug), ['nine-tides-at-carrow-1981']);
+  // A browser that has never met the companion's star is given everything it needs to place it.
+  assert.deepEqual(arrival.result.deep.map(item => [item.reading.slug, item.reading.title, item.reading.year, item.from, item.source]),
+    [['nine-tides-at-carrow-1981', 'Nine Tides at Carrow', 1981, CHARTED.s, 'deepfield']]);
+  assert.deepEqual(arrival.result.facts, { 'nine-tides-at-carrow-1981': { poster: 'https://image.tmdb.org/t/p/w500/tides.jpg', imdb: 'tt0000002', runtime: 88 } });
+
+  // The same holds when the arrival is answered from the companion's own memory.
+  const again = odyssey.start({ op: 'arrival', input: { star: 'the-lamp-of-saint-orrin-1974' } });
+  assert.deepEqual(again.result.deep.map(item => item.reading.slug), ['nine-tides-at-carrow-1981']);
+  assert.deepEqual(Object.keys(again.result.facts), ['nine-tides-at-carrow-1981']);
+});
+
 test('the same film found twice is one star, and a film the chart holds stays the chart\'s', async () => {
   const runner = fakeRunner({
     deepfield: { stars: [reading('The Lamp of Saint Orrin', 1974, { light: 'idea', claim: 'Found again.' }), reading(CHARTED.t, CHARTED.y, { light: 'story', claim: 'Already charted.' })] },

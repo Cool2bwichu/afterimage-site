@@ -76,6 +76,8 @@ export function createEntrance(app) {
       requestAnimationFrame(() => layer.classList.add('on'));
       if (!app.small) setTimeout(() => input.focus({ preventScroll: true }), 600);
     },
+    /** Leaves the threshold for somewhere already chosen (an address followed while it was still up). */
+    leave() { if (!state.entered) begin(() => {}); },
     /** Passes the threshold without the ceremony (a returning voyager, or an address that names a star). */
     skip() {
       state.entered = true;

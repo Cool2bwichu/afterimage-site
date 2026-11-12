@@ -6,7 +6,7 @@
 // and stars found beyond it only exist once their readings are restored.
 const KEY = 'afterimage.odyssey.v1';
 const MAX_WAKE = 240;
-const MAX_READINGS = 2400;
+const MAX_READINGS = 1500;
 const MAX_ARRIVALS = 160;
 
 function load() {
@@ -26,7 +26,7 @@ export function createStore() {
     loved: new Set(list(saved.loved)),
     seen: new Set(list(saved.seen)),
     wake: list(saved.wake).slice(-MAX_WAKE),
-    // Stars found beyond the chart: { reading, from (slug), source, extra }
+    // Stars found beyond the chart: { slug, reading, from (slug), source, extra: { pu, im, rt } }
     found: Array.isArray(saved.found) ? saved.found.filter(entry => entry && entry.reading && entry.reading.title).slice(-MAX_READINGS) : [],
     // What the Navigator said on arrival, by slug: { essence, rays: [{ light, slug, claim, watch }], beyond }
     arrivals: saved.arrivals && typeof saved.arrivals === 'object' ? saved.arrivals : {},
@@ -68,6 +68,15 @@ export function createStore() {
     remember(entry) {
       state.found.push(entry);
       save();
+    },
+    /** What a catalogue found for a star this browser remembers: its poster, identifier, running time. */
+    noteFacts(slug, extra) {
+      for (let i = state.found.length - 1; i >= 0; i -= 1) {
+        if (state.found[i].slug !== slug) continue;
+        state.found[i].extra = { ...state.found[i].extra, ...extra };
+        save();
+        return;
+      }
     },
     keepArrival(slug, arrival) {
       delete state.arrivals[slug];

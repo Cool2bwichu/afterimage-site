@@ -56,7 +56,9 @@ export function createSearchView(app) {
       }
     } else {
       const found = search.films(query, 8);
-      if (found.length) groups.push([pick ? 'Films' : 'On the chart', found.map(({ star }) => filmItem(star))]);
+      const beyond = found.filter(({ star }) => universe.isDeep(star)).length;
+      const heading = pick ? 'Films' : !beyond ? 'On the chart' : beyond === found.length ? 'Found beyond the chart' : 'On the chart, and found beyond it';
+      if (found.length) groups.push([heading, found.map(({ star }) => filmItem(star))]);
       if (!pick) {
         const traits = search.traits(query, 4);
         if (traits.length) groups.push(['Currents: light up every film that shares it', traits.map(({ trait }) => traitItem(trait))]);

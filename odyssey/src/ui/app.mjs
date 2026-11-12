@@ -604,7 +604,11 @@ export function createApp({ root, universe, depth, cosmos, labels, pilot, store,
   root.style.setProperty('--light', lightById(state.sky).color);
   frameCosmos();
 
-  window.addEventListener('hashchange', () => { if (window.location.hash.replace(/^#/, '') !== written) followAddress(); });
+  window.addEventListener('hashchange', () => {
+    if (window.location.hash.replace(/^#/, '') === written) return;
+    // An address followed from the threshold is a way of setting out like any other.
+    if (followAddress() && !state.entered) app.entrance.leave();
+  });
   window.addEventListener('resize', () => requestAnimationFrame(frameCosmos));
   // The Navigator may come aboard after a star was reached: read that star then.
   listeners.add(what => {

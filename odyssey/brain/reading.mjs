@@ -130,6 +130,11 @@ export function reviveReading(stored, vocabulary) {
   return normaliseReading({ ...stored, ...(stored.tags && typeof stored.tags === 'object' ? stored.tags : {}), axes }, vocabulary);
 }
 
+const READING_KEYS = ['title', 'year', 'director', 'known', 'fame', 'country', 'premise', 'afterimage', 'tags', 'axes', 'bw', 'animated', 'movement', 'setting', 'hi', 'lo'];
+
+/** A clean reading with only its own fields: what is worth keeping or sending. */
+export const plainReading = reading => Object.fromEntries(READING_KEYS.filter(key => reading[key] !== undefined).map(key => [key, reading[key]]));
+
 /** A reading's slug: the address of the star it becomes. */
 export const readingSlug = reading => slugOf(reading.title, reading.year);
 

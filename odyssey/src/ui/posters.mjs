@@ -41,7 +41,8 @@ export function hasPoster(film) {
  */
 export function posterUrl(film, size = 'small') {
   if (sheets || !outside) return '';
-  if (film.pu) return film.pu; // a poster found for a star charted later
+  // A poster the catalogue found for a star charted later, at a width nearer the size it is shown at.
+  if (film.pu) return size === 'large' ? film.pu : film.pu.replace(/\/t\/p\/w\d+\//, '/t/p/w342/');
   if (!film.p) return '';
   // A free image is recorded at a generous width; ask for one nearer the size it is shown at.
   const path = film.p.replace(/\/(\d+)px-([^/]+)$/, (whole, width, name) => (Number(width) > 500 ? `/${size === 'large' ? 500 : 250}px-${name}` : whole));
@@ -148,6 +149,51 @@ function fetchImage(job) {
   probe.src = job.url;
 }
 
+/** Sets a film's image over its plate, as soon as it is in view. False when the film has no image to show. */
+function attach(element, film, { eager, size }) {
+  const place = sheets ? sheetPlace(film, size) : null;
+  const url = place ? place.url : posterUrl(film, size);
+  if (!url) return false;
+  const job = { holder: element, url, place, title: film.t, eager, tries: 0, shown: false };
+  if (known.get(url) === 'here') reveal(job);
+  else if (watcher) { jobs.set(element, job); watcher.observe(element); }
+  else want(job);
+  return true;
+}
+
+// A star charted from memory has no poster until a catalogue answers for it, which can be a little
+// after the star is first shown. The plates drawn of it meanwhile are noted here, held weakly, so
+// that the poster reaches every one of them still on the page when it comes.
+const plates = new Map(); // slug → [{ ref: WeakRef<element>, eager, size }]
+const PLATES_KEPT = 24;
+
+function awaitPoster(element, film, options) {
+  if (typeof WeakRef !== 'function') return;
+  let list = plates.get(film.s);
+  if (!list) { list = []; plates.set(film.s, list); }
+  list.push({ ref: new WeakRef(element), ...options });
+  if (list.length > PLATES_KEPT) {
+    const live = list.filter(entry => entry.ref.deref()?.isConnected);
+    plates.set(film.s, live.slice(-PLATES_KEPT));
+  }
+}
+
+/**
+ * Posters have been found for films already drawn: every plate of theirs still on the page takes its image.
+ * @param {object[]} films film records that now carry a poster
+ */
+export function postersFound(films) {
+  for (const film of films || []) {
+    const list = plates.get(film.s);
+    if (!list) continue;
+    plates.delete(film.s);
+    for (const { ref, eager, size } of list) {
+      const element = ref.deref();
+      if (element && element.isConnected) attach(element, film, { eager, size });
+    }
+  }
+}
+
 /**
  * A poster element: the plate underneath, the image over it once it arrives.
  * @param {object} film
@@ -159,14 +205,6 @@ export function poster(film, { words = true, eager = false, size = 'small' } = {
   const plate = h('span.poster-plate', { 'aria-hidden': 'true' });
   if (words) plate.append(h('span.poster-plate-title', film.t), h('span.poster-plate-year', String(film.y || '')));
   element.append(plate);
-
-  const place = sheets ? sheetPlace(film, size) : null;
-  const url = place ? place.url : posterUrl(film, size);
-  if (url) {
-    const job = { holder: element, url, place, title: film.t, eager, tries: 0, shown: false };
-    if (known.get(url) === 'here') reveal(job);
-    else if (watcher) { jobs.set(element, job); watcher.observe(element); }
-    else want(job);
-  }
+  if (!attach(element, film, { eager, size }) && film.deep && outside && !sheets) awaitPoster(element, film, { eager, size });
   return element;
 }

@@ -65,23 +65,37 @@ export function createDossier(app) {
     h('span.frow-go', icon('arrow', 15)));
   }
 
+  // The plain facts of a film, and the ways out to the rest of the web.
+  const metaOf = film => [String(film.y), film.d, (film.c || []).slice(0, 2).join(', '), film.rt ? `${film.rt} min` : ''].filter(Boolean).join(' · ');
+  const linksOf = film => [
+    film.w ? h('a.ext', { href: `https://en.wikipedia.org/wiki/${encodeURIComponent(film.w.replace(/ /g, '_'))}`, target: '_blank', rel: 'noopener noreferrer' }, 'Wikipedia') : null,
+    film.im ? h('a.ext', { href: `https://www.imdb.com/title/${film.im}/`, target: '_blank', rel: 'noopener noreferrer' }, 'IMDb') : null,
+    h('a.ext', { href: `https://letterboxd.com/search/films/${encodeURIComponent(`${film.t} ${film.y}`)}/`, target: '_blank', rel: 'noopener noreferrer' }, 'Letterboxd'),
+  ];
+  /** A catalogue has answered for a star from beyond the chart while its dossier was open. */
+  function facts() {
+    if (!parts) return;
+    const film = films[parts.star];
+    parts.meta.textContent = metaOf(film);
+    replace(parts.links, linksOf(film));
+  }
+
   // ── A star.
   function showStar(star) {
     shownStar = star;
     const film = films[star];
     const deep = universe.isDeep(star);
-    const sky = state.sky;
 
     const love = h('button.act.act-love', { type: 'button', onclick: () => app.toggle('loved', star) }, icon('heart', 17), h('span', 'Love'));
     const seen = h('button.act.act-seen', { type: 'button', onclick: () => app.toggle('seen', star) }, icon('check', 17), h('span', 'Seen'));
-    const facts = [String(film.y), film.d, (film.c || []).slice(0, 2).join(', '), film.rt ? `${film.rt} min` : ''].filter(Boolean);
     const kicker = h('p.dossier-kicker');
+    const meta = h('p.dossier-meta', metaOf(film));
     const head = h('header.dossier-head', { style: { '--hi': film.hi, '--lo': film.lo } },
       h('div.dossier-poster', poster(film, { eager: true, size: 'large' })),
       h('div.dossier-id',
         kicker,
         h('h2.dossier-title', film.t),
-        h('p.dossier-meta', facts.join(' · ')),
+        meta,
         deep ? h('p.dossier-deep', source('memory')) : null,
         h('div.dossier-acts', love, seen)));
 
@@ -103,18 +117,14 @@ export function createDossier(app) {
     const shape = storyShape(film);
     const recall = film.rc ? veiled('What stays with people', film.rc, deep ? 'memory' : 'atlas', 'This may give something away.') : null;
 
-    const links = [
-      film.w ? h('a.ext', { href: `https://en.wikipedia.org/wiki/${encodeURIComponent(film.w.replace(/ /g, '_'))}`, target: '_blank', rel: 'noopener noreferrer' }, 'Wikipedia') : null,
-      film.im ? h('a.ext', { href: `https://www.imdb.com/title/${film.im}/`, target: '_blank', rel: 'noopener noreferrer' }, 'IMDb') : null,
-      h('a.ext', { href: `https://letterboxd.com/search/films/${encodeURIComponent(`${film.t} ${film.y}`)}/`, target: '_blank', rel: 'noopener noreferrer' }, 'Letterboxd'),
-    ];
+    const links = h('p.ext-row', linksOf(film));
     const tools = section('tools', 'From here',
       h('div.tool-row',
         h('button.act', { type: 'button', onclick: () => app.panels.open('collide', { a: star }) }, icon('collide', 17), h('span', 'Collide with…')),
         h('button.act', { type: 'button', onclick: () => app.panels.open('passage', { a: star }) }, icon('passage', 17), h('span', 'Passage to…'))),
-      h('p.ext-row', links));
+      links);
 
-    parts = { star, kicker, love, seen, essence, rays, deeper };
+    parts = { star, kicker, meta, links, love, seen, essence, rays, deeper };
     replace(scroll, head, essence, recall, rays, deeper, lines, traitsSection, shape, tools);
     sheet.hidden = false;
     sheet.dataset.kind = 'star';
@@ -317,6 +327,7 @@ export function createDossier(app) {
     else if (what === 'marks') marks();
     else if (what === 'sky') { place(); }
     else if (what === 'navigator') { arrival(); deepField(); }
+    else if (what === 'facts') facts();
   });
 
   return {

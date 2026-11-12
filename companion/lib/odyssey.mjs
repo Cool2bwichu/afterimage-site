@@ -14,7 +14,7 @@ import { fileURLToPath } from 'node:url';
 
 import { EFFORT, STRICT_NOTE, strictSchema } from '../../odyssey/brain/contracts.mjs';
 import { NavigatorError, createNavigator, restoreStars, settleReadings } from '../../odyssey/brain/navigator.mjs';
-import { readingSlug, reviveReading } from '../../odyssey/brain/reading.mjs';
+import { plainReading as plain, readingSlug, reviveReading } from '../../odyssey/brain/reading.mjs';
 import { buildVocabulary } from '../../odyssey/brain/vocabulary.mjs';
 import { LIGHT_IDS } from '../../odyssey/src/engine/lights.mjs';
 import { createSearch } from '../../odyssey/src/engine/search.mjs';
@@ -38,7 +38,6 @@ const COMMONS_PAGE = 600;
 const COMMONS_PAGE_MAX = 2000;
 const SLUG = /^[a-z0-9-]{1,180}$/;
 const EFFORT_ORDER = ['low', 'medium', 'high', 'xhigh', 'max'];
-const READING_KEYS = ['title', 'year', 'director', 'known', 'fame', 'country', 'premise', 'afterimage', 'tags', 'axes', 'bw', 'animated', 'movement', 'setting', 'hi', 'lo'];
 const SOURCES = ['deepfield', 'chart', 'course', 'collision', 'sky'];
 const TIMED_OUT = Symbol('timed out');
 
@@ -289,7 +288,6 @@ export async function createOdyssey({
     },
   });
 
-  const plain = reading => Object.fromEntries(READING_KEYS.filter(key => reading[key] !== undefined).map(key => [key, reading[key]]));
   const starOf = name => universe.indexOfSlug(name);
   const slugAt = star => films[star].s;
 
@@ -400,10 +398,11 @@ export async function createOdyssey({
   }
 
   // ── What a browser is sent. A film is always named by its slug here, with its reading beside it.
+  const handed = item => ({ reading: { ...item.reading, slug: item.slug }, from: item.from, source: item.source, ...(item.facts ? { facts: item.facts } : {}) });
   const outward = (entry, extras = {}) => ({ ...(entry.item ? entry.item.reading : plain(entry.reading)), slug: slugAt(entry.star), ...extras });
   const factsOf = entries => Object.fromEntries(entries.filter(entry => entry.item && entry.item.facts).map(entry => [entry.item.slug, entry.item.facts]));
 
-  /** An arrival with the films it points to named by slug, and the readings of any that are beyond the chart. */
+  /** An arrival with the films it points to named by slug, and any of them that are beyond the chart handed over whole. */
   function shapeArrival(value) {
     const rays = [];
     const deep = [];
@@ -421,7 +420,7 @@ export async function createOdyssey({
     return {
       shaped: {
         essence: value.essence || '', beyond: value.beyond || null, rays,
-        deep: deep.map(item => ({ ...item.reading, slug: item.slug })),
+        deep: deep.map(handed),
         facts: Object.fromEntries(deep.filter(item => item.facts).map(item => [item.slug, item.facts])),
       },
       deep,
@@ -656,8 +655,7 @@ export async function createOdyssey({
     commons({ since = 0, limit = COMMONS_PAGE } = {}) {
       const mark = Number.isFinite(since) && since > 0 ? since : 0;
       const size = Number.isInteger(limit) && limit > 0 ? Math.min(limit, COMMONS_PAGE_MAX) : COMMONS_PAGE;
-      const stars = commons.filter(item => item.n > mark).sort((a, b) => a.n - b.n).slice(-size)
-        .map(item => ({ reading: { ...item.reading, slug: item.slug }, from: item.from, source: item.source, ...(item.facts ? { facts: item.facts } : {}) }));
+      const stars = commons.filter(item => item.n > mark).sort((a, b) => a.n - b.n).slice(-size).map(handed);
       return { stars, next: sequence, total: commons.length };
     },
 

@@ -5,7 +5,7 @@ import { createSearch } from './engine/search.mjs';
 import { createCosmos } from './cosmos/renderer.mjs';
 import { createLabels } from './cosmos/labels.mjs';
 import { createStore } from './ui/store.mjs';
-import { configurePosters } from './ui/posters.mjs';
+import { configurePosters, postersFound } from './ui/posters.mjs';
 import { createPilot } from './nav/pilot.mjs';
 import { createApp, OVERVIEW } from './ui/app.mjs';
 
@@ -50,7 +50,7 @@ async function boot() {
   let cosmos;
   try {
     cosmos = createCosmos({ canvas: document.getElementById('cosmos'), universe, reducedMotion, small });
-  } catch (error) {
+  } catch {
     say('This browser cannot draw the universe.', 'The Odyssey needs WebGL2, which every current browser has. Try another browser, or turn hardware acceleration on.');
     return;
   }
@@ -62,7 +62,12 @@ async function boot() {
   fetchJson(dataUrl('depth')).then(file => { for (const film of file.films || []) depth.push(film); }).catch(() => {});
 
   let app = null;
-  const pilot = createPilot({ universe, depth, search, store, edition: config.edition || 'site', onStatus: () => app?.refresh('navigator') });
+  const pilot = createPilot({
+    universe, depth, search, store, edition: config.edition || 'site',
+    onStatus: () => app?.refresh('navigator'),
+    // A catalogue has answered for stars already in the sky: their plates take the posters, and their dossiers the rest.
+    onFacts: films => { postersFound(films); app?.refresh('facts'); },
+  });
   const labels = createLabels({
     root: document.getElementById('labels'), cosmos, universe, small,
     onStar: star => app?.focusStar(star),

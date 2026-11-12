@@ -247,8 +247,9 @@ export function createPanels(app) {
     const choose = () => app.searchView.open({ title: `Collide ${films[c.a].t} with…`, pick: star => { if (star === c.a) return; c.b = star; c.result = null; c.note = ''; c.between = app.between(c.a, c.b); open('collide'); run(); } });
 
     async function run() {
-      if (!pilot.connected || c.b < 0) return;
+      if (!pilot.connected || c.b < 0 || c.state === 'asking') return;
       c.state = 'asking';
+      c.note = '';
       renderCollide();
       try { c.result = await pilot.collide(c.a, c.b); } catch (error) { c.note = pilot.explain(error); }
       c.state = 'idle';
@@ -275,6 +276,10 @@ export function createPanels(app) {
           h('button.act.act-primary', { type: 'button', onclick: () => app.focusStar(c.result.star) }, icon('arrow', 17), h('span', `Go to ${film.t}`))));
       } else if (!pilot.connected) nodes.push(needNavigator('Naming the film between them'));
       if (c.note) nodes.push(h('p.panel-error', c.note));
+      // Stopped, failed, or never asked: the Navigator can still be asked.
+      if (!c.result && c.state !== 'asking' && pilot.connected) {
+        nodes.push(h('button.act.act-primary', { type: 'button', onclick: run }, icon('spark', 17), h('span', c.note ? 'Ask again' : 'Ask the Navigator for the film between them')));
+      }
       if (c.between.length) {
         nodes.push(h('h3.panel-title', 'What the chart finds between them', source('chart')),
           c.between.map(entry => filmRow(entry.star, { bodyNode: h('span.frow-shared', 'near both on the chart') })));
