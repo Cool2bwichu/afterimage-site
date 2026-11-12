@@ -46,8 +46,10 @@ export function readPartial(text) {
     const rest = text.slice(at);
     const number = /^-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?/.exec(rest);
     if (number) {
-      // A number that runs to the end of the text may still have digits coming.
-      if (number[0].length >= rest.length) { at = length; return OPEN; }
+      // A number counts once something has been written that ends it: until then
+      // more digits, a decimal point or an exponent may still be coming.
+      const next = rest[number[0].length];
+      if (next === undefined || /[\d.eE+-]/.test(next)) { at = length; return OPEN; }
       at += number[0].length;
       return Number(number[0]);
     }

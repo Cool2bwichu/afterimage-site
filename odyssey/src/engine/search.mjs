@@ -1,5 +1,5 @@
 // Finding a star by name. Titles, directors and years are matched without
-// regard to accents or case; a query can also name a trait ("heist", "dread").
+// regard to accents or case; a query can also name a trait ("robbery", "dread").
 
 export function fold(text) {
   return String(text || '')

@@ -16,6 +16,8 @@ const HOUR = 3600 * 1000;
 const UNAVAILABLE = new Set(['not_granted', 'sampling_disabled', 'not_declared', 'capability_disabled', 'capability_removed']);
 const SOURCES = ['deepfield', 'chart', 'course', 'collision', 'sky'];
 const POSTER = /^https:\/\/image\.tmdb\.org\/t\/p\/w\d{3}\/[A-Za-z0-9._-]+\.(?:jpg|jpeg|png|webp)$/i;
+// How often the browser looks in on an answer the companion is still writing, in milliseconds.
+const PACE = { first: 500, step: 150, most: 1400 };
 
 const COPY = {
   offline: 'The Navigator is not connected, so this part of the voyage is closed. The chart itself still works.',
@@ -108,7 +110,7 @@ function inPageAsk(sample, onUnavailable) {
 
 // ── Claude through the companion. The browser sends an operation and names
 // films by slug; the companion builds the prompt itself.
-function createRemote({ url, passphrase }) {
+function createRemote({ url, passphrase }, pace = PACE) {
   const base = String(url || '').replace(/\/+$/, '');
   const headers = body => ({ ...(body ? { 'Content-Type': 'application/json' } : {}), ...(passphrase ? { Authorization: `Bearer ${passphrase}` } : {}) });
 
@@ -148,12 +150,12 @@ function createRemote({ url, passphrase }) {
     const started = await request('/api/odyssey/jobs', { method: 'POST', body: JSON.stringify({ op, input }), signal });
     if (started.result) return started.result; // answered from the companion's own memory
     if (typeof started.jobId !== 'string') throw fail('failed');
-    let pause = 500;
+    let pause = pace.first;
     let seen = 0;
     let misses = 0;
     for (;;) {
       await wait(pause, signal);
-      pause = Math.min(1400, pause + 150);
+      pause = Math.min(pace.most, pause + pace.step);
       let job;
       try {
         job = await request(`/api/odyssey/jobs/${encodeURIComponent(started.jobId)}`, { signal });
@@ -189,8 +191,9 @@ function createRemote({ url, passphrase }) {
  * @param {object} input.store        the voyager's store
  * @param {(status: object) => void} [input.onStatus]
  * @param {(films: object[]) => void} [input.onFacts]  stars already here have just been given a poster or other facts
+ * @param {{ first: number, step: number, most: number }} [input.pace]  how often to look in on the companion
  */
-export function createPilot({ universe, depth, search, store, edition = 'site', onStatus = () => {}, onFacts = () => {} }) {
+export function createPilot({ universe, depth, search, store, edition = 'site', onStatus = () => {}, onFacts = () => {}, pace = PACE }) {
   // Inside claude.ai a page asks Claude itself and can reach nothing else, so there is no companion to connect.
   const canConnect = edition !== 'claude';
   const vocabulary = buildVocabulary(universe.bundle.traits);
@@ -331,7 +334,7 @@ export function createPilot({ universe, depth, search, store, edition = 'site', 
 
   async function findCompanion(config) {
     if (!config || !config.url) return false;
-    const candidate = createRemote(config);
+    const candidate = createRemote(config, pace);
     const answer = await candidate.status();
     if (!answer.connected) throw fail('not_connected');
     remote = candidate;
