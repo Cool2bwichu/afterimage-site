@@ -61,7 +61,8 @@ Subscription mode needs the `claude` command on the companion's `PATH`, or
   They require `Authorization: Bearer $AFTERIMAGE_BRIDGE_SECRET`.
 - **The browser routes** (`/api/…`) are for the GitHub Pages site. They mirror
   the site's own API (status, connect, reels, Atlases, replacements, job
-  polling, `films/search` and `films/enrich`). A call is accepted only when:
+  polling, `films/search` and `films/enrich`), and they carry the Odyssey's
+  Navigator at `/api/odyssey/…`. A call is accepted only when:
   - `AFTERIMAGE_SITE_PASSPHRASE` is set; until then they answer
     `SITE_API_DISABLED`;
   - the call carries `Authorization: Bearer <passphrase>`;
@@ -88,10 +89,13 @@ Subscription mode needs the `claude` command on the companion's `PATH`, or
 | `AFTERIMAGE_BRIDGE_SECRET` | `afterimage-local-development` outside production | Shared with a site that has server routes. At least 24 characters in production. Production needs this, the passphrase, or both. |
 | `AFTERIMAGE_SITE_PASSPHRASE` | none (browser routes closed) | Opens the browser routes for the GitHub Pages site. At least 16 characters in production. |
 | `AFTERIMAGE_ALLOWED_ORIGINS` | none | Comma-separated site origins allowed to call the browser routes, such as `https://cool2bwichu.github.io`. Required in production with a passphrase. |
-| `TMDB_READ_TOKEN` | none | TMDB API Read Access Token or v3 API key, for the browser routes' film search and details. Without `AFTERIMAGE_FILM_METADATA_URL`, it also verifies Atlas and replacement films in-process. |
+| `TMDB_READ_TOKEN` | none | TMDB API Read Access Token or v3 API key, for the browser routes' film search and details. Without `AFTERIMAGE_FILM_METADATA_URL`, it also verifies Atlas and replacement films in-process. The Odyssey uses it to find posters for films beyond its chart. |
 | `TMDB_API_BASE` | TMDB's API | Only for tests against a stand-in. |
 | `AFTERIMAGE_FILM_METADATA_URL` | none | A site's `/api/films/enrich`, used to verify Atlas and replacement films when the site has server routes; HTTPS, or HTTP to `localhost`. |
 | `AFTERIMAGE_JOB_DIR` | `companion/data/generation-jobs` | Durable job files. Required in production; mount persistent storage. |
+| `AFTERIMAGE_ODYSSEY_DIR` | `companion/data/odyssey` outside production | Where films the Navigator charts from memory are kept. In production, mount persistent storage; without it they last only until the next restart. The image sets `/data/afterimage-odyssey`. |
+| `AFTERIMAGE_ODYSSEY_DATA` | `../odyssey/public/data` | The Odyssey's compiled chart. Without it the companion serves everything else and answers `ODYSSEY_NOT_CONFIGURED`. |
+| `AFTERIMAGE_ODYSSEY_CONCURRENCY` | `2` | How many Odyssey answers Claude may write at once, 1 to 6. |
 | `AFTERIMAGE_CLAUDE_MODEL` | `claude-opus-5-5` | Any current Claude model ID your account can use. |
 | `AFTERIMAGE_CLAUDE_EFFORT` | `high` | `low`, `medium`, `high`, `xhigh` or `max`. |
 | `AFTERIMAGE_CLAUDE_FALLBACKS` | `default` | API mode only: `off` disables server-side refusal fallbacks. |
@@ -158,6 +162,38 @@ Each call logs one JSON line with token counts, never request content. In
 subscription mode it includes Claude Code's cost estimate, which is what the
 same work would cost on the API, not a charge.
 
+## The Odyssey
+
+The companion also carries the Navigator behind the Odyssey
+([../odyssey/README.md](../odyssey/README.md)). It opens the Odyssey's chart
+exactly as a browser does, and the Navigator code in `odyssey/brain` writes
+every prompt, so a browser never sends one. A request names an operation and
+names films by their slugs; the few things a viewer types go into the prompt as
+data, after the brief.
+
+| Route | What it does |
+| --- | --- |
+| `GET /api/odyssey/status` | Whether Claude is connected, the model, how many films are on the chart and how many have been found beyond it. |
+| `POST /api/odyssey/jobs` | `{ op, input }`, where `op` is `arrival`, `deepfield`, `chart`, `course`, `collision` or `sky`. Answers `200 { result }` from memory, or `202 { jobId }`. |
+| `GET /api/odyssey/jobs/:id` | `working` (with a `draft` of the answer so far), `done` (with the `result`) or `failed` (with a `code`). |
+| `GET /api/odyssey/commons` | The films found beyond the chart, in pages, so a new visitor's sky holds what earlier visitors found. |
+
+These are browser routes: the passphrase, the allowed origins and the throttle
+above apply to them unchanged.
+
+- **The commons.** A film the Navigator charts from memory is kept, up to 8,000
+  of them, so a later request can name it and the next visitor can see it. A
+  request that names a film the companion does not know answers `UNKNOWN_STAR`
+  with the slug, and the browser asks for it to be charted by title.
+- **Posters.** With `TMDB_READ_TOKEN`, each found film is looked up once in the
+  catalogue for its poster, IMDb identifier and running time. Without it the
+  films arrive without posters.
+- **Effort.** Each kind of answer thinks no harder than it needs to, and never
+  harder than `AFTERIMAGE_CLAUDE_EFFORT`.
+- **Whose Claude.** In subscription mode every Odyssey answer draws on the
+  owner's plan, like the reels. The same rule applies: for a site other people
+  will use, switch to `AFTERIMAGE_CLAUDE_AUTH=api`.
+
 ## Deploy
 
 `Dockerfile` builds a Node 22 image with Claude Code pinned to 2.1.284, the
@@ -172,7 +208,8 @@ docker build -f companion/Dockerfile .
 `/health`. Run it as an always-on service with:
 
 - persistent storage mounted at `/data`, where jobs are kept in
-  `/data/afterimage-generation-jobs`;
+  `/data/afterimage-generation-jobs` and the Odyssey's found films in
+  `/data/afterimage-odyssey`;
 - TLS at the edge;
 - `CLAUDE_CODE_OAUTH_TOKEN` (or `ANTHROPIC_API_KEY`) in the host's secret store.
 
@@ -216,6 +253,9 @@ Artifact cannot reach TMDB. See `../docs/claude.md`.
   the job store, Claude Code's stream events (thinking and subagent events are
   never read as the answer) and the API stream with a fallback.
 - Collisions: the contract, prompt, effort cap, routes and in-page answers.
+- The Odyssey: every operation against a scripted Claude, the commons across a
+  restart, catalogue lookups, unknown stars, and the routes behind the
+  passphrase.
 
 ## Provenance
 
