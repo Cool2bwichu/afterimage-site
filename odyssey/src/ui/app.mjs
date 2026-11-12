@@ -576,6 +576,8 @@ export function createApp({ root, universe, depth, cosmos, labels, pilot, store,
       cosmos.canvas.style.cursor = star >= 0 ? 'pointer' : '';
     },
     onGesture() { if (state.drift) stopDrift(); },
+    // Names and poster cards lie over the sky: a drag that starts on one still moves it.
+    surfaces: [document.getElementById('labels')].filter(Boolean),
   });
 
   Object.assign(app, {

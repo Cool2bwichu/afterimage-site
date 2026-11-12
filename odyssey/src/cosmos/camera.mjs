@@ -243,9 +243,16 @@ export function createCamera({ reducedMotion = false } = {}) {
   };
 }
 
-/** Wires pointer, wheel and touch to a camera. Returns a function that removes the wiring. */
-export function attachControls(element, camera, { onTap, onHover, onGesture } = {}) {
+/**
+ * Wires pointer, wheel and touch to a camera. Returns a function that removes the wiring.
+ * `surfaces` are layers drawn over the element (names, poster cards): a drag or a wheel that
+ * begins on one moves the sky exactly as it would from open space, and a press that does not
+ * move is still theirs to answer.
+ */
+export function attachControls(element, camera, { onTap, onHover, onGesture, surfaces = [] } = {}) {
   const pointers = new Map();
+  const outside = new Set(); // pointers that went down on a surface, not on the element
+  let dragged = false;       // the last press on a surface became a drag: its click is not a choice
   let moved = 0;
   let pinch = null;
   let downAt = 0;
@@ -267,6 +274,9 @@ export function attachControls(element, camera, { onTap, onHover, onGesture } = 
     }
     onGesture?.();
   }
+
+  function onElementMove(event) { if (!outside.has(event.pointerId)) move(event); }
+  function onElementUp(event) { if (!outside.has(event.pointerId)) up(event); }
 
   function move(event) {
     const pointer = pointers.get(event.pointerId);
@@ -313,20 +323,78 @@ export function attachControls(element, camera, { onTap, onHover, onGesture } = 
     onGesture?.();
   }
 
+  // ── The same hands, begun on something drawn over the sky.
+  function surfaceDown(event) {
+    if (event.button > 2) return;
+    dragged = false;
+    outside.add(event.pointerId);
+    pointers.set(event.pointerId, { x: event.clientX, y: event.clientY, button: event.button, shift: event.shiftKey });
+    moved = 0;
+    downAt = performance.now();
+    if (pointers.size === 2) {
+      const [a, b] = [...pointers.values()];
+      pinch = { distance: Math.hypot(a.x - b.x, a.y - b.y), midX: (a.x + b.x) / 2, midY: (a.y + b.y) / 2 };
+    }
+    onGesture?.();
+  }
+  function outsideMove(event) {
+    if (!outside.has(event.pointerId)) return;
+    move(event);
+    if (moved >= 4) dragged = true;
+  }
+  function outsideUp(event) {
+    if (!outside.delete(event.pointerId)) return;
+    pointers.delete(event.pointerId);
+    if (pointers.size < 2) pinch = null;
+  }
+  // A drag that ends where it began still raises a click: it moved the sky, it did not choose a film.
+  const surfaceClick = event => {
+    if (!dragged) return;
+    dragged = false;
+    event.stopPropagation();
+    event.preventDefault();
+  };
+  // Shift and a press would otherwise select text, and a pressed poster would be dragged away as an image.
+  const still = event => event.preventDefault();
+
   const leave = () => onHover?.(-1, -1);
   const menu = event => event.preventDefault();
+  for (const surface of surfaces) {
+    surface.addEventListener('pointerdown', surfaceDown);
+    surface.addEventListener('click', surfaceClick, true);
+    surface.addEventListener('mousedown', still);
+    surface.addEventListener('dragstart', still);
+    surface.addEventListener('wheel', wheel, { passive: false });
+    surface.addEventListener('contextmenu', menu);
+  }
+  if (surfaces.length) {
+    window.addEventListener('pointermove', outsideMove);
+    window.addEventListener('pointerup', outsideUp);
+    window.addEventListener('pointercancel', outsideUp);
+  }
   element.addEventListener('pointerdown', down);
-  element.addEventListener('pointermove', move);
-  element.addEventListener('pointerup', up);
-  element.addEventListener('pointercancel', up);
+  element.addEventListener('pointermove', onElementMove);
+  element.addEventListener('pointerup', onElementUp);
+  element.addEventListener('pointercancel', onElementUp);
   element.addEventListener('pointerleave', leave);
   element.addEventListener('wheel', wheel, { passive: false });
   element.addEventListener('contextmenu', menu);
   return () => {
+    for (const surface of surfaces) {
+      surface.removeEventListener('pointerdown', surfaceDown);
+      surface.removeEventListener('click', surfaceClick, true);
+      surface.removeEventListener('mousedown', still);
+      surface.removeEventListener('dragstart', still);
+      surface.removeEventListener('wheel', wheel);
+      surface.removeEventListener('contextmenu', menu);
+    }
+    window.removeEventListener('pointermove', outsideMove);
+    window.removeEventListener('pointerup', outsideUp);
+    window.removeEventListener('pointercancel', outsideUp);
     element.removeEventListener('pointerdown', down);
-    element.removeEventListener('pointermove', move);
-    element.removeEventListener('pointerup', up);
-    element.removeEventListener('pointercancel', up);
+    element.removeEventListener('pointermove', onElementMove);
+    element.removeEventListener('pointerup', onElementUp);
+    element.removeEventListener('pointercancel', onElementUp);
     element.removeEventListener('pointerleave', leave);
     element.removeEventListener('wheel', wheel);
     element.removeEventListener('contextmenu', menu);

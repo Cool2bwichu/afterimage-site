@@ -93,6 +93,8 @@ html, body { margin: 0; height: 100%; background: var(--ink); overflow: hidden; 
 .lbl-layer { position: absolute; inset: 0; }
 .lbl-galaxy, .lbl-arm, .lbl-star, .lbl-card { position: absolute; left: 0; top: 0; will-change: transform; opacity: 0; pointer-events: none; transition: opacity 0.5s var(--ease); }
 .lbl-galaxy.on, .lbl-arm.on, .lbl-star.on, .lbl-card.on { pointer-events: auto; }
+.lbl-galaxy, .lbl-arm, .lbl-star, .lbl-card { touch-action: none; }
+.lbl-card img { -webkit-user-drag: none; }
 .lbl-star.on, .lbl-card.on { opacity: 1; }
 
 .lbl-galaxy { display: grid; justify-items: center; gap: 3px; text-align: center; white-space: nowrap; padding: 6px 12px; }
