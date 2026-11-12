@@ -12,6 +12,7 @@ export function createHud(app) {
   const crumbs = h('div.crumbs', { 'aria-live': 'polite' });
   const brand = h('button.brand', { type: 'button', title: 'Back to the whole universe (H)', onclick: () => app.goHome() },
     h('span.brand-mark', 'AFTERIMAGE'), h('span.brand-sub', 'The Odyssey'));
+  const backButton = h('button.hud-back', { type: 'button', title: 'Back to where you were (Backspace)', 'aria-label': 'Back to where you were', hidden: true, onclick: () => app.back() }, icon('back', 16));
 
   const tool = (name, label, glyph, action, extra = {}) => {
     const count = h('span.tool-count');
@@ -20,7 +21,7 @@ export function createHud(app) {
   };
   const tools = {
     search: tool('search', 'Find a film', 'search', () => app.searchView.open()),
-    course: tool('course', 'Plot a course', 'compass', () => app.panels.toggle('course')),
+    voyage: tool('voyage', 'Set out', 'compass', () => app.panels.toggle(state.tool?.name === 'course' ? 'course' : 'voyage')),
     sky: tool('sky', 'Your sky', 'heart', () => app.panels.toggle('sky')),
     figures: tool('figures', 'Constellations', 'constellation', () => app.panels.toggle('figures')),
     nebulae: tool('nebulae', 'Nebulae', 'nebula', () => app.panels.toggle('nebulae')),
@@ -29,7 +30,7 @@ export function createHud(app) {
   const navDot = h('span.nav-dot');
   const navLabel = h('span.nav-label', 'Finding the Navigator');
   const navChip = h('button.nav-chip', { type: 'button', 'aria-haspopup': 'dialog', onclick: () => app.panels.toggle('navigator') }, navDot, navLabel);
-  const top = h('header.hud-top', h('div.hud-left', brand, crumbs), h('nav.hud-tools', { 'aria-label': 'Tools' }, Object.values(tools).map(entry => entry.button), navChip));
+  const top = h('header.hud-top', h('div.hud-left', h('div.hud-brandline', backButton, brand), crumbs), h('nav.hud-tools', { 'aria-label': 'Tools' }, Object.values(tools).map(entry => entry.button), navChip));
 
   // ── Bottom: the dial of lights.
   const dialButtons = ALL_LIGHTS.map((light, n) => h('button.dial-light', {
@@ -51,18 +52,29 @@ export function createHud(app) {
 
   const currentLabel = h('span.current-label');
   const currentNote = h('span.current-note');
-  const current = h('div.current', { hidden: true }, h('span.current-dot'), h('span.current-text', currentLabel, currentNote),
+  const currentList = h('button.current-list', { type: 'button', title: 'List its films, the truest first', onclick: () => app.panels.open('set') }, icon('list', 15), h('span', 'Films'));
+  const current = h('div.current', { hidden: true }, h('span.current-dot'), h('span.current-text', currentLabel, currentNote), currentList,
     h('button.current-close', { type: 'button', 'aria-label': 'Put the lights back', onclick: () => app.setCurrent(null) }, icon('close', 15)));
 
-  // ── A voyage being followed.
+  // ── A course, passage or trail being followed.
   const voyageName = h('span.voyage-name');
   const voyageStop = h('span.voyage-stop');
   const voyagePrev = h('button.voyage-step', { type: 'button', 'aria-label': 'Previous stop', onclick: () => app.voyageTo(Math.max(0, (state.voyage?.at ?? 0) - 1)) }, icon('back', 16));
   const voyageNext = h('button.voyage-step.next', { type: 'button', onclick: () => app.voyageTo(Math.min((state.voyage?.stops.length || 1) - 1, (state.voyage?.at ?? -1) + 1)) }, h('span', 'Next'), icon('arrow', 16));
+  const panelOf = kind => ({ passage: 'passage', trail: 'set' }[kind] || 'course');
   const voyage = h('div.voyage', { hidden: true },
-    h('button.voyage-open', { type: 'button', title: 'Show the whole voyage', onclick: () => app.panels.open(state.voyage?.kind === 'passage' ? 'passage' : 'course') }, voyageName, voyageStop),
+    h('button.voyage-open', { type: 'button', title: 'Show the whole voyage', onclick: () => app.panels.open(panelOf(state.voyage?.kind)) }, voyageName, voyageStop),
     voyagePrev, voyageNext,
     h('button.voyage-end', { type: 'button', 'aria-label': 'End this voyage', onclick: () => app.endVoyage() }, icon('close', 15)));
+
+  // ── A voyage set out on: where it is, and the way to land it.
+  const jbarKicker = h('span.jbar-kicker');
+  const jbarName = h('span.jbar-name');
+  const jbarLand = h('button.jbar-land', { type: 'button', onclick: () => app.land() }, icon('flag', 15), h('span', 'Land here'));
+  const jbar = h('div.jbar', { hidden: true },
+    h('button.jbar-open', { type: 'button', title: 'Show the voyage and its doors', onclick: () => app.panels.open('voyage') }, icon('door', 17), h('span.jbar-text', jbarKicker, jbarName)),
+    jbarLand,
+    h('button.jbar-end', { type: 'button', 'aria-label': 'End the voyage', title: 'End the voyage', onclick: () => app.endJourney() }, icon('close', 15)));
 
   // ── The wake: where you have been.
   const wakeList = h('div.wake-list');
@@ -74,7 +86,7 @@ export function createHud(app) {
     h('button', { type: 'button', 'aria-label': 'Further', onclick: () => cosmos.camera.zoom(1.6) }, icon('minus', 16)),
     h('button', { type: 'button', 'aria-label': 'The whole universe', onclick: () => app.goHome() }, icon('home', 16)));
 
-  const bottom = h('footer.hud-bottom', wake, h('div.hud-centre', caption, voyage, dial), zoom);
+  const bottom = h('footer.hud-bottom', wake, h('div.hud-centre', caption, voyage, jbar, dial), zoom);
   const layer = h('div.hud', top, h('div.hud-notices', current, working, toasts), bottom);
   app.root.querySelector('#app').append(layer);
 
@@ -93,7 +105,11 @@ export function createHud(app) {
         const arm = galaxy && galaxy.arms.find(entry => entry.arm === armIndex);
         armName = arm ? arm.name : '';
       }
-    } else if (state.galaxy >= 0) g = state.galaxy;
+    } else if (state.galaxy >= 0) {
+      g = state.galaxy;
+      const arm = state.arm >= 0 && universe.galaxies[sky][g] ? universe.galaxies[sky][g].arms.find(entry => entry.arm === state.arm) : null;
+      armName = arm ? arm.name : '';
+    }
     if (g >= 0 && g !== UNLIT && universe.galaxies[sky][g]) {
       const galaxy = universe.galaxies[sky][g];
       parts.push(h('button.crumb', { type: 'button', onclick: () => app.openGalaxy(galaxy.g) }, galaxy.name));
@@ -138,7 +154,14 @@ export function createHud(app) {
     tools.figures.count.textContent = state.found.size ? String(state.found.size) : '';
     tools.drift.button.classList.toggle('on', state.drift);
     tools.drift.button.setAttribute('aria-pressed', String(state.drift));
-    for (const entry of Object.values(tools)) entry.button.classList.toggle('open', state.tool?.name === entry.name);
+    const open = state.tool?.name === 'course' ? 'voyage' : state.tool?.name;
+    for (const entry of Object.values(tools)) entry.button.classList.toggle('open', open === entry.name);
+    tools.voyage.button.classList.toggle('on', Boolean(state.journey && !state.journey.landed));
+    currentList.hidden = state.tool?.name === 'set';
+  }
+
+  function history() {
+    backButton.hidden = !app.canGoBack();
   }
 
   function navigator() {
@@ -153,19 +176,37 @@ export function createHud(app) {
     current.hidden = !set;
     if (!set) return;
     current.style.setProperty('--c', set.colour || '#dec6a0');
-    currentLabel.textContent = set.label;
-    currentNote.textContent = ` · ${plural(set.stars.size, 'film')}${set.kind === 'trait' ? '' : set.note ? ` · ${set.note}` : ''}`;
+    currentLabel.textContent = set.label.charAt(0).toUpperCase() + set.label.slice(1);
+    currentNote.textContent = ` · ${plural(set.stars.size, 'film')}`;
+    current.title = set.note || '';
   }
 
   function journey() {
     const v = state.voyage;
     voyage.hidden = !v;
-    if (!v) return;
-    voyageName.textContent = v.name;
-    voyageStop.textContent = v.at >= 0 ? `Stop ${v.at + 1} of ${v.stops.length}` : `${v.stops.length} stops`;
-    voyagePrev.disabled = v.at <= 0;
-    voyageNext.disabled = v.at >= v.stops.length - 1;
-    voyageNext.firstChild.textContent = v.at < 0 ? 'Begin' : 'Next';
+    if (v) {
+      voyageName.textContent = v.name;
+      voyageStop.textContent = v.at >= 0 ? `Stop ${v.at + 1} of ${v.stops.length}` : `${v.stops.length} stops`;
+      voyagePrev.disabled = v.at <= 0;
+      voyageNext.disabled = v.at >= v.stops.length - 1;
+      voyageNext.firstChild.textContent = v.at < 0 ? 'Begin' : 'Next';
+    }
+    const j = state.journey;
+    // The panel says all this at length; the bar is for when it is closed.
+    jbar.hidden = !j || state.tool?.name === 'voyage';
+    if (!j) return;
+    const last = films[j.path[j.path.length - 1].star];
+    const jumps = j.path.length - 1;
+    jbar.classList.toggle('landed', j.landed);
+    if (j.landed) {
+      jbarKicker.textContent = j.shared ? 'A voyage that landed on' : 'Tonight';
+      jbarName.textContent = last.t;
+    } else {
+      jbarKicker.textContent = jumps ? `Under way · ${plural(jumps, 'jump')}` : 'Setting out';
+      jbarName.textContent = jumps ? `from ${films[j.origin].t}` : `from ${last.t}`;
+    }
+    jbarLand.hidden = j.landed || !jumps;
+    jbarLand.lastChild.textContent = state.focus === j.path[jumps].star ? 'Land here' : `Land on ${last.t}`;
   }
 
   const api = {
@@ -202,7 +243,9 @@ export function createHud(app) {
       if (!what || what === 'marks' || what === 'drift' || what === 'tool' || what === 'focus') counts();
       if (!what || what === 'navigator') navigator();
       if (!what || what === 'current') lit();
-      if (!what || what === 'voyage' || what === 'focus') journey();
+      if (!what || what === 'voyage' || what === 'focus' || what === 'journey' || what === 'tool') journey();
+      if (!what || what === 'journey') counts();
+      if (!what || what === 'history') history();
     },
   };
   app.on(api.update);

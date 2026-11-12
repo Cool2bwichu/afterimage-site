@@ -10,6 +10,7 @@ import { poster } from './posters.mjs';
 const SOURCES = {
   chart: ['charted', 'Computed from the chart: what the two films are recorded as sharing.'],
   claude: ['read by Claude', 'Written by Claude as the Navigator, from its own knowledge of the films.'],
+  ahead: ['read by Claude ahead of time', 'Written by Claude as the Navigator when the chart was printed, before you arrived.'],
   memory: ['charted by Claude from memory', 'This film is not on the printed chart. Claude described it from memory, so its place is a reading, not a record.'],
   book: ['from the encyclopedia', 'The opening of the film\'s Wikipedia article.'],
   atlas: ['from the atlas', 'A reading recorded in the ATLAS this chart was compiled from.'],
@@ -36,6 +37,14 @@ export function createDossier(app) {
   // The sky is framed again once the sheet has finished growing or shrinking.
   sheet.addEventListener('transitionend', event => { if (event.target === sheet && event.propertyName === 'height') app.frameCosmos(); });
 
+  // Someone reading is not moved on by the drift: a mouse resting on the sheet, or a finger that touched it lately.
+  let over = false;
+  let touched = -1e9;
+  sheet.addEventListener('pointerenter', event => { if (event.pointerType === 'mouse') over = true; });
+  sheet.addEventListener('pointerleave', event => { if (event.pointerType === 'mouse') over = false; });
+  sheet.addEventListener('pointerdown', () => { touched = performance.now(); });
+  scroll.addEventListener('scroll', () => { touched = performance.now(); }, { passive: true });
+
   let shownStar = -1;
   let parts = null; // the live sections of a star's dossier
 
@@ -49,6 +58,7 @@ export function createDossier(app) {
   });
 
   const section = (name, title, ...children) => h(`section.dsec.dsec-${name}`, title ? h('h3.dsec-title', title) : null, ...children);
+  const traitName = trait => universe.traits[trait].s || universe.traits[trait].t;
 
   function filmRow(star, { light = null, kicker = '', body = null, onGo, tag = null }) {
     const film = films[star];
@@ -86,8 +96,13 @@ export function createDossier(app) {
     const film = films[star];
     const deep = universe.isDeep(star);
 
-    const love = h('button.act.act-love', { type: 'button', onclick: () => app.toggle('loved', star) }, icon('heart', 17), h('span', 'Love'));
-    const seen = h('button.act.act-seen', { type: 'button', onclick: () => app.toggle('seen', star) }, icon('check', 17), h('span', 'Seen'));
+    const act = (name, glyph, label, set) => h(`button.act.act-${name}`, { type: 'button', onclick: () => app.toggle(set, star) }, icon(glyph, 17), h('span', label));
+    const love = act('love', 'heart', 'Love', 'loved');
+    const save = act('save', 'bookmark', 'Add to watchlist', 'watchlist');
+    const seen = act('seen', 'check', 'Watched', 'seen');
+    const aside = h('button.act-aside', { type: 'button', title: 'Never offer this film as somewhere to go next', onclick: () => app.toggle('hidden', star) }, icon('aside', 15), h('span', 'Not for me'));
+    const asideNote = h('p.aside-note', { hidden: true }, 'Set aside. It will not be offered as somewhere to go next.',
+      h('button.quiet', { type: 'button', onclick: () => app.toggle('hidden', star, false) }, 'Undo'));
     const kicker = h('p.dossier-kicker');
     const meta = h('p.dossier-meta', metaOf(film));
     const head = h('header.dossier-head', { style: { '--hi': film.hi, '--lo': film.lo } },
@@ -96,9 +111,11 @@ export function createDossier(app) {
         kicker,
         h('h2.dossier-title', film.t),
         meta,
-        deep ? h('p.dossier-deep', source('memory')) : null,
-        h('div.dossier-acts', love, seen)));
+        deep ? h('p.dossier-deep', source('memory')) : null),
+      h('div.dossier-acts', love, save, seen, aside),
+      asideNote);
 
+    const voyage = h('div.dossier-voyage', { hidden: true });
     const essence = section('essence', null);
     const rays = section('rays', null);
     const deeper = section('deeper', null);
@@ -109,10 +126,10 @@ export function createDossier(app) {
 
     const groups = traitsOf(universe, star, 5).map(({ light, traits }) => ({ light, traits: traits.filter(t => !t.veiled).slice(0, 5) })).filter(group => group.traits.length);
     const traitsSection = groups.length ? section('traits', h('span', 'What this star is made of', source(deep ? 'memory' : 'chart')),
-      h('p.dsec-note', 'Choose any one to light up every film that shares it.'),
+      h('p.dsec-note', 'Choose any one to see every film that shares it, the truest first.'),
       groups.map(group => h('div.trait-group', { style: { '--c': lightById(group.light).color } },
         h('span.trait-light', lightById(group.light).name),
-        h('div.trait-chips', group.traits.map(({ trait }) => h('button.chip', { type: 'button', onclick: () => app.showTrait(trait) }, universe.traits[trait].s || universe.traits[trait].t)))))) : null;
+        h('div.trait-chips', group.traits.map(({ trait }) => h('button.chip', { type: 'button', onclick: () => app.browse('trait', trait) }, traitName(trait))))))) : null;
 
     const shape = storyShape(film);
     const recall = film.rc ? veiled('What stays with people', film.rc, deep ? 'memory' : 'atlas', 'This may give something away.') : null;
@@ -120,18 +137,21 @@ export function createDossier(app) {
     const links = h('p.ext-row', linksOf(film));
     const tools = section('tools', 'From here',
       h('div.tool-row',
+        h('button.act', { type: 'button', onclick: () => app.setOut(star) }, icon('door', 17), h('span', 'Set out from here')),
         h('button.act', { type: 'button', onclick: () => app.panels.open('collide', { a: star }) }, icon('collide', 17), h('span', 'Collide with…')),
-        h('button.act', { type: 'button', onclick: () => app.panels.open('passage', { a: star }) }, icon('passage', 17), h('span', 'Passage to…'))),
+        h('button.act', { type: 'button', onclick: () => app.panels.open('passage', { a: star }) }, icon('passage', 17), h('span', 'Passage to…')),
+        h('button.act', { type: 'button', onclick: () => app.share() }, icon('share', 17), h('span', 'Share'))),
       links);
 
-    parts = { star, kicker, meta, links, love, seen, essence, rays, deeper };
-    replace(scroll, head, essence, recall, rays, deeper, lines, traitsSection, shape, tools);
+    parts = { star, kicker, meta, links, love, save, seen, aside, asideNote, voyage, essence, rays, deeper };
+    // The rays come before anything that may give the story away.
+    replace(scroll, head, voyage, essence, rays, recall, deeper, lines, traitsSection, shape, tools);
     sheet.hidden = false;
     sheet.dataset.kind = 'star';
     sheet.setAttribute('aria-label', `${film.t}, ${film.y}`);
     scroll.scrollTop = 0;
     requestAnimationFrame(() => sheet.classList.add('on'));
-    place(); marks(); arrival(); deepField();
+    place(); marks(); journey(); arrival(); deepField();
   }
 
   function veiled(title, text, kind, warning) {
@@ -176,18 +196,53 @@ export function createDossier(app) {
     replace(parts.kicker,
       h('span.kick-dot', { style: { '--c': light.color } }),
       h('button.kick-link', { type: 'button', onclick: () => app.openGalaxy(galaxy.g) }, galaxy.name),
-      arm ? h('span.kick-arm', ` · ${arm.name}`) : null);
+      arm ? h('span.kick-arm', ' · ') : null,
+      arm ? h('button.kick-link.kick-arm-link', { type: 'button', onclick: () => app.openGalaxy(galaxy.g, arm.arm) }, arm.name) : null);
   }
 
   function marks() {
     if (!parts) return;
-    const loved = app.marks.loved.has(parts.star);
-    const seen = app.marks.seen.has(parts.star);
-    parts.love.classList.toggle('on', loved);
-    parts.love.setAttribute('aria-pressed', String(loved));
-    parts.love.lastChild.textContent = loved ? 'Loved' : 'Love';
-    parts.seen.classList.toggle('on', seen);
-    parts.seen.setAttribute('aria-pressed', String(seen));
+    const star = parts.star;
+    const set = (button, on, offLabel, onLabel) => {
+      button.classList.toggle('on', on);
+      button.setAttribute('aria-pressed', String(on));
+      button.lastChild.textContent = on ? onLabel : offLabel;
+    };
+    set(parts.love, app.marks.loved.has(star), 'Love', 'Loved');
+    set(parts.save, app.marks.watchlist.has(star), 'Add to watchlist', 'On your watchlist');
+    set(parts.seen, app.marks.seen.has(star), 'Watched', 'Watched');
+    const hidden = app.marks.hidden.has(star);
+    parts.aside.hidden = hidden;
+    parts.asideNote.hidden = !hidden;
+  }
+
+  // ── A voyage under way, or landed, at this star.
+  function journey() {
+    if (!parts) return;
+    const j = state.journey;
+    const at = j ? j.path[j.path.length - 1].star : -1;
+    const band = parts.voyage;
+    if (!j || at !== parts.star) { band.hidden = true; replace(band); return; }
+    const origin = films[j.origin];
+    const jumps = j.path.length - 1;
+    band.hidden = false;
+    if (j.landed) {
+      replace(band,
+        h('p.dv-kicker', icon('flag', 14), h('span', j.shared ? 'A voyage someone shared' : 'Tonight\'s film')),
+        h('p.dv-text', jumps
+          ? `Found on a voyage of ${plural(jumps, 'jump')} from ${origin.t}.`
+          : 'The voyage ended where it began.'),
+        h('div.dv-acts',
+          h('button.act', { type: 'button', onclick: () => app.panels.open('voyage') }, icon('passage', 16), h('span', 'The voyage')),
+          h('button.act', { type: 'button', onclick: () => app.share() }, icon('share', 16), h('span', 'Share'))));
+      return;
+    }
+    replace(band,
+      h('p.dv-kicker', icon('door', 14), h('span', jumps ? `On a voyage · ${plural(jumps, 'jump')} from ${origin.t}` : 'Setting out')),
+      h('p.dv-text', jumps ? 'Three doors open from here, each under its own light. Take one, or land: this could be tonight\'s film.' : 'Three doors open from here, each under its own light onto a film near this one. Take one to begin.'),
+      h('div.dv-acts',
+        h('button.act', { type: 'button', onclick: () => app.panels.open('voyage') }, icon('door', 16), h('span', 'The doors')),
+        jumps ? h('button.act.act-primary', { type: 'button', onclick: () => app.land() }, icon('flag', 16), h('span', 'Land here')) : null));
   }
 
   // ── What the Navigator says of it, and the six rays.
@@ -199,10 +254,11 @@ export function createDossier(app) {
     const a = state.arrival;
     const status = state.arrivalState;
     const nodes = [];
+    const by = a && a.ahead ? 'ahead' : 'claude';
 
     if (a && a.essence) {
-      nodes.push(h('p.essence-text', a.essence), h('p.essence-by', source('claude'),
-        status === 'read' ? h('button.quiet', { type: 'button', onclick: () => app.readArrival(true) }, 'Read again') : h('span.developing', 'developing')));
+      nodes.push(h('p.essence-text', a.essence), h('p.essence-by', source(by),
+        status === 'read' ? (pilot.connected ? h('button.quiet', { type: 'button', onclick: () => app.readArrival(true) }, a.ahead ? 'Read it now' : 'Read again') : null) : h('span.developing', 'developing')));
     } else {
       if (status === 'asking' || status === 'draft') {
         nodes.push(h('div.reading', h('span.reading-pulse'), h('span', 'The Navigator is reading this star'),
@@ -227,26 +283,28 @@ export function createDossier(app) {
     const anyRead = state.rays.some(ray => ray.read);
     const rows = state.rays.map(ray => {
       const light = lightById(ray.light);
-      const shared = ray.shared.map(entry => universe.traits[entry.trait].s || universe.traits[entry.trait].t);
+      const shared = ray.shared.map(entry => traitName(entry.trait));
       const body = ray.read
         ? [h('span.frow-claim', ray.claim), ray.watch ? h('span.frow-watch', h('em', 'Watch for '), ray.watch.replace(/^watch for\s*/i, '')) : null]
         : h('span.frow-shared', shared.length ? `Both: ${shared.join(' · ')}` : 'Nearest under this light');
-      return filmRow(ray.star, { light: ray.light, kicker: `${light.name} · ${light.asks.toLowerCase()}`, body, tag: source(ray.read ? 'claude' : 'chart') });
+      return filmRow(ray.star, { light: ray.light, kicker: `${light.name} · ${light.asks.toLowerCase()}`, body, tag: source(ray.read ? by : 'chart') });
     });
-    const beyond = a && a.beyond ? beyondCard(a.beyond) : null;
+    const beyond = a && a.beyond ? beyondCard(a.beyond, by) : null;
+    const under = state.journey && !state.journey.landed;
     replace(parts.rays,
       h('h3.dsec-title', h('span', 'Six rays lead on from here')),
       h('p.dsec-note', anyRead
         ? 'Under each light, the film Claude chose as this one\'s truest companion.'
         : 'Under each light, the film the chart places nearest. Follow one, or change the light and watch the universe re-form around this star.'),
       rows.length ? rows : h('p.dsec-note', 'The chart has nothing near this star yet.'),
-      beyond);
+      beyond,
+      under ? null : h('button.act.act-setout', { type: 'button', onclick: () => app.setOut(star) }, icon('door', 17), h('span', 'Set out on a voyage from here')));
   }
 
-  function beyondCard(beyond) {
+  function beyondCard(beyond, by) {
     const known = app.search.exact(beyond.title, beyond.year);
     return h('div.beyond',
-      h('p.beyond-kicker', 'Beyond the chart', source('claude')),
+      h('p.beyond-kicker', 'Beyond the chart', source(by)),
       h('p.beyond-title', beyond.title, h('span.frow-year', String(beyond.year))),
       h('p.beyond-why', beyond.why),
       known >= 0
@@ -261,7 +319,7 @@ export function createDossier(app) {
     const asking = state.deepState === 'asking';
     const nodes = [h('h3.dsec-title', h('span', 'The deep field'))];
     if (!found.length && !asking) {
-      nodes.push(h('p.dsec-note', 'The chart holds 2,204 films. Claude knows a great many more. Look deeper and the Navigator charts films from beyond it, near this star.'));
+      nodes.push(h('p.dsec-note', `The chart holds ${universe.base.toLocaleString('en')} films. Claude knows a great many more. Look deeper and the Navigator charts films from beyond it, near this star.`));
     }
     if (found.length) {
       nodes.push(h('p.dsec-note', h('span', `${plural(found.length, 'film')} from beyond the chart, nearest first. `), source('memory')));
@@ -281,42 +339,75 @@ export function createDossier(app) {
     replace(parts.deeper, nodes);
   }
 
-  // ── A galaxy.
-  function showGalaxy(g, armIndex = -1) {
+  // ── A galaxy, and one of its star systems.
+  const doorGrid = stars => h('div.door-grid', stars.slice(0, 5).map(star => h('button.door', {
+    type: 'button', title: `${films[star].t} (${films[star].y})`, onclick: () => app.focusStar(star),
+    onpointerenter: () => cosmos.setHover(star), onpointerleave: () => cosmos.setHover(-1),
+  }, poster(films[star]), h('span.door-title', films[star].t))));
+  const armRow = (g, arm, on = false) => h('button.arm-row', { type: 'button', class: on ? 'on' : '', onclick: () => app.openGalaxy(g, arm.arm) },
+    h('span.arm-name', arm.name), h('span.arm-size', plural(arm.size, 'film')),
+    h('span.arm-lead', arm.lead.slice(0, 3).map(star => films[star].t).join(' · ')));
+
+  function showSheet(kind, label) {
+    sheet.hidden = false;
+    sheet.dataset.kind = kind;
+    sheet.setAttribute('aria-label', label);
+    scroll.scrollTop = 0;
+    requestAnimationFrame(() => sheet.classList.add('on'));
+  }
+
+  function showGalaxy(g) {
     shownStar = -1;
     parts = null;
     const sky = state.sky;
     const galaxy = universe.galaxies[sky][g];
     const light = lightById(sky);
-    const share = ([trait, percent]) => h('button.chip', { type: 'button', onclick: () => app.showTrait(trait) }, universe.traits[trait].s || universe.traits[trait].t, h('span.chip-n', `${percent}%`));
+    const share = ([trait, percent]) => h('button.chip', { type: 'button', onclick: () => app.browse('trait', trait) }, traitName(trait), h('span.chip-n', `${percent}%`));
     const head = h('header.galaxy-head', { style: { '--c': light.color } },
       h('p.dossier-kicker', h('span.kick-dot', { style: { '--c': light.color } }), `A galaxy under ${light.name.toLowerCase()}`),
       h('h2.dossier-title', galaxy.name),
       h('p.galaxy-thesis', galaxy.thesis),
-      h('p.dossier-meta', `${plural(galaxy.size, 'film')} · ${plural(galaxy.arms.length, 'arm')}`));
+      h('p.dossier-meta', `${plural(galaxy.size, 'film')} · ${plural(galaxy.arms.length, 'star system')}`),
+      h('div.dossier-acts', h('button.act.act-primary', { type: 'button', onclick: () => app.browse('galaxy', g) }, icon('list', 16), h('span', `Browse its ${plural(galaxy.size, 'film')}`))));
     const doors = section('doors', h('span', 'Ways in', source('chart')),
       h('p.dsec-note', 'Well-known films near its heart.'),
-      h('div.door-grid', galaxy.doors.slice(0, 5).map(star => h('button.door', { type: 'button', title: `${films[star].t} (${films[star].y})`, onclick: () => app.focusStar(star) },
-        poster(films[star]), h('span.door-title', films[star].t)))));
-    const arms = section('arms', 'Its arms',
-      galaxy.arms.map(arm => h('button.arm-row', { type: 'button', class: arm.arm === armIndex ? 'on' : '', onclick: () => app.openGalaxy(g, arm.arm) },
-        h('span.arm-name', arm.name), h('span.arm-size', plural(arm.size, 'film')),
-        h('span.arm-lead', arm.lead.slice(0, 3).map(star => films[star].t).join(' · ')))));
+      doorGrid(galaxy.doors));
+    const arms = section('arms', 'Its star systems', galaxy.arms.map(arm => armRow(g, arm)));
     const made = section('traits', h('span', 'What holds it together', source('chart')),
       h('div.trait-chips', galaxy.top.slice(0, 10).map(share)));
     const typical = section('typical', 'At its heart',
       galaxy.typical.slice(0, 6).map(star => filmRow(star, {})));
     replace(scroll, head, doors, arms, made, typical);
-    sheet.hidden = false;
-    sheet.dataset.kind = 'galaxy';
-    sheet.setAttribute('aria-label', galaxy.name);
-    scroll.scrollTop = 0;
-    requestAnimationFrame(() => sheet.classList.add('on'));
+    showSheet('galaxy', galaxy.name);
+  }
+
+  function showArm(g, armIndex) {
+    const sky = state.sky;
+    const galaxy = universe.galaxies[sky][g];
+    const arm = galaxy && galaxy.arms.find(entry => entry.arm === armIndex);
+    if (!arm) { showGalaxy(g); return; }
+    shownStar = -1;
+    parts = null;
+    const light = lightById(sky);
+    const head = h('header.galaxy-head.arm-head', { style: { '--c': light.color } },
+      h('p.dossier-kicker', h('span.kick-dot', { style: { '--c': light.color } }), 'A star system in ',
+        h('button.kick-link', { type: 'button', onclick: () => app.openGalaxy(g) }, galaxy.name)),
+      h('h2.dossier-title', arm.name.replace(' · ', '\u00a0· ')),
+      h('p.dossier-meta', `${plural(arm.size, 'film')} · under ${light.name.toLowerCase()}`),
+      h('div.dossier-acts', h('button.act.act-primary', { type: 'button', onclick: () => app.browse('arm', g, armIndex) }, icon('list', 16), h('span', `Browse its ${plural(arm.size, 'film')}`))));
+    const lead = section('doors', h('span', 'Its brightest stars', source('chart')), doorGrid(arm.lead));
+    const made = section('traits', h('span', 'What holds it together', source('chart')),
+      h('div.trait-chips', (arm.top || []).slice(0, 8).map(trait => h('button.chip', { type: 'button', onclick: () => app.browse('trait', trait) }, traitName(trait)))));
+    const others = galaxy.arms.filter(entry => entry.arm !== armIndex);
+    const siblings = others.length ? section('arms', `The other systems of ${galaxy.name}`, others.map(entry => armRow(g, entry))) : null;
+    replace(scroll, head, lead, made, siblings);
+    showSheet('arm', `${arm.name}, in ${galaxy.name}`);
   }
 
   function hide() {
     shownStar = -1;
     parts = null;
+    over = false;
     sheet.classList.remove('on', 'tall');
     sheet.hidden = true;
   }
@@ -328,10 +419,13 @@ export function createDossier(app) {
     else if (what === 'sky') { place(); }
     else if (what === 'navigator') { arrival(); deepField(); }
     else if (what === 'facts') facts();
+    else if (what === 'journey') { journey(); arrival(); }
   });
 
   return {
-    showStar, showGalaxy, hide,
+    showStar, showGalaxy, showArm, hide,
+    /** Whether someone is reading the sheet now. */
+    reading: () => !sheet.hidden && (over || performance.now() - touched < 8000),
     width: () => (sheet.hidden || app.small ? 0 : sheet.getBoundingClientRect().width),
     height: () => (sheet.hidden || !app.small ? 0 : sheet.getBoundingClientRect().height),
     get star() { return shownStar; },

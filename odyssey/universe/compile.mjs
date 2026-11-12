@@ -59,6 +59,9 @@ function synopsis(text) {
 }
 
 const round = (value, places = 2) => Math.round(value * 10 ** places) / 10 ** places;
+// A few directors reach the atlas as bare Wikidata identifiers: the ones known are named, the rest left blank.
+const DIRECTORS = { Q54864392: 'Ari Aster' };
+const directorName = name => (/^Q\d+$/.test(name || '') ? DIRECTORS[name] || '' : name);
 
 export function compileUniverse(root) {
   const started = Date.now();
@@ -151,7 +154,7 @@ export function compileUniverse(root) {
     const record = {
       t: film.title,
       y: Number(film.year) || 0,
-      d: film.director,
+      d: directorName(film.director),
       s: film.slug,
       rn: film.renown,
       hi: film.hi,

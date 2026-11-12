@@ -192,8 +192,9 @@ function createRemote({ url, passphrase }, pace = PACE) {
  * @param {(status: object) => void} [input.onStatus]
  * @param {(films: object[]) => void} [input.onFacts]  stars already here have just been given a poster or other facts
  * @param {{ first: number, step: number, most: number }} [input.pace]  how often to look in on the companion
+ * @param {{ get(slug: string): Promise<object|null>, about: object|null }} [input.readings]  readings written ahead of time
  */
-export function createPilot({ universe, depth, search, store, edition = 'site', onStatus = () => {}, onFacts = () => {}, pace = PACE }) {
+export function createPilot({ universe, depth, search, store, edition = 'site', onStatus = () => {}, onFacts = () => {}, pace = PACE, readings = null }) {
   // Inside claude.ai a page asks Claude itself and can reach nothing else, so there is no companion to connect.
   const canConnect = edition !== 'claude';
   const vocabulary = buildVocabulary(universe.bundle.traits);
@@ -434,6 +435,16 @@ export function createPilot({ universe, depth, search, store, edition = 'site', 
     return arrival.essence || arrival.rays.length ? arrival : null;
   }
 
+  /** What the Navigator wrote of a charted star before anyone arrived, checked like any reading; null when nothing was. */
+  async function aheadArrival(star) {
+    if (!readings || !(star >= 0 && star < universe.base)) return null;
+    let raw = null;
+    try { raw = await readings.get(slugOf(star)); } catch { raw = null; }
+    if (!raw) return null;
+    const arrival = rayIn(raw);
+    return arrival.essence || arrival.rays.length ? { ...arrival, ahead: true } : null;
+  }
+
   async function arrival(star, { onDraft, fresh = false } = {}) {
     if (!fresh) { const kept = cachedArrival(star); if (kept) return kept; }
     need();
@@ -576,9 +587,11 @@ export function createPilot({ universe, depth, search, store, edition = 'site', 
     vocabulary,
     get status() { return status; },
     get connected() { return Boolean(local || remote); },
+    /** How many stars were read ahead of time, and by whom: { count, films, by, made }, or null. */
+    get ahead() { return readings ? readings.about : null; },
     canConnect,
     find, connect, disconnect, restore, explain,
-    arrival, cachedArrival, deepField, chart, course, collide, sky,
+    arrival, cachedArrival, aheadArrival, deepField, chart, course, collide, sky,
     cancel(kind) { running.get(kind)?.abort(); running.delete(kind); },
     busy(kind) { return running.has(kind); },
   };

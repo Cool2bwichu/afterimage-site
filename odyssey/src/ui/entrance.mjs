@@ -60,6 +60,7 @@ export function createEntrance(app) {
       h('p.enter-line', 'Starlight is old light. So is cinema.'),
       h('div.enter-field', icon('search', 20), input, suggestions),
       h('div.enter-ways',
+        h('button.enter-way', { type: 'button', onclick: () => begin(() => app.panels.open('voyage')) }, icon('door', 18), h('span', 'Set out')),
         h('button.enter-way', { type: 'button', onclick: () => begin(() => app.startDrift()) }, icon('drift', 18), h('span', 'Drift')),
         h('button.enter-way', { type: 'button', onclick: () => begin(() => app.panels.open('course')) }, icon('compass', 18), h('span', 'Plot a course')),
         h('button.enter-way', { type: 'button', onclick: () => begin(() => app.overview()) }, icon('home', 18), h('span', 'See the whole universe'))),

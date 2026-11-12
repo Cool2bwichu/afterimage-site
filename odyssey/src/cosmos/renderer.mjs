@@ -11,7 +11,7 @@ import * as S from './shaders.mjs';
 
 const DUST_PER_STAR = 10;
 const HEADROOM = 3072; // room for stars charted later before buffers are rebuilt
-const MAX_LINES = 640;
+const MAX_LINES = 900;
 const LINE_FLOATS = 14;
 const GLOW_FLOATS = 15;
 
@@ -219,6 +219,7 @@ export function createCosmos({ canvas, universe, reducedMotion = false, small = 
   const marks = { loved: new Set(), visited: new Set() };
   let dim = 0;
   let dimGoal = 0;
+  let veil = 0; // the rest of the sky stepping back while a star system is open
 
   function allocate(needed) {
     const next = needed + HEADROOM;
@@ -455,7 +456,7 @@ export function createCosmos({ canvas, universe, reducedMotion = false, small = 
       const mark = (marks.loved.has(i) ? 1 : 0) + (marks.visited.has(i) ? 2 : 0) + (universe.isDeep(i) ? 4 : 0);
       if (data[i * 4 + 2] !== mark) { data[i * 4 + 2] = mark; dataDirty = true; }
     }
-    dimGoal = highlight ? 0.74 : 0;
+    dimGoal = Math.max(highlight ? 0.74 : 0, veil);
     glowEasing = true;
   }
 
@@ -789,6 +790,7 @@ export function createCosmos({ canvas, universe, reducedMotion = false, small = 
     setHover(i) { if (hover !== i) { hover = i; refreshGlowGoals(); } },
     setHighlight(set) { highlight = set && set.size ? set : null; refreshGlowGoals(); },
     setRayEnds(list) { rayEnds = new Set(list); refreshGlowGoals(); },
+    setVeil(amount) { if (veil !== amount) { veil = amount; refreshGlowGoals(); } },
     setMarks({ loved, visited }) { if (loved) marks.loved = loved; if (visited) marks.visited = visited; refreshGlowGoals(); },
     onFrame(listener) { frameListeners.add(listener); return () => frameListeners.delete(listener); },
     onSettled(listener) { settled.add(listener); return () => settled.delete(listener); },

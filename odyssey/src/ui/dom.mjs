@@ -63,6 +63,16 @@ const ICONS = {
   stop: '<rect x="7" y="7" width="10" height="10" rx="1.5"/>',
   eye: '<path d="M2.500 12s3.500-6.500 9.500-6.500 9.500 6.500 9.500 6.500-3.500 6.500-9.500 6.500S2.500 12 2.500 12Z"/><circle cx="12" cy="12" r="2.600"/>',
   menu: '<path d="M4 7h16M4 12h16M4 17h16"/>',
+  bookmark: '<path d="M7 4.5h10v15.5l-5-3.7-5 3.7V4.5Z"/>',
+  list: '<path d="M9 7h11M9 12h11M9 17h11"/><circle cx="4.6" cy="7" r=".9"/><circle cx="4.6" cy="12" r=".9"/><circle cx="4.6" cy="17" r=".9"/>',
+  share: '<path d="M12 14.5V4M8 8l4-4 4 4"/><path d="M5.5 12v6.5A1.5 1.5 0 0 0 7 20h10a1.5 1.5 0 0 0 1.5-1.5V12"/>',
+  aside: '<circle cx="12" cy="12" r="8"/><path d="M6.4 17.6 17.6 6.4"/>',
+  door: '<path d="M7 20V5.5A1.5 1.5 0 0 1 8.5 4h7A1.5 1.5 0 0 1 17 5.5V20"/><path d="M4 20h16"/><circle cx="14" cy="12.5" r=".9"/>',
+  flag: '<path d="M6 21V4"/><path d="M6 4.5h11l-2.2 4 2.2 4H6"/>',
+  download: '<path d="M12 4v11M7.5 10.5 12 15l4.5-4.5"/><path d="M5 19.5h14"/>',
+  upload: '<path d="M12 15V4M7.5 8.5 12 4l4.5 4.5"/><path d="M5 19.5h14"/>',
+  undo: '<path d="M9 14 4.5 9.5 9 5"/><path d="M4.5 9.5H14a5.5 5.5 0 0 1 0 11h-3"/>',
+  orbit: '<circle cx="12" cy="12" r="2.4"/><ellipse cx="12" cy="12" rx="9.5" ry="4.6" transform="rotate(-18 12 12)"/>',
 };
 
 export function icon(name, size = 18) {

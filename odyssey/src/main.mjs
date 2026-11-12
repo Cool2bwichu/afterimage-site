@@ -7,6 +7,7 @@ import { createLabels } from './cosmos/labels.mjs';
 import { createStore } from './ui/store.mjs';
 import { configurePosters, postersFound } from './ui/posters.mjs';
 import { createPilot } from './nav/pilot.mjs';
+import { createReadings } from './nav/readings.mjs';
 import { createApp, OVERVIEW } from './ui/app.mjs';
 
 const root = document.getElementById('odyssey');
@@ -61,9 +62,12 @@ async function boot() {
   const depth = [];
   fetchJson(dataUrl('depth')).then(file => { for (const film of file.films || []) depth.push(film); }).catch(() => {});
 
+  // What the Navigator wrote of each star before anyone arrived (scripts/pre-read.mjs), fetched a shard at a time.
+  const readings = config.readings === false ? null : createReadings({ url: config.readings || `${config.data || './data/'}readings/index.json` });
+  readings?.open(); // the index is small, and the Navigator's panel tells of it
   let app = null;
   const pilot = createPilot({
-    universe, depth, search, store, edition: config.edition || 'site',
+    universe, depth, search, store, readings, edition: config.edition || 'site',
     onStatus: () => app?.refresh('navigator'),
     // A catalogue has answered for stars already in the sky: their plates take the posters, and their dossiers the rest.
     onFacts: films => { postersFound(films); app?.refresh('facts'); },
@@ -74,11 +78,11 @@ async function boot() {
     onGalaxy: g => app?.openGalaxy(g),
     onArm: (g, arm) => app?.openGalaxy(g, arm),
   });
-  app = createApp({ root, universe, depth, cosmos, labels, pilot, store, search, small, reducedMotion });
+  app = createApp({ root, universe, depth, cosmos, labels, pilot, store, search, small, reducedMotion, edition: config.edition || 'site' });
   window.__odyssey = { app, universe, cosmos, pilot, store };
 
-  // Set out: straight to the star the address names, or by way of the threshold.
-  const named = /^#(star|galaxy)-/.test(window.location.hash);
+  // Set out: straight to the star, galaxy or voyage the address names, or by way of the threshold.
+  const named = /^#(star|galaxy|voyage)-/.test(window.location.hash);
   if (named) {
     app.entrance.skip();
     if (!app.followAddress({ instant: true })) app.entrance.show();

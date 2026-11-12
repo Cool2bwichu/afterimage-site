@@ -1,13 +1,20 @@
-// What a voyager keeps between visits: the films they love and have seen,
-// their wake, the stars they found beyond the chart, and what the Navigator
-// has already told them. All of it lives in this browser only.
+// What a voyager keeps between visits: the films they love, have watched, are
+// saving for a night to come, or have set aside; their wake and every star they
+// have visited; the voyages they have landed; the stars they found beyond the
+// chart; and what the Navigator has already told them. All of it lives in this
+// browser only, and a file can carry it to another (see archive.mjs).
 //
 // Films are remembered by slug, never by index: the chart may be recompiled,
 // and stars found beyond it only exist once their readings are restored.
+import { cleanRoute, exportArchive, mergeArchive } from './archive.mjs';
+
 const KEY = 'afterimage.odyssey.v1';
 const MAX_WAKE = 240;
+const MAX_VISITED = 6000;
 const MAX_READINGS = 1500;
 const MAX_ARRIVALS = 160;
+const MAX_ROUTES = 60;
+export const MARKS = ['loved', 'seen', 'watchlist', 'hidden'];
 
 function load() {
   try {
@@ -19,13 +26,20 @@ function load() {
   }
 }
 
-export function createStore() {
-  const saved = load();
-  const list = value => (Array.isArray(value) ? value.filter(item => typeof item === 'string') : []);
-  const state = {
+const list = value => (Array.isArray(value) ? value.filter(item => typeof item === 'string') : []);
+
+function read(saved) {
+  const wake = list(saved.wake).slice(-MAX_WAKE);
+  return {
     loved: new Set(list(saved.loved)),
     seen: new Set(list(saved.seen)),
-    wake: list(saved.wake).slice(-MAX_WAKE),
+    watchlist: new Set(list(saved.watchlist)),
+    hidden: new Set(list(saved.hidden)),
+    // Every star ever reached, not only the recent wake: constellations are found from it.
+    visited: new Set([...list(saved.visited), ...wake]),
+    wake,
+    // Voyages a voyager landed, and trails and passages they kept: { name, heading, kind, savedAt, stops: [{ slug, light, note }], landed? }
+    routes: Array.isArray(saved.routes) ? saved.routes.map(cleanRoute).filter(Boolean).slice(-MAX_ROUTES) : [],
     // Stars found beyond the chart: { slug, reading, from (slug), source, extra: { pu, im, rt } }
     found: Array.isArray(saved.found) ? saved.found.filter(entry => entry && entry.reading && entry.reading.title).slice(-MAX_READINGS) : [],
     // What the Navigator said on arrival, by slug: { essence, rays: [{ light, slug, claim, watch }], beyond }
@@ -35,34 +49,84 @@ export function createStore() {
     companion: saved.companion && typeof saved.companion === 'object' ? saved.companion : null,
     readArrivals: saved.readArrivals !== false, // whether the Navigator reads each star on arrival
   };
+}
+
+export function createStore() {
+  const state = read(load());
+  const listeners = new Set();
   let timer = 0;
 
+  function snapshot() {
+    const arrivals = Object.fromEntries(Object.entries(state.arrivals).slice(-MAX_ARRIVALS));
+    return {
+      loved: [...state.loved], seen: [...state.seen], watchlist: [...state.watchlist], hidden: [...state.hidden],
+      visited: [...state.visited].slice(-MAX_VISITED), wake: state.wake.slice(-MAX_WAKE), routes: state.routes.slice(-MAX_ROUTES),
+      found: state.found.slice(-MAX_READINGS), arrivals, sky: state.sky, entered: state.entered,
+      companion: state.companion, readArrivals: state.readArrivals,
+    };
+  }
+
   function write() {
+    clearTimeout(timer);
     timer = 0;
     try {
-      const arrivals = Object.fromEntries(Object.entries(state.arrivals).slice(-MAX_ARRIVALS));
-      window.localStorage.setItem(KEY, JSON.stringify({
-        loved: [...state.loved], seen: [...state.seen], wake: state.wake.slice(-MAX_WAKE),
-        found: state.found.slice(-MAX_READINGS), arrivals, sky: state.sky, entered: state.entered,
-        companion: state.companion, readArrivals: state.readArrivals,
-      }));
+      window.localStorage.setItem(KEY, JSON.stringify(snapshot()));
     } catch { /* a full or forbidden store: the voyage simply is not remembered */ }
   }
   const save = () => { if (!timer) timer = setTimeout(write, 400); };
+  // A tab being closed writes what it has not yet written.
+  window.addEventListener?.('pagehide', () => { if (timer) write(); });
 
-  return {
+  // Another tab of the Odyssey changed what is kept: its marks and voyages are this tab's too.
+  window.addEventListener?.('storage', event => {
+    if (event.key !== KEY || !event.newValue) return;
+    let other;
+    try { other = read(JSON.parse(event.newValue)); } catch { return; }
+    for (const key of [...MARKS, 'visited']) state[key] = other[key];
+    state.routes = other.routes;
+    for (const listener of listeners) listener('marks');
+  });
+
+  const store = {
     state,
     save,
+    /** Called when another tab changes the marks. */
+    onChange(listener) { listeners.add(listener); return () => listeners.delete(listener); },
     toggle(set, slug) {
       const on = !state[set].has(slug);
-      if (on) state[set].add(slug); else state[set].delete(slug);
-      save();
+      store.mark(set, slug, on);
       return on;
     },
+    /** Puts a film in or out of one of the marks. Watching a film takes it off the watchlist; setting it aside takes it out of all the rest. */
+    mark(set, slug, on) {
+      if (on) {
+        state[set].add(slug);
+        if (set === 'seen') state.watchlist.delete(slug);
+        if (set === 'hidden') { state.watchlist.delete(slug); state.loved.delete(slug); }
+        if (set === 'loved' || set === 'watchlist') state.hidden.delete(slug);
+      } else state[set].delete(slug);
+      save();
+    },
     visit(slug) {
-      if (state.wake[state.wake.length - 1] === slug) return;
+      state.visited.add(slug);
+      if (state.wake[state.wake.length - 1] === slug) { save(); return; }
       state.wake.push(slug);
       if (state.wake.length > MAX_WAKE) state.wake.splice(0, state.wake.length - MAX_WAKE);
+      save();
+    },
+    /** Keeps a voyage. The same stops kept again replace the older one. */
+    keepRoute(route) {
+      const clean = cleanRoute(route);
+      if (!clean) return null;
+      const key = clean.stops.map(stop => stop.slug).join('|');
+      state.routes = state.routes.filter(other => other.stops.map(stop => stop.slug).join('|') !== key || other.kind !== clean.kind);
+      state.routes.push(clean);
+      if (state.routes.length > MAX_ROUTES) state.routes.splice(0, state.routes.length - MAX_ROUTES);
+      save();
+      return clean;
+    },
+    forgetRoute(route) {
+      state.routes = state.routes.filter(other => other !== route);
       save();
     },
     remember(entry) {
@@ -84,9 +148,20 @@ export function createStore() {
       save();
     },
     set(key, value) { state[key] = value; save(); },
+    /** Everything kept, as a file's contents. */
+    archive() { return exportArchive(state); },
+    /** Joins a file's contents to what is kept, and writes it at once. Throws, changing nothing, if it is not an archive. */
+    absorb(archive) {
+      const { state: next, counts } = mergeArchive(state, archive);
+      Object.assign(state, next);
+      write();
+      return counts;
+    },
     clear() {
-      state.loved.clear(); state.seen.clear(); state.wake.length = 0; state.found.length = 0; state.arrivals = {};
+      for (const key of [...MARKS, 'visited']) state[key].clear();
+      state.wake.length = 0; state.found.length = 0; state.routes = []; state.arrivals = {};
       write();
     },
   };
+  return store;
 }

@@ -10,7 +10,7 @@
 // What comes out:
 //   index.html      the page, written the way an Artifact is: content only
 //   app.<hash>.js   the whole programme
-//   data/           the chart and the deeper notes
+//   data/           the chart, the deeper notes, and any readings written ahead of time
 //   posters/        sheets of thumbnails in two sizes, and their index
 //   files.json      what to publish, in batches that fit one publish each
 //
@@ -129,6 +129,22 @@ async function buildPosters(bundle) {
   return { manifest, held: Object.keys(index).length, wanted: films.length };
 }
 
+// ── Readings written ahead of time (scripts/pre-read.mjs), when there are any:
+// the shards are renamed for their contents, and a new index names them.
+async function emitReadings() {
+  const folder = join(root, 'public', 'data', 'readings');
+  let index = null;
+  try { index = JSON.parse(await readFile(join(folder, 'index.json'), 'utf8')); } catch { return false; }
+  if (!index || !index.count || !Array.isArray(index.files)) return false;
+  const files = [];
+  for (const name of index.files) {
+    if (typeof name !== 'string') { files.push(null); continue; }
+    const made = await emit('data/readings', name.replace(/\.json$/, ''), 'json', await readFile(join(folder, name)));
+    files.push(made.replace(/^data\/readings\//, ''));
+  }
+  return `./${await emit('data/readings', 'index', 'json', JSON.stringify({ ...index, files }))}`;
+}
+
 // ── The page, as an Artifact is written: no document around it, the title and
 // the styles first, and every address relative.
 function compose({ shell, css, config, app }) {
@@ -176,6 +192,8 @@ async function main() {
     edition: 'claude',
     universe: `./${await emit('data', 'universe', 'json', universeText)}`,
     depth: `./${await emit('data', 'depth', 'json', await readFile(join(root, 'public', 'data', 'depth.json')))}`,
+    // With none, the page does not look for them.
+    readings: await emitReadings(),
   };
   let posters = null;
   if (withPosters) {

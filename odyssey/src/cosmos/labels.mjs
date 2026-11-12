@@ -21,7 +21,7 @@ export function createLabels({ root, cosmos, universe, small = false, onStar, on
   let arms = [];
   let hidden = false;
   let sinceSelect = 1;
-  const context = { focus: -1, hover: -1, rays: new Map(), highlight: null, loved: new Set(), lit: null };
+  const context = { focus: -1, hover: -1, rays: new Map(), highlight: null, loved: new Set(), lit: null, system: false };
   const insets = { left: 0, right: 0, bottom: 0 }; // the parts of the sky that panels cover
   const fixed = [];  // boxes of the galaxy and arm names now showing: star names keep clear of them
   const shown = new Map(); // star → { element, kind, rank }
@@ -75,7 +75,8 @@ export function createLabels({ root, cosmos, universe, small = false, onStar, on
     fixed.length = 0;
     for (const entry of galaxies) {
       const { galaxy, element } = entry;
-      const p = moving || hidden ? null : cosmos.projectPoint(galaxy.centre[0], galaxy.centre[1], galaxy.centre[2], scratch);
+      // Inside a star system the names of galaxies and their arms step back with the rest of the sky.
+      const p = moving || hidden || context.system ? null : cosmos.projectPoint(galaxy.centre[0], galaxy.centre[1], galaxy.centre[2], scratch);
       if (!p) { show(entry, false); continue; }
       const radiusPx = (galaxy.radius * view.focal) / p.depth;
       // A galaxy's name is for seeing it whole: it fades as you enter.
@@ -95,7 +96,7 @@ export function createLabels({ root, cosmos, universe, small = false, onStar, on
     }
     for (const entry of arms) {
       const { galaxy, arm, element } = entry;
-      const p = moving || hidden ? null : cosmos.projectPoint(arm.at[0], arm.at[1], arm.at[2], scratch);
+      const p = moving || hidden || context.system ? null : cosmos.projectPoint(arm.at[0], arm.at[1], arm.at[2], scratch);
       if (!p) { show(entry, false); continue; }
       const radiusPx = (galaxy.radius * view.focal) / p.depth;
       const opacity = clamp((radiusPx - height * 0.26) / (height * 0.12), 0, 1) * clamp((height * 2.6 - radiusPx) / (height * 0.8), 0, 1);
@@ -160,6 +161,8 @@ export function createLabels({ root, cosmos, universe, small = false, onStar, on
     const moving = cosmos.transitioning;
 
     for (let i = 0; i < count; i += 1) {
+      // Inside a star system its own rings name the films near it: the sky keeps quiet.
+      if (context.system && i !== context.focus) continue;
       const special = i === context.focus || i === context.hover || i === hoverFromLabel || context.rays.has(i);
       const lit = context.highlight ? context.highlight.has(i) : false;
       if (!special && !lit && (!titleMode || moving)) continue;
@@ -277,7 +280,11 @@ export function createLabels({ root, cosmos, universe, small = false, onStar, on
 
   return {
     /** What the labels should favour: the focused star, the ends of its rays (star → colour), a lit set. */
-    setContext(next) { Object.assign(context, next); sinceSelect = 1; },
+    setContext(next) {
+      Object.assign(context, next);
+      root.classList.toggle('system', Boolean(context.system));
+      sinceSelect = 1;
+    },
     /** How much of the sky is covered by panels, in pixels from each edge: nothing is named under them. */
     setInsets(next) { Object.assign(insets, next); sinceSelect = 1; },
     setHidden(value) { hidden = value; root.classList.toggle('hidden', value); sinceSelect = 1; },
