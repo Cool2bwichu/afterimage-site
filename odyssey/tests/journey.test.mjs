@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { LIGHT_IDS } from '../src/engine/lights.mjs';
-import { doors, homeLikeness, pullOf, rankSet, rings, routeOf, trail, typicality } from '../src/engine/journey.mjs';
+import { doors, holdsArm, homeLikeness, pullOf, rankSet, rings, routeOf, trail, typicality } from '../src/engine/journey.mjs';
 import { carriers } from '../src/engine/voyage.mjs';
 import { open, star } from './chart.mjs';
 
@@ -116,7 +116,7 @@ test('the doors out of a star open under different lights, onto films not yet tr
   assert.equal(doors(universe, MOOD, { origin: MOOD, k: 5 }).length, 5);
 });
 
-test('a star system has a ring under each light, strongest innermost, led by the film given', () => {
+test('a star system has a ring under each light, strongest innermost unless one light leads, led by the film given', () => {
   const system = rings(universe, MOOD, { per: 3 });
   assert.equal(system.length, 6);
   assert.deepEqual([...system.map(ring => ring.light)].sort(), [...LIGHT_IDS].sort());
@@ -128,6 +128,27 @@ test('a star system has a ring under each light, strongest innermost, led by the
   }
   const led = rings(universe, MOOD, { first: new Map([['story', VERTIGO]]) });
   assert.equal(led.find(ring => ring.light === 'story').stars[0], VERTIGO);
+  // Under one light, that light's ring is innermost and the rest keep their order.
+  const weakest = system.at(-1).light;
+  const lit = rings(universe, MOOD, { per: 3, lead: weakest });
+  assert.deepEqual(lit.map(ring => ring.light), [weakest, ...system.slice(0, -1).map(ring => ring.light)]);
+  assert.deepEqual(rings(universe, MOOD, { per: 3, lead: null }).map(ring => ring.light), system.map(ring => ring.light));
+});
+
+test('a film is said to be of its star system only when it carries a trait the system is named for', () => {
+  const armOf = (sky, star) => universe.galaxies[sky][universe.galaxyOf[sky][star]]?.arms.find(arm => arm.arm === universe.armOf[sky][star]);
+  const moods = armOf('white', MOOD);
+  assert.ok(holdsArm(universe, MOOD, moods), moods.name);
+  let held = 0;
+  let not = 0;
+  for (let i = 0; i < universe.base; i += 1) {
+    const arm = armOf('white', i);
+    if (!arm) continue;
+    if (holdsArm(universe, i, arm)) held += 1; else not += 1;
+  }
+  assert.ok(held > 2 * not && not > 0, `${held} carry their system's name, ${not} do not`);
+  assert.equal(holdsArm(universe, MOOD, null), false);
+  assert.equal(holdsArm(universe, -1, moods), false);
 });
 
 test('a voyage read back from a link keeps its stars in order, joined by the light they are closest in', () => {

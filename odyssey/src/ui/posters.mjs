@@ -194,6 +194,16 @@ export function postersFound(films) {
   }
 }
 
+const ARTICLES = new Set(['the', 'a', 'an', 'le', 'la', 'les', 'il', 'lo', 'el', 'los', 'las', 'der', 'die', 'das', 'de', 'het']);
+
+/** The first letter of a title's first word that is not an article: "The Thing" is T, "La Strada" is S. */
+export function initial(title) {
+  const words = String(title || '').split(/\s+/).filter(Boolean);
+  const word = words.find(entry => !ARTICLES.has(entry.toLowerCase())) || words[0] || '';
+  const letter = word.replace(/^(?:l'|d')/i, '').match(/[\p{L}\p{N}]/u);
+  return letter ? letter[0].toLocaleUpperCase() : '';
+}
+
 /**
  * A poster element: the plate underneath, the image over it once it arrives.
  * @param {object} film
@@ -203,7 +213,9 @@ export function postersFound(films) {
 export function poster(film, { words = true, eager = false, size = 'small' } = {}) {
   const element = h('span.poster', { style: { '--hi': film.hi || '#dec6a0', '--lo': film.lo || '#101923' } });
   const plate = h('span.poster-plate', { 'aria-hidden': 'true' });
+  // A plate too small for its title wears the title's initial instead.
   if (words) plate.append(h('span.poster-plate-title', film.t), h('span.poster-plate-year', String(film.y || '')));
+  else plate.append(h('span.poster-plate-initial', initial(film.t)));
   element.append(plate);
   if (!attach(element, film, { eager, size }) && film.deep && outside && !sheets) awaitPoster(element, film, { eager, size });
   return element;

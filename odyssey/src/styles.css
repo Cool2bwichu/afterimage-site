@@ -86,6 +86,7 @@ html, body { margin: 0; height: 100%; background: var(--ink); overflow: hidden; 
 }
 .poster-plate-title { font-family: var(--serif); font-weight: 500; font-size: 13.5cqw; line-height: 1; color: var(--ivory); text-wrap: balance; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4; line-clamp: 4; }
 .poster-plate-year { font-size: 6.4cqw; letter-spacing: 0.18em; color: color-mix(in srgb, var(--hi) 70%, #fff); }
+.poster-plate-initial { position: absolute; inset: 0; display: grid; place-items: center; padding-top: 8cqw; font-family: var(--serif); font-weight: 500; font-size: 56cqw; line-height: 1; color: color-mix(in srgb, var(--hi) 45%, var(--ivory)); text-shadow: 0 0 18cqw color-mix(in srgb, var(--hi) 60%, transparent); opacity: 0.88; }
 .poster-image { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity 0.6s var(--ease); background-repeat: no-repeat; }
 .poster.has-image .poster-image { opacity: 1; }
 
@@ -451,7 +452,12 @@ button.figure:hover, .figure.on { border-color: var(--starlight); background: rg
 .enter-ways { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-top: 26px; }
 .enter-way { display: inline-flex; align-items: center; gap: 9px; height: 42px; padding: 0 20px; border-radius: 999px; border: 1px solid var(--line); background: rgba(7, 10, 16, 0.5); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ivory); transition: border-color 0.3s, background 0.3s; }
 .enter-way:hover { border-color: var(--starlight); background: rgba(222, 198, 160, 0.1); }
-.enter-foot { max-width: 44em; margin-top: 44px; font-size: 12px; letter-spacing: 0.04em; color: var(--faint); text-shadow: 0 0 10px rgba(5, 8, 14, 1); }
+.enter-foot { max-width: 44em; margin-top: 44px; font-size: 12px; letter-spacing: 0.04em; color: var(--dim); text-shadow: 0 0 10px rgba(5, 8, 14, 1), 0 0 3px rgba(5, 8, 14, 1); }
+.enter-way.enter-back { padding-left: 7px; border-color: rgba(240, 201, 135, 0.45); text-transform: none; letter-spacing: 0.02em; font-size: 13px; }
+.enter-way.enter-back:hover { border-color: rgba(240, 201, 135, 0.8); }
+.enter-back-poster { flex: none; width: 19px; }
+.enter-back-poster .poster { border-radius: 2px; }
+.enter-back-name { max-width: 22em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ── The way back, the lit set's list, and a voyage under way, in the instruments. */
 .hud-brandline { display: flex; align-items: center; gap: 10px; min-width: 0; }
@@ -597,13 +603,19 @@ button.figure:hover, .figure.on { border-color: var(--starlight); background: rg
 .orbits:not(.on) { visibility: hidden; }
 .orbit-rings { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
 .orbit-ring { fill: none; stroke: var(--c); stroke-width: 1; stroke-opacity: 0.42; filter: drop-shadow(0 0 3px var(--c)); }
-.orbit-names, .orbit-moons { position: absolute; inset: 0; }
-.orbit-name { position: absolute; left: 0; top: 0; font-size: 9px; letter-spacing: 0.22em; text-transform: uppercase; white-space: nowrap; color: var(--c); text-shadow: 0 0 8px rgba(5, 8, 14, 1), 0 0 2px rgba(5, 8, 14, 1); pointer-events: none; will-change: transform, opacity; }
+.orbit-ring.lit { stroke-opacity: 0.9; stroke-width: 1.5; filter: drop-shadow(0 0 5px var(--c)); }
+.orbit-moons { position: absolute; inset: 0; }
+.orbit-system { position: absolute; inset: 0; }
+/* The lights' names, written along their rings and above the films. */
+.orbit-names { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; z-index: 300; }
+.orbit-name { font-family: var(--sans); font-size: 9px; font-weight: 500; letter-spacing: 0.24em; fill: var(--c); dominant-baseline: central; paint-order: stroke; stroke: rgba(5, 8, 14, 0.85); stroke-width: 3px; stroke-linejoin: round; }
+.orbit-name.lit { font-size: 10.5px; font-weight: 600; letter-spacing: 0.3em; }
 .orbit-moon { position: absolute; left: 0; top: 0; width: 36px; pointer-events: auto; touch-action: none; will-change: transform, opacity; transform-origin: 50% 50%; }
 .orbit-moon .poster { box-shadow: 0 0 0 1px color-mix(in srgb, var(--c) 65%, transparent), 0 0 16px color-mix(in srgb, var(--c) 40%, transparent), 0 6px 14px rgba(0, 0, 0, 0.5); transition: box-shadow 0.3s, transform 0.3s var(--ease); }
 .orbit-moon:hover .poster { transform: scale(1.12); box-shadow: 0 0 0 1.5px var(--c), 0 0 26px color-mix(in srgb, var(--c) 70%, transparent), 0 8px 18px rgba(0, 0, 0, 0.55); }
 .orbit-moon-title { position: absolute; left: 50%; top: calc(100% + 4px); width: 120px; margin-left: -60px; font-size: 10px; line-height: 1.15; text-align: center; color: rgba(244, 239, 229, 0.88); text-shadow: 0 0 6px rgba(5, 8, 14, 1), 0 0 2px rgba(5, 8, 14, 1); opacity: 0; transition: opacity 0.25s; pointer-events: none; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; }
 .orbit-moon:hover .orbit-moon-title, .orbit-moon.door .orbit-moon-title { opacity: 1; }
+.orbit-moon.lit .poster { box-shadow: 0 0 0 1.5px var(--c), 0 0 22px color-mix(in srgb, var(--c) 60%, transparent), 0 6px 14px rgba(0, 0, 0, 0.5); }
 .orbit-moon.door .poster { box-shadow: 0 0 0 2px var(--c), 0 0 26px var(--c), 0 8px 18px rgba(0, 0, 0, 0.55); }
 .orbit-moon.door::after { content: ''; position: absolute; inset: -6px; border-radius: 7px; border: 1px solid var(--c); opacity: 0.7; animation: door-pulse 2.6s ease-in-out infinite; pointer-events: none; }
 @keyframes door-pulse { 0%, 100% { transform: scale(1); opacity: 0.65; } 50% { transform: scale(1.12); opacity: 0.15; } }

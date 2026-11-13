@@ -84,7 +84,7 @@ the pre-read has been run, the index there is empty and nothing changes.
 cd odyssey
 npm ci
 npm run dev        # http://localhost:5199
-npm test           # 76 tests: the chart, the engine, voyages and lists, the open universe, the brain, the pilot, journals, readings
+npm test           # 78 tests: the chart, the engine, voyages and lists, the open universe, the brain, the pilot, journals, readings
 npm run build      # the static site, in dist/
 ```
 

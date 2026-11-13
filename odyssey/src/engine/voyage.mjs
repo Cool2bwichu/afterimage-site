@@ -22,7 +22,18 @@ export function sharedTraits(universe, lightId, a, b, limit = 3, { veiled = fals
     }
   }
   found.sort((x, y) => y.share - x.share);
-  return found.slice(0, limit);
+  // One person can be several traits (directed by, written by): say their name once.
+  const said = new Set();
+  const out = [];
+  for (const entry of found) {
+    const { s, t } = traits[entry.trait];
+    const word = (s || t).toLowerCase();
+    if (said.has(word)) continue;
+    said.add(word);
+    out.push(entry);
+    if (out.length >= limit) break;
+  }
+  return out;
 }
 
 /** A bond in a few words: "a robbery · told out of order". */

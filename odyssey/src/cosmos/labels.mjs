@@ -37,7 +37,7 @@ export function createLabels({ root, cosmos, universe, small = false, onStar, on
         h('span.lbl-galaxy-name', galaxy.name),
         h('span.lbl-galaxy-count', `${galaxy.size} films`));
       galaxyLayer.append(element);
-      return { galaxy, element, visible: false };
+      return { galaxy, element, visible: false, wide: 0 };
     }).sort((a, b) => b.galaxy.size - a.galaxy.size); // where two names would cross, the larger galaxy keeps its
     arms = [];
     for (const galaxy of universe.galaxies[sky] || []) {
@@ -71,7 +71,8 @@ export function createLabels({ root, cosmos, universe, small = false, onStar, on
     const { width, height } = cosmos.size;
     const left = insets.left;
     const right = width - insets.right;
-    const floor = height - insets.bottom;
+    // The light dial and the wake sit along the bottom: names keep above them.
+    const floor = height - insets.bottom - (small ? 62 : 84);
     fixed.length = 0;
     for (const entry of galaxies) {
       const { galaxy, element } = entry;
@@ -84,11 +85,13 @@ export function createLabels({ root, cosmos, universe, small = false, onStar, on
       const scale = clamp(radiusPx / 150, 0.62, 1.5);
       const y = p.y + radiusPx * 0.74 + 8;
       // A name that would run under the instruments along the top is not shown at all.
-      if (opacity <= 0.02 || p.x < left - 40 || p.x > right + 40 || y - 27 * scale < 58 || y > floor + 30) { show(entry, false); continue; }
-      const wide = (galaxy.name.length * 11.5 + 30) * scale;
+      if (opacity <= 0.02 || p.x < left - 40 || p.x > right + 40 || y - 27 * scale < 58 || y + 20 * scale > floor) { show(entry, false); continue; }
+      // Measured once the name has been laid out; until then, guessed from its length.
+      if (!entry.wide) entry.wide = element.offsetWidth;
+      const wide = (entry.wide || galaxy.name.length * 11.5 + 30) * scale;
       const box = [p.x - wide / 2, y - 27 * scale, p.x + wide / 2, y + 27 * scale];
-      // Beside an open panel a name is shown whole or not at all.
-      if ((insets.left > 0 && box[0] < left + 6) || (insets.right > 0 && box[2] > right - 6)) { show(entry, false); continue; }
+      // A name is shown whole or not at all, beside an open panel or at the edge of the screen.
+      if (box[0] < left + 6 || box[2] > right - 6) { show(entry, false); continue; }
       if (crosses(fixed, ...box)) { show(entry, false); continue; }
       fixed.push(box);
       place(element, p.x, y, scale);
@@ -101,9 +104,10 @@ export function createLabels({ root, cosmos, universe, small = false, onStar, on
       const radiusPx = (galaxy.radius * view.focal) / p.depth;
       const opacity = clamp((radiusPx - height * 0.26) / (height * 0.12), 0, 1) * clamp((height * 2.6 - radiusPx) / (height * 0.8), 0, 1);
       const y = p.y - 26;
-      if (opacity <= 0.02 || p.x < left - 20 || p.x > right + 20 || y < 84 || y > floor - 10) { show(entry, false); continue; }
+      if (opacity <= 0.02 || p.x < left - 20 || p.x > right + 20 || y < 84 || y + 10 > floor) { show(entry, false); continue; }
+      if (!entry.measured) { entry.measured = true; entry.wide = element.offsetWidth || entry.wide; }
       const box = [p.x - entry.wide / 2, y - 10, p.x + entry.wide / 2, y + 10];
-      if ((insets.left > 0 && box[0] < left + 6) || (insets.right > 0 && box[2] > right - 6)) { show(entry, false); continue; }
+      if (box[0] < left + 6 || box[2] > right - 6) { show(entry, false); continue; }
       if (crosses(fixed, ...box)) { show(entry, false); continue; }
       fixed.push(box);
       place(element, p.x, y);
@@ -189,9 +193,9 @@ export function createLabels({ root, cosmos, universe, small = false, onStar, on
 
     const placed = fixed.map(box => box);
     const collides = (l, t, r, b) => crosses(placed, l, t, r, b);
-    // Nothing but the star you are at runs under the edge of an open panel.
-    const edgeLeft = insets.left > 0 ? insets.left + 6 : -Infinity;
-    const edgeRight = insets.right > 0 ? width - insets.right - 6 : Infinity;
+    // Nothing but the star you are at runs under the edge of an open panel, or off the screen.
+    const edgeLeft = insets.left + 4;
+    const edgeRight = width - insets.right - 4;
     const floorLine = height - insets.bottom - (small ? 62 : 84); // the dial and the wake sit below this
     const focusBox = [];
     const next = new Map();
@@ -222,7 +226,11 @@ export function createLabels({ root, cosmos, universe, small = false, onStar, on
         const film = universe.films[star];
         const tw = Math.min(190, film.t.length * 6.4 + 34);
         const box = [x - tw / 2, y + 6, x + tw / 2, y + 26];
-        if (free(box)) { placed.push(box); kind = 'title'; titles += 1; }
+        if (free(box)) {
+          placed.push(box); kind = 'title'; titles += 1;
+          // The ends of the rays keep clear of the name of the star you are at, as they do of its card.
+          if (star === context.focus) focusBox.push(box);
+        }
       }
       if (kind) next.set(star, { kind, rank: next.size });
     }
@@ -276,6 +284,11 @@ export function createLabels({ root, cosmos, universe, small = false, onStar, on
   }
 
   buildSky();
+  // Names measured before the fonts arrived are measured again.
+  document.fonts?.ready?.then(() => {
+    for (const entry of galaxies) entry.wide = 0;
+    for (const entry of arms) entry.measured = false;
+  });
   const off = cosmos.onFrame(update);
 
   return {

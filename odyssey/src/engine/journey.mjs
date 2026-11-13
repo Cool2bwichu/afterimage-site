@@ -209,16 +209,18 @@ export function doors(universe, at, { origin = at, path = [], exclude = null, lo
  * @param {Map<string, number>} [options.first] light → the film that leads its ring
  * @param {Set<number>|null} [options.exclude]
  * @param {number} [options.per] films on each ring
+ * @param {string|null} [options.lead] the light the sky is seen by: its ring goes innermost
  * @returns {Array<{ light: string, sim: number, stars: number[] }>}
  */
-export function rings(universe, star, { first = new Map(), exclude = null, per = 3 } = {}) {
+export function rings(universe, star, { first = new Map(), exclude = null, per = 3, lead = null } = {}) {
   const { model } = universe;
   const allow = j => !(exclude && exclude.has(j));
   const lists = LIGHT_IDS.map(light => {
     const near = model.neighbours(light, star, per + 8, allow);
     return { light, near, sim: near.length ? near[0].sim * (WEIGHT[light] ** 0.5) : 0 };
   }).filter(entry => entry.near.length || first.has(entry.light));
-  lists.sort((a, b) => b.sim - a.sim);
+  // Under one light, its ring is the innermost; otherwise the strongest is.
+  lists.sort((a, b) => (b.light === lead) - (a.light === lead) || b.sim - a.sim);
   const leads = new Set([...first.values()]);
   const placed = new Set();
   const out = [];
@@ -235,6 +237,28 @@ export function rings(universe, star, { first = new Map(), exclude = null, per =
     if (stars.length) out.push({ light, sim, stars });
   }
   return out;
+}
+
+const namingOf = new WeakMap();
+
+/**
+ * Whether a film carries a trait its star system is named for. A film can sit in
+ * a system by its other traits alone, and then the system's name is not true of
+ * it: Rashomon sits among "Aching romance · Forbidden Love" without being either.
+ */
+export function holdsArm(universe, star, arm) {
+  if (!arm || star < 0) return false;
+  if (arm.name.startsWith('Around ')) return true;
+  let naming = namingOf.get(arm);
+  if (!naming) {
+    const words = new Set(arm.name.split(' · '));
+    naming = (arm.top || []).filter(trait => {
+      const { s, t } = universe.traits[trait];
+      return words.has(s || t);
+    });
+    namingOf.set(arm, naming);
+  }
+  return naming.some(trait => universe.model.index[LIGHT_IDS[universe.traits[trait].l]].has(star, trait));
 }
 
 /** A voyage read back from a link: its stars by slug, joined by the light each pair is closest in. */

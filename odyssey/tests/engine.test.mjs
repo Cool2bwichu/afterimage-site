@@ -65,6 +65,19 @@ test('a neighbour comes with what the two films share, and nothing veiled is tol
   assert.ok(LIGHT_IDS.includes(closestLight(universe, MOOD, VERTIGO).light));
 });
 
+test('one person who is several traits of two films is named once in what they share', () => {
+  const mulholland = universe.indexOfSlug('mulholland-drive-2001');
+  const highway = universe.indexOfSlug('lost-highway-1997');
+  assert.ok(mulholland >= 0 && highway >= 0);
+  const both = universe.model.index.hands.shared(mulholland, highway, 8).map(entry => universe.traits[entry.trait]);
+  assert.ok(both.filter(trait => trait.s === 'David Lynch').length > 1, 'the chart holds Lynch as more than one trait of both');
+  for (const light of ['hands', 'white']) {
+    const words = sharedTraits(universe, light, mulholland, highway, 8).map(entry => (universe.traits[entry.trait].s || universe.traits[entry.trait].t).toLowerCase());
+    assert.equal(new Set(words).size, words.length, `${light}: ${words.join(' · ')}`);
+    assert.ok(words.includes('david lynch'));
+  }
+});
+
 test('the six rays of a star end at different films, one for each light that has something to say', () => {
   for (const film of [MOOD, VERTIGO, SPIRITED]) {
     const rays = prism(universe, film);

@@ -3,6 +3,7 @@
 // (computed), the encyclopedia, or Claude reading as the Navigator.
 import { lightById } from '../engine/lights.mjs';
 import { UNLIT } from '../engine/universe.mjs';
+import { holdsArm } from '../engine/journey.mjs';
 import { traitsOf } from '../engine/voyage.mjs';
 import { h, icon, replace, plural } from './dom.mjs';
 import { poster } from './posters.mjs';
@@ -125,11 +126,21 @@ export function createDossier(app) {
       drawn.map(line => filmRow(line.other, { kicker: line.type, body: line.claim ? h('span.frow-claim', line.claim) : null }))) : null;
 
     const groups = traitsOf(universe, star, 5).map(({ light, traits }) => ({ light, traits: traits.filter(t => !t.veiled).slice(0, 5) })).filter(group => group.traits.length);
+    // Two traits of one group with the same short name (directed by and written by
+    // David Lynch) are each given their whole name.
+    const chipName = traits => {
+      const count = new Map();
+      for (const { trait } of traits) count.set(traitName(trait).toLowerCase(), (count.get(traitName(trait).toLowerCase()) || 0) + 1);
+      return trait => (count.get(traitName(trait).toLowerCase()) > 1 ? universe.traits[trait].t : traitName(trait));
+    };
     const traitsSection = groups.length ? section('traits', h('span', 'What this star is made of', source(deep ? 'memory' : 'chart')),
       h('p.dsec-note', 'Choose any one to see every film that shares it, the truest first.'),
-      groups.map(group => h('div.trait-group', { style: { '--c': lightById(group.light).color } },
-        h('span.trait-light', lightById(group.light).name),
-        h('div.trait-chips', group.traits.map(({ trait }) => h('button.chip', { type: 'button', onclick: () => app.browse('trait', trait) }, traitName(trait))))))) : null;
+      groups.map(group => {
+        const name = chipName(group.traits);
+        return h('div.trait-group', { style: { '--c': lightById(group.light).color } },
+          h('span.trait-light', lightById(group.light).name),
+          h('div.trait-chips', group.traits.map(({ trait }) => h('button.chip', { type: 'button', onclick: () => app.browse('trait', trait) }, name(trait)))));
+      })) : null;
 
     const shape = storyShape(film);
     const recall = film.rc ? veiled('What stays with people', film.rc, deep ? 'memory' : 'atlas', 'This may give something away.') : null;
@@ -137,7 +148,6 @@ export function createDossier(app) {
     const links = h('p.ext-row', linksOf(film));
     const tools = section('tools', 'From here',
       h('div.tool-row',
-        h('button.act', { type: 'button', onclick: () => app.setOut(star) }, icon('door', 17), h('span', 'Set out from here')),
         h('button.act', { type: 'button', onclick: () => app.panels.open('collide', { a: star }) }, icon('collide', 17), h('span', 'Collide with…')),
         h('button.act', { type: 'button', onclick: () => app.panels.open('passage', { a: star }) }, icon('passage', 17), h('span', 'Passage to…')),
         h('button.act', { type: 'button', onclick: () => app.share() }, icon('share', 17), h('span', 'Share'))),
@@ -192,7 +202,8 @@ export function createDossier(app) {
       return;
     }
     const galaxy = universe.galaxies[sky][g];
-    const arm = galaxy.arms.find(entry => entry.arm === universe.armOf[sky][parts.star]);
+    const within = galaxy.arms.find(entry => entry.arm === universe.armOf[sky][parts.star]);
+    const arm = holdsArm(universe, parts.star, within) ? within : null;
     replace(parts.kicker,
       h('span.kick-dot', { style: { '--c': light.color } }),
       h('button.kick-link', { type: 'button', onclick: () => app.openGalaxy(galaxy.g) }, galaxy.name),

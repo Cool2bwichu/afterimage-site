@@ -1,5 +1,6 @@
 // The instruments around the sky: where you are, the light you are seeing
 // by, the Navigator's state, your wake, and whatever needs saying.
+import { holdsArm } from '../engine/journey.mjs';
 import { ALL_LIGHTS, lightById } from '../engine/lights.mjs';
 import { UNLIT } from '../engine/universe.mjs';
 import { h, icon, replace, plural } from './dom.mjs';
@@ -79,7 +80,7 @@ export function createHud(app) {
   // ── The wake: where you have been.
   const wakeList = h('div.wake-list');
   const wakeLog = h('p.wake-log');
-  const wake = h('div.wake', { 'aria-label': 'Your wake' }, wakeList, wakeLog);
+  const wake = h('div.wake', { role: 'group', 'aria-label': 'Your wake' }, wakeList, wakeLog);
 
   const zoom = h('div.zoom',
     h('button', { type: 'button', 'aria-label': 'Closer', onclick: () => cosmos.camera.zoom(0.62) }, icon('plus', 16)),
@@ -103,7 +104,7 @@ export function createHud(app) {
         const galaxy = universe.galaxies[sky][g];
         const armIndex = universe.armOf[sky][state.focus];
         const arm = galaxy && galaxy.arms.find(entry => entry.arm === armIndex);
-        armName = arm ? arm.name : '';
+        armName = holdsArm(universe, state.focus, arm) ? arm.name : '';
       }
     } else if (state.galaxy >= 0) {
       g = state.galaxy;

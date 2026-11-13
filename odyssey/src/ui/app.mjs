@@ -23,6 +23,7 @@ const PALE = [0.8, 0.88, 1];
 // The whole universe in one look: how far back, how steeply, and how far the camera leans toward the viewer.
 export const OVERVIEW = { reach: 2.0, reachSmall: 3.4, pitch: 0.95, bias: 0.125 };
 const DRIFT_EVERY = 12500;
+const HUD_TOP = 76; // the instruments along the top of the screen, and where you are beneath them
 
 export function createApp({ root, universe, depth, cosmos, labels, pilot, store, search, small, reducedMotion, edition = 'site' }) {
   const state = {
@@ -76,6 +77,9 @@ export function createApp({ root, universe, depth, cosmos, labels, pilot, store,
   app.refresh = refresh;
 
   // ── Where the cosmos sits behind the panels.
+  // What covers the sky, in CSS pixels from each edge: the panels, the
+  // instruments along the top, and the light dial along the bottom.
+  const covered = { left: 0, right: 0, top: HUD_TOP, bottom: 0 };
   function frameCosmos() {
     const { width, height } = cosmos.size;
     const right = app.dossier?.width() || 0;
@@ -84,9 +88,11 @@ export function createApp({ root, universe, depth, cosmos, labels, pilot, store,
     root.style.setProperty('--inset-left', `${left}px`);
     root.style.setProperty('--inset-right', `${right}px`);
     labels.setInsets({ left, right, bottom: below });
+    Object.assign(covered, { left, right, bottom: Math.max(below, small ? 72 : 118) });
     cosmos.camera.setBias(state.focus < 0 && state.galaxy < 0 ? OVERVIEW.bias : 0);
-    // The star you are at sits in the middle of the sky that is left uncovered.
-    if (small) cosmos.camera.setCentre(0, Math.min(0.55, below / Math.max(height, 1)));
+    // The star you are at sits in the middle of the sky that is left uncovered,
+    // below the instruments along the top.
+    if (small) cosmos.camera.setCentre(0, Math.min(0.55, (below - (state.focus >= 0 ? HUD_TOP : 0)) / Math.max(height, 1)));
     else cosmos.camera.setCentre((left - right) / Math.max(width, 1), 0);
   }
   app.frameCosmos = frameCosmos;
@@ -179,7 +185,7 @@ export function createApp({ root, universe, depth, cosmos, labels, pilot, store,
 
   // ── The star system around the star you are at.
   const orbits = createOrbits({
-    root: document.getElementById('labels'), cosmos, universe, small, reducedMotion,
+    root: document.getElementById('labels'), cosmos, universe, small, reducedMotion, insets: covered,
     onStar: (star, light) => focusStar(star, { light }),
     onHover: star => cosmos.setHover(star),
     onMode: active => {
@@ -197,7 +203,11 @@ export function createApp({ root, universe, depth, cosmos, labels, pilot, store,
     const taken = new Set();
     for (const door of openDoors()) { first.set(door.light, door.star); taken.add(door.star); }
     for (const ray of state.rays) if (!first.has(ray.light) && !taken.has(ray.star)) { first.set(ray.light, ray.star); taken.add(ray.star); }
-    orbits.setSystem(state.focus, rings(universe, state.focus, { first, exclude: notFor, per: small ? 2 : 3 }));
+    orbits.setLight(state.sky);
+    // Under one light its ring goes innermost, where it shows best; on a phone the
+    // innermost ring runs behind the film's own card, so the rings keep their order there.
+    const lead = small || state.sky === 'white' ? null : state.sky;
+    orbits.setSystem(state.focus, rings(universe, state.focus, { first, exclude: notFor, per: small ? 2 : 3, lead }));
     orbits.setDoors(openDoors().map(door => door.star));
   }
 
@@ -353,6 +363,7 @@ export function createApp({ root, universe, depth, cosmos, labels, pilot, store,
     const camera = cosmos.camera;
     if (state.focus >= 0) {
       const star = state.focus;
+      updateSystem();
       cosmos.setSky(sky, { around: cosmos.positionOf(star) });
       camera.flyTo({ follow: () => cosmos.positionOf(star), hold: true, target: cosmos.restingPlace(star), duration: 2.9, lift: 1.5 });
     } else if (state.galaxy >= 0) {
