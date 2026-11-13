@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { LIGHT_IDS } from '../src/engine/lights.mjs';
-import { SKIES, UNLIT } from '../src/engine/universe.mjs';
+import { CHARTED_SKIES, UNLIT } from '../src/engine/universe.mjs';
 import { slugOf } from '../src/engine/search.mjs';
 import { bundle, depth, open } from './chart.mjs';
 
@@ -38,7 +38,7 @@ test('a poster is a path on Wikimedia, never an address somewhere else', () => {
 });
 
 test('every sky places every film, in a galaxy or on the unlit ring', () => {
-  for (const sky of SKIES) {
+  for (const sky of CHARTED_SKIES) {
     const galaxies = bundle.galaxies[sky];
     assert.ok(galaxies.length >= 8 && galaxies.length <= 20, `${sky} has a sky's worth of galaxies`);
     const sizes = new Array(galaxies.length).fill(0);
@@ -64,7 +64,7 @@ test('every sky places every film, in a galaxy or on the unlit ring', () => {
 });
 
 test('galaxy names are not repeated within a sky', () => {
-  for (const sky of SKIES) {
+  for (const sky of CHARTED_SKIES) {
     const names = bundle.galaxies[sky].map(galaxy => galaxy.name);
     assert.equal(new Set(names).size, names.length, `${sky}: ${names.join(', ')}`);
   }

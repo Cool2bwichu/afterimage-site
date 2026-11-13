@@ -5,12 +5,17 @@ import { UNLIT } from '../engine/universe.mjs';
 import { h } from '../ui/dom.mjs';
 import { poster } from '../ui/posters.mjs';
 import { clamp } from './math.mjs';
+import { GALAXY_HUES } from './renderer.mjs';
+import { heightAt } from '../engine/time.mjs';
 
 const CARD_W = 64;
 const CARD_H = 95;
 const SELECT_EVERY = 0.16; // seconds between choosing which stars are named
+// In Lookback the decades are rings: their names run outward from the centre like a
+// ruler, turned this far from the side of the sky nearest you, toward your right.
+const RULER = 1.2;
 
-export function createLabels({ root, cosmos, universe, small = false, onStar, onGalaxy, onArm }) {
+export function createLabels({ root, cosmos, universe, small = false, onStar, onGalaxy, onArm, onKind }) {
   const galaxyLayer = h('div.lbl-layer.lbl-galaxies');
   const armLayer = h('div.lbl-layer.lbl-arms');
   const starLayer = h('div.lbl-layer.lbl-stars');
@@ -19,11 +24,13 @@ export function createLabels({ root, cosmos, universe, small = false, onStar, on
   let sky = cosmos.sky;
   let galaxies = [];
   let arms = [];
+  let kinds = []; // in Lookback, the kinds of film named around the horizon, each at its line of sight
   let hidden = false;
   let sinceSelect = 1;
-  const context = { focus: -1, hover: -1, rays: new Map(), highlight: null, loved: new Set(), lit: null, system: false };
+  const context = { focus: -1, hover: -1, rays: new Map(), highlight: null, loved: new Set(), lit: null, system: false, ring: -1 };
   const insets = { left: 0, right: 0, bottom: 0 }; // the parts of the sky that panels cover
   const fixed = [];  // boxes of the galaxy and arm names now showing: star names keep clear of them
+  let blocked = [];  // boxes of notices laid over the sky (the lit set's chip): no name is put under them
   const shown = new Map(); // star → { element, kind, rank }
   const leaving = new Set();
   const scratch = {};
@@ -33,7 +40,7 @@ export function createLabels({ root, cosmos, universe, small = false, onStar, on
     galaxyLayer.replaceChildren();
     armLayer.replaceChildren();
     galaxies = (universe.galaxies[sky] || []).map(galaxy => {
-      const element = h('button.lbl-galaxy', { type: 'button', tabindex: '-1', onclick: () => onGalaxy?.(galaxy.g) },
+      const element = h('button.lbl-galaxy', { type: 'button', tabindex: '-1', class: galaxy.ring ? 'ring' : '', onclick: () => onGalaxy?.(galaxy.g) },
         h('span.lbl-galaxy-name', galaxy.name),
         h('span.lbl-galaxy-count', `${galaxy.size} films`));
       galaxyLayer.append(element);
@@ -49,6 +56,18 @@ export function createLabels({ root, cosmos, universe, small = false, onStar, on
     }
     // Where two names would cross, the larger arm keeps its name.
     arms.sort((a, b) => b.arm.size - a.arm.size);
+    kinds = [];
+    if (sky === 'time' && universe.time) {
+      const horizon = universe.time.edges[universe.time.edges.length - 1] * 1.075;
+      for (const galaxy of universe.galaxies.white || []) {
+        const sector = universe.time.sectors.get(galaxy.g);
+        if (!sector) continue;
+        const angle = sector.start + sector.width / 2;
+        const element = h('button.lbl-kind', { type: 'button', tabindex: '-1', style: { '--c': GALAXY_HUES[galaxy.g % GALAXY_HUES.length] }, onclick: () => onKind?.(galaxy.g) }, galaxy.name);
+        galaxyLayer.append(element);
+        kinds.push({ galaxy, element, at: [Math.cos(angle) * horizon, heightAt(horizon), Math.sin(angle) * horizon], visible: false, wide: 0 });
+      }
+    }
   }
 
   const crosses = (boxes, l, t, r, b) => { for (const box of boxes) if (l < box[2] && r > box[0] && t < box[3] && b > box[1]) return true; return false; };
@@ -74,22 +93,30 @@ export function createLabels({ root, cosmos, universe, small = false, onStar, on
     // The light dial and the wake sit along the bottom: names keep above them.
     const floor = height - insets.bottom - (small ? 62 : 84);
     fixed.length = 0;
+    for (const box of blocked) fixed.push(box);
+    const yaw = cosmos.camera.state.yaw;
+    const ruler = Math.atan2(Math.cos(yaw), Math.sin(yaw)) - RULER;
     for (const entry of galaxies) {
       const { galaxy, element } = entry;
+      // A ring's name sits on the ring itself, where the ruler crosses it; any other galaxy's, beneath it.
+      const ring = galaxy.ring;
+      const mid = ring ? (ring.inner + ring.outer) / 2 : 0;
+      const at = ring ? [Math.cos(ruler) * mid, galaxy.centre[1], Math.sin(ruler) * mid] : galaxy.centre;
       // Inside a star system the names of galaxies and their arms step back with the rest of the sky.
-      const p = moving || hidden || context.system ? null : cosmos.projectPoint(galaxy.centre[0], galaxy.centre[1], galaxy.centre[2], scratch);
+      const p = moving || hidden || context.system ? null : cosmos.projectPoint(at[0], at[1], at[2], scratch);
       if (!p) { show(entry, false); continue; }
       const radiusPx = (galaxy.radius * view.focal) / p.depth;
       // A galaxy's name is for seeing it whole: it fades as you enter.
       const opacity = clamp((radiusPx - 26) / 30, 0, 1) * clamp((height * 0.62 - radiusPx) / (height * 0.2), 0, 1);
-      const scale = clamp(radiusPx / 150, 0.62, 1.5);
-      const y = p.y + radiusPx * 0.74 + 8;
+      const scale = clamp(radiusPx / 150, 0.62, ring ? 1.1 : 1.5);
+      const y = ring ? p.y : p.y + radiusPx * 0.74 + 8;
+      const half = ring ? 12 : 27; // a ring's name is one line
       // A name that would run under the instruments along the top is not shown at all.
-      if (opacity <= 0.02 || p.x < left - 40 || p.x > right + 40 || y - 27 * scale < 58 || y + 20 * scale > floor) { show(entry, false); continue; }
+      if (opacity <= 0.02 || p.x < left - 40 || p.x > right + 40 || y - half * scale < 58 || y + Math.min(half, 20) * scale > floor) { show(entry, false); continue; }
       // Measured once the name has been laid out; until then, guessed from its length.
       if (!entry.wide) entry.wide = element.offsetWidth;
       const wide = (entry.wide || galaxy.name.length * 11.5 + 30) * scale;
-      const box = [p.x - wide / 2, y - 27 * scale, p.x + wide / 2, y + 27 * scale];
+      const box = [p.x - wide / 2, y - half * scale, p.x + wide / 2, y + half * scale];
       // A name is shown whole or not at all, beside an open panel or at the edge of the screen.
       if (box[0] < left + 6 || box[2] > right - 6) { show(entry, false); continue; }
       if (crosses(fixed, ...box)) { show(entry, false); continue; }
@@ -97,8 +124,22 @@ export function createLabels({ root, cosmos, universe, small = false, onStar, on
       place(element, p.x, y, scale);
       show(entry, true, opacity);
     }
+    // Around the horizon of Lookback, the kinds of film: which way each line of sight runs.
+    const far = clamp((view.distance - 760) / 420, 0, 1);
+    for (const entry of kinds) {
+      const p = moving || hidden || context.system || far <= 0.02 ? null : cosmos.projectPoint(entry.at[0], entry.at[1], entry.at[2], scratch);
+      if (!p) { show(entry, false); continue; }
+      if (!entry.wide) entry.wide = entry.element.offsetWidth || entry.galaxy.name.length * 8 + 16;
+      const box = [p.x - entry.wide / 2, p.y - 11, p.x + entry.wide / 2, p.y + 11];
+      if (box[0] < left + 6 || box[2] > right - 6 || box[1] < 58 || box[3] > floor || crosses(fixed, ...box)) { show(entry, false); continue; }
+      fixed.push(box);
+      place(entry.element, p.x, p.y);
+      show(entry, true, far * 0.9);
+    }
     for (const entry of arms) {
       const { galaxy, arm, element } = entry;
+      // In Lookback every ring has the same kinds: only the ring you are in names them.
+      if (galaxy.ring && galaxy.g !== context.ring) { show(entry, false); continue; }
       const p = moving || hidden || context.system ? null : cosmos.projectPoint(arm.at[0], arm.at[1], arm.at[2], scratch);
       if (!p) { show(entry, false); continue; }
       const radiusPx = (galaxy.radius * view.focal) / p.depth;
@@ -288,6 +329,7 @@ export function createLabels({ root, cosmos, universe, small = false, onStar, on
   document.fonts?.ready?.then(() => {
     for (const entry of galaxies) entry.wide = 0;
     for (const entry of arms) entry.measured = false;
+    for (const entry of kinds) entry.wide = 0;
   });
   const off = cosmos.onFrame(update);
 
@@ -300,6 +342,8 @@ export function createLabels({ root, cosmos, universe, small = false, onStar, on
     },
     /** How much of the sky is covered by panels, in pixels from each edge: nothing is named under them. */
     setInsets(next) { Object.assign(insets, next); sinceSelect = 1; },
+    /** Boxes in CSS pixels ([left, top, right, bottom]) laid over the sky, which names keep out from under. */
+    setBlocked(boxes) { blocked = boxes || []; sinceSelect = 1; },
     setHidden(value) { hidden = value; root.classList.toggle('hidden', value); sinceSelect = 1; },
     rebuild() { buildSky(); },
     stop() { off(); },

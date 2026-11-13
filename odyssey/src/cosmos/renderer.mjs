@@ -4,6 +4,7 @@
 // labels, posters and picking can ask where a star is on screen right now.
 import { SKIES, UNLIT } from '../engine/universe.mjs';
 import { lightById } from '../engine/lights.mjs';
+import { heightAt, INNER, TIME } from '../engine/time.mjs';
 import { mulberry32, hashString, gaussian } from '../engine/rng.mjs';
 import { createCamera, FOV } from './camera.mjs';
 import { clamp, lerp, easeInOut, angleDelta, hexToRgb, multiply } from './math.mjs';
@@ -11,7 +12,7 @@ import * as S from './shaders.mjs';
 
 const DUST_PER_STAR = 10;
 const HEADROOM = 3072; // room for stars charted later before buffers are rebuilt
-const MAX_LINES = 900;
+const MAX_LINES = 1500; // the rings of Lookback take a few hundred
 const LINE_FLOATS = 14;
 const GLOW_FLOATS = 15;
 
@@ -24,10 +25,12 @@ const SKY_TINTS = {
   idea: { a: '#553c98', b: '#27468a', base: '#06050c' },
   world: { a: '#2a7850', b: '#1c5a6c', base: '#030806' },
   hands: { a: '#304c98', b: '#553a88', base: '#04060c' },
+  // Old light is red light: the far past glows ember, the present is cold and blue.
+  time: { a: '#8a3a26', b: '#24406e', base: '#070506' },
 };
 
 // Each galaxy of the white sky takes one of these; a coloured sky varies its own hue.
-const GALAXY_HUES = ['#f2b066', '#79d3ea', '#f08aa0', '#bda0f7', '#8fdcaa', '#8aa8f5', '#dec6a0', '#e9967a', '#9cbbb9', '#d7a6e8', '#a8c686', '#7fb7f0', '#f0c987', '#c9a0a0'];
+export const GALAXY_HUES = ['#f2b066', '#79d3ea', '#f08aa0', '#bda0f7', '#8fdcaa', '#8aa8f5', '#dec6a0', '#e9967a', '#9cbbb9', '#d7a6e8', '#a8c686', '#7fb7f0', '#f0c987', '#c9a0a0'];
 
 function compile(gl, type, source) {
   const shader = gl.createShader(type);
@@ -320,7 +323,29 @@ export function createCosmos({ canvas, universe, reducedMotion = false, small = 
     attribute(5, glowBuffer, 2, gl.FLOAT, false, stride, 52, 1);
   }
 
+  // In Lookback a decade is a ring: each kind of film glows as an arc of it, in the
+  // colour its galaxy has under white light, and the present burns at the centre.
+  function timeGlows(set, out) {
+    // The present: a small warm light where you stand, and a faint halo the decades open out from.
+    out.push(0, heightAt(INNER), 0, INNER * 0.42, 0, 0, 0, INNER * 0.42, 0, 1, 0.9, 0.78, 0.5, 1, set);
+    out.push(0, heightAt(INNER), 0, INNER * 2.1, 0, 0, 0, INNER * 2.1, 0, 0.93, 0.66, 0.52, 0.045, 1, set);
+    for (const galaxy of universe.galaxies[TIME] || []) {
+      const { inner, outer } = galaxy.ring;
+      const mid = (inner + outer) / 2;
+      for (const arm of galaxy.arms) {
+        const angle = arm.from + arm.width / 2;
+        const c = Math.cos(angle);
+        const s = Math.sin(angle);
+        const along = mid * arm.width * 0.8;
+        const across = (outer - inner) * 1.05;
+        const rgb = hexToRgb(GALAXY_HUES[arm.arm % GALAXY_HUES.length]);
+        out.push(c * mid, heightAt(mid), s * mid, -s * along, 0, c * along, c * across, 0, s * across, ...rgb, 0.05 + 0.1 * Math.min(1, arm.size / 45), 0, set);
+      }
+    }
+  }
+
   function glowsOf(skyId, set, out) {
+    if (skyId === TIME) { timeGlows(set, out); return; }
     for (const galaxy of universe.galaxies[skyId] || []) {
       const rgb = galaxyColour(skyId, galaxy.g);
       const n = galaxy.normal;

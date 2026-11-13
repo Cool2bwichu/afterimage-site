@@ -55,7 +55,35 @@ test('reading a file back joins it to what is kept, and reports what grew', () =
   assert.equal(state.arrivals['vertigo-1958'].essence, 'A man falls in love with a ghost he helps to make.', 'what was kept is not overwritten');
   assert.equal(Object.getPrototypeOf(state.arrivals), Object.prototype);
   assert.equal(state.sky, 'image');
-  assert.deepEqual(counts, { loved: 1, seen: 0, watchlist: 1, hidden: 1, visited: 1, found: 1, routes: 1 });
+  assert.deepEqual(counts, { loved: 1, seen: 0, watchlist: 1, hidden: 1, visited: 1, found: 1, routes: 1, comets: 0 });
+});
+
+test('the comets of each night travel in the file: a night kept here keeps its film, and one caught anywhere is caught', () => {
+  const here = { ...kept(), sky: 'time', comets: [
+    { night: '2026-11-12', slug: 'mirror-1975', from: 'solaris-1972', light: 'image', why: 'loved', caught: true },
+    { night: '2026-11-13', slug: 'stalker-1979', from: null, light: 'idea', why: 'known', caught: false },
+  ] };
+  const file = exportArchive(here);
+  assert.equal(file.sky, 'time', 'Lookback is a sky that travels too');
+  assert.equal(file.comets.length, 2);
+  const { state, counts } = mergeArchive(kept(), JSON.parse(JSON.stringify(file)));
+  assert.equal(state.comets.length, 2);
+  assert.equal(counts.comets, 2);
+  assert.equal(state.sky, 'time');
+  const incoming = { format: FORMAT, version: 3, comets: [
+    { night: '2026-11-13', slug: 'stalker-1979', caught: true },
+    { night: '2026-11-14', slug: 'mirror-1975', light: 'nowhere', why: 'because' },
+    { night: 'yesterday', slug: 'alien-1979' },
+    { night: '2026-11-15' },
+  ] };
+  const merged = mergeArchive(here, incoming);
+  assert.deepEqual(merged.state.comets.map(comet => comet.night), ['2026-11-12', '2026-11-13', '2026-11-14']);
+  assert.equal(merged.state.comets[1].caught, true, 'caught in the other browser');
+  assert.equal(merged.state.comets[2].light, null, 'an unknown light is dropped');
+  assert.equal(merged.state.comets[2].why, 'known');
+  assert.equal(merged.counts.comets, 1);
+  assert.equal(here.comets[1].caught, false, 'what was kept is not changed in place');
+  assert.throws(() => mergeArchive(here, { format: FORMAT, version: 3, comets: 'many' }), /comets/);
 });
 
 test('a file that is not a voyage changes nothing', () => {

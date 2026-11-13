@@ -6,7 +6,7 @@
 //
 // Films are remembered by slug, never by index: the chart may be recompiled,
 // and stars found beyond it only exist once their readings are restored.
-import { cleanRoute, exportArchive, mergeArchive } from './archive.mjs';
+import { cleanComet, cleanRoute, exportArchive, mergeArchive } from './archive.mjs';
 
 const KEY = 'afterimage.odyssey.v1';
 const MAX_WAKE = 240;
@@ -14,6 +14,7 @@ const MAX_VISITED = 6000;
 const MAX_READINGS = 1500;
 const MAX_ARRIVALS = 160;
 const MAX_ROUTES = 60;
+const MAX_COMETS = 60;
 export const MARKS = ['loved', 'seen', 'watchlist', 'hidden'];
 
 function load() {
@@ -40,6 +41,8 @@ function read(saved) {
     wake,
     // Voyages a voyager landed, and trails and passages they kept: { name, heading, kind, savedAt, stops: [{ slug, light, note }], landed? }
     routes: Array.isArray(saved.routes) ? saved.routes.map(cleanRoute).filter(Boolean).slice(-MAX_ROUTES) : [],
+    // Each night's comet, once chosen: { night, slug, from, light, why, caught }, oldest first.
+    comets: Array.isArray(saved.comets) ? saved.comets.map(cleanComet).filter(Boolean).slice(-MAX_COMETS) : [],
     // Stars found beyond the chart: { slug, reading, from (slug), source, extra: { pu, im, rt } }
     found: Array.isArray(saved.found) ? saved.found.filter(entry => entry && entry.reading && entry.reading.title).slice(-MAX_READINGS) : [],
     // What the Navigator said on arrival, by slug: { essence, rays: [{ light, slug, claim, watch }], beyond }
@@ -61,7 +64,7 @@ export function createStore() {
     return {
       loved: [...state.loved], seen: [...state.seen], watchlist: [...state.watchlist], hidden: [...state.hidden],
       visited: [...state.visited].slice(-MAX_VISITED), wake: state.wake.slice(-MAX_WAKE), routes: state.routes.slice(-MAX_ROUTES),
-      found: state.found.slice(-MAX_READINGS), arrivals, sky: state.sky, entered: state.entered,
+      found: state.found.slice(-MAX_READINGS), arrivals, sky: state.sky, entered: state.entered, comets: state.comets.slice(-MAX_COMETS),
       companion: state.companion, readArrivals: state.readArrivals,
     };
   }
@@ -84,6 +87,7 @@ export function createStore() {
     try { other = read(JSON.parse(event.newValue)); } catch { return; }
     for (const key of [...MARKS, 'visited']) state[key] = other[key];
     state.routes = other.routes;
+    state.comets = other.comets;
     for (const listener of listeners) listener('marks');
   });
 
@@ -147,6 +151,22 @@ export function createStore() {
       state.arrivals[slug] = arrival;
       save();
     },
+    /** Keeps the night's comet once it is chosen, so it stays the same all night. */
+    keepComet(comet) {
+      const clean = cleanComet(comet);
+      if (!clean) return null;
+      state.comets = state.comets.filter(other => other.night !== clean.night);
+      state.comets.push(clean);
+      if (state.comets.length > MAX_COMETS) state.comets.splice(0, state.comets.length - MAX_COMETS);
+      save();
+      return clean;
+    },
+    /** The night's comet is caught: what it carried is known, and it is kept among the comets caught. */
+    catchComet(night) {
+      const comet = state.comets.find(other => other.night === night);
+      if (comet && !comet.caught) { comet.caught = true; save(); }
+      return comet || null;
+    },
     set(key, value) { state[key] = value; save(); },
     /** Everything kept, as a file's contents. */
     archive() { return exportArchive(state); },
@@ -159,7 +179,7 @@ export function createStore() {
     },
     clear() {
       for (const key of [...MARKS, 'visited']) state[key].clear();
-      state.wake.length = 0; state.found.length = 0; state.routes = []; state.arrivals = {};
+      state.wake.length = 0; state.found.length = 0; state.routes = []; state.arrivals = {}; state.comets = [];
       write();
     },
   };

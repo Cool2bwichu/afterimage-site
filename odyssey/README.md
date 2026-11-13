@@ -16,6 +16,18 @@ existing AFTERIMAGE site, its hosting, or its deployments.
   hands (who made it). White light is all six together. Under each light the
   2,204 charted films gather into different galaxies with different arms, so
   two films that sit far apart by story can be neighbours by feeling.
+- **Lookback, a universe of time.** The same films placed by when they were
+  made: the present at the centre, a ring for each decade, the silent years at
+  the horizon. Each kind of film (a galaxy of white light) keeps one direction,
+  so looking outward from a film is looking back along its line. At a star, its
+  line of sight runs back to the horizon and forward to the present, each step
+  the film most like the last at least four years away, and its star system
+  holds the films before it, after it and of its time. Key 7, or the ring beside
+  the lights. Computed in the browser from the chart (`src/engine/time.mjs`).
+- **Tonight's comet.** Once a night a comet crosses the sky carrying a film the
+  chart thinks you are missing: near a film you love, or, before you love any,
+  a film few have found beside one everyone knows. Catch it to see the film and
+  why it came; the comets caught are kept in Your sky and travel in the journal.
 - **Rays and star systems.** From any star, one ray per light leads to the film
   nearest it under that light, with the reason said plainly. Arriving at a film
   draws its system: six orbits, one per light, with its nearest films circling
@@ -102,8 +114,8 @@ site's origin in `AFTERIMAGE_ALLOWED_ORIGINS`. A deployment can also set
 | --- | --- |
 | `universe/` | The compiler: loads ATLAS, builds likeness under six lights, forms galaxies and arms, finds constellations, lays out each sky. `authored/` holds the hand-written names and vocabulary. |
 | `public/data/` | The compiled chart. Deterministic: the same corpus gives the same bytes. |
-| `src/engine/` | Likeness, search, gravity, passages, voyages and ranked lists (`journey.mjs`), and the open universe (`addStars` is append-only, so charted films never move). Runs in the browser and in the companion. |
-| `src/cosmos/` | The WebGL sky: renderer, shaders, camera, labels. |
+| `src/engine/` | Likeness, search, gravity, passages, voyages and ranked lists (`journey.mjs`), Lookback (`time.mjs`), tonight's comet (`comet.mjs`), and the open universe (`addStars` is append-only, so charted films never move). Runs in the browser and in the companion. |
+| `src/cosmos/` | The WebGL sky: renderer, shaders, camera, labels, star systems, the comet. |
 | `src/ui/` | The interface: entrance, dossier, panels, posters, and what the browser remembers (`store.mjs`) and carries in a journal (`archive.mjs`). |
 | `src/nav/pilot.mjs` | Finds the Navigator (in the page, through the companion, or not at all) and places what it returns. |
 | `src/nav/readings.mjs` | Finds the readings written ahead of time, a shard at a time. |

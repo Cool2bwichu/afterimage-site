@@ -73,6 +73,7 @@ const ICONS = {
   upload: '<path d="M12 15V4M7.5 8.5 12 4l4.5 4.5"/><path d="M5 19.5h14"/>',
   undo: '<path d="M9 14 4.5 9.5 9 5"/><path d="M4.5 9.5H14a5.5 5.5 0 0 1 0 11h-3"/>',
   orbit: '<circle cx="12" cy="12" r="2.4"/><ellipse cx="12" cy="12" rx="9.5" ry="4.6" transform="rotate(-18 12 12)"/>',
+  comet: '<circle cx="16.6" cy="7.4" r="2.7"/><path d="M14.6 9.4 4 20"/><path d="M12.6 7.2 6.5 13.3" opacity=".6"/><path d="M16.8 11.4 10.7 17.5" opacity=".6"/>',
 };
 
 export function icon(name, size = 18) {

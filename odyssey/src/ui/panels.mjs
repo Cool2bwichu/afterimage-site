@@ -23,7 +23,7 @@ const ORDERS = [
   ['yours', 'For you', 'The films the ones you love pull hardest first'],
   ['unfamiliar', 'Less known', 'The truest, leaning toward films fewer people know'],
 ];
-const SKY_TABS = [['loved', 'Loved'], ['watchlist', 'Watchlist'], ['seen', 'Watched'], ['voyages', 'Voyages'], ['aside', 'Set aside'], ['journal', 'Journal']];
+const SKY_TABS = [['loved', 'Loved'], ['watchlist', 'Watchlist'], ['seen', 'Watched'], ['voyages', 'Voyages'], ['comets', 'Comets'], ['aside', 'Set aside'], ['journal', 'Journal']];
 const BACK_TO = { figures: 'Constellations', nebulae: 'Nebulae', sky: 'Your sky', voyage: 'Set out' };
 
 export function createPanels(app) {
@@ -326,8 +326,9 @@ export function createPanels(app) {
     trait: () => `A current · ${lightById(set.light).name}`,
     register: () => 'A nebula',
     constellation: () => (set.known ? 'A constellation' : 'A constellation not yet found'),
-    galaxy: () => `A galaxy under ${lightById(set.light).name.toLowerCase()}`,
-    arm: () => 'A star system',
+    galaxy: () => (set.sky === 'time' ? 'A decade, seen in Lookback' : `A galaxy under ${lightById(set.light).name.toLowerCase()}`),
+    arm: () => (set.sky === 'time' ? 'A kind of film in a decade' : 'A star system'),
+    kind: () => 'A kind of film, in every decade',
     sky: () => 'Your sky',
   }[set.kind] || (() => 'A set of films'))();
   const setKey = set => `${set.kind}:${set.id}:${set.arm ?? ''}:${set.stars.size}:${set.light || ''}`;
@@ -436,12 +437,13 @@ export function createPanels(app) {
     const count = {
       loved: app.marks.loved.size, watchlist: app.marks.watchlist.size, seen: app.marks.seen.size,
       voyages: store.state.routes.length, aside: app.marks.hidden.size, journal: 0,
+      comets: store.state.comets.filter(entry => entry.caught).length,
     };
     const tabs = h('div.tabs', { role: 'tablist', 'aria-label': 'What you keep' }, SKY_TABS.map(([id, label]) => h('button.tab', {
       type: 'button', role: 'tab', 'aria-selected': String(memo.skyTab === id), class: memo.skyTab === id ? 'on' : '',
       onclick: () => { memo.skyTab = id; renderSky(); body.scrollTop = 0; },
     }, label, count[id] ? h('span.tab-n', String(count[id])) : null)));
-    const content = { loved: lovedTab, watchlist: watchTab, seen: seenTab, voyages: voyagesTab, aside: asideTab, journal: journalTab }[memo.skyTab]();
+    const content = { loved: lovedTab, watchlist: watchTab, seen: seenTab, voyages: voyagesTab, comets: cometsTab, aside: asideTab, journal: journalTab }[memo.skyTab]();
     replace(body, tabs, content);
   }
 
@@ -537,6 +539,40 @@ export function createPanels(app) {
       list.map(star => keptRow(star, films[star].d, [mini('undo', 'Bring it back', () => app.toggle('hidden', star, false))]))];
   }
 
+  // ── Comets: tonight's, while it is still crossing the sky, and every one caught, the latest first.
+  const nightName = night => {
+    const [y, m, d] = night.split('-').map(Number);
+    const date = new Date(y, m - 1, d);
+    return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', ...(y !== new Date().getFullYear() ? { year: 'numeric' } : {}) });
+  };
+  function cometsTab() {
+    const tonight = app.tonight();
+    const nodes = [];
+    if (tonight && !tonight.caught) {
+      nodes.push(h('div.comet-card',
+        h('p.comet-card-kicker', icon('comet', 15), h('span', 'Tonight\'s comet')),
+        h('p.comet-card-text', 'It is crossing the sky now, carrying a film the chart thinks you are missing. Catch it to see which.'),
+        h('div.panel-actions',
+          h('button.act.act-primary', { type: 'button', onclick: () => { if (app.small) close(); app.catchComet(); } }, icon('comet', 16), h('span', 'Catch it')),
+          h('button.act', { type: 'button', onclick: () => { close(); app.showComet(); } }, icon('eye', 16), h('span', 'Show me where it is')))));
+    }
+    const caught = store.state.comets.filter(entry => entry.caught && app.starOf(entry.slug) >= 0).reverse();
+    if (!caught.length) {
+      nodes.push(note('A comet crosses the sky each night, carrying a film the chart thinks you are missing. Catch it and it is kept here.'));
+      return nodes;
+    }
+    const missed = store.state.comets.filter(entry => !entry.caught && entry.night !== tonight?.night).length;
+    nodes.push(note(`${plural(caught.length, 'comet')} caught, the latest first.${missed ? ` ${plural(missed, 'comet')} got away.` : ''}`));
+    nodes.push(h('div.set-rows', caught.map(entry => {
+      const star = app.starOf(entry.slug);
+      return filmRow(star, {
+        light: entry.light, kicker: entry.night === tonight?.night ? 'Tonight' : nightName(entry.night),
+        bodyNode: h('span.frow-shared', app.cometReason(entry)), onGo: () => go(star),
+      });
+    })));
+    return nodes;
+  }
+
   function voyagesTab() {
     const routes = [...store.state.routes].reverse();
     if (!routes.length) return note('Every voyage you land is kept here with the road that led to it. Set out from any film to begin one.');
@@ -618,6 +654,7 @@ export function createPanels(app) {
       counts.seen ? `${counts.seen} watched` : '', counts.hidden ? `${counts.hidden} set aside` : '',
       counts.routes ? plural(counts.routes, 'voyage') : '', counts.visited ? plural(counts.visited, 'star') + ' visited' : '',
       counts.found ? plural(counts.found, 'film') + ' from beyond the chart' : '',
+      counts.comets ? plural(counts.comets, "night's comet", "nights' comets") : '',
     ].filter(Boolean);
     memo.journalError = '';
     memo.journalText = '';
@@ -822,6 +859,8 @@ export function createPanels(app) {
     if (!RENDER[name]) return;
     const before = state.tool?.name || null;
     if (name === 'set' && before !== 'set') memo.back = BACK_TO[before] ? before : null;
+    // A decade lit only because it was opened is kept lit once its films are listed.
+    if (name === 'set' && state.current?.auto) state.current.auto = false;
     const same = before === name;
     state.tool = { name };
     sheet.hidden = false;
@@ -858,6 +897,7 @@ export function createPanels(app) {
     else if (what === 'current' && (name === 'figures' || name === 'nebulae')) again(name);
     else if (what === 'voyage' && (name === 'passage' || name === 'set')) again(name);
     else if ((what === 'journey' || what === 'focus') && name === 'voyage') again(name);
+    else if (what === 'comet' && name === 'sky') again(name);
     else if (what === 'focus' && name === 'figures') again(name);
     else if (what === 'sky' && name === 'voyage' && !state.journey) again(name);
   });

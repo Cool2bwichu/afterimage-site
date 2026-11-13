@@ -107,6 +107,39 @@ html, body { margin: 0; height: 100%; background: var(--ink); overflow: hidden; 
 .lbl-galaxy-name { font-family: var(--serif); font-weight: 500; font-size: 25px; line-height: 1.05; letter-spacing: 0.02em; color: var(--ivory); text-shadow: 0 0 18px rgba(5, 8, 14, 0.95), 0 0 4px rgba(5, 8, 14, 0.9), 0 1px 2px rgba(5, 8, 14, 0.9); transition: color 0.3s; }
 .lbl-galaxy-count { font-size: 9.5px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--light); opacity: 0.75; text-shadow: 0 0 8px rgba(5, 8, 14, 0.95); }
 .lbl-galaxy:hover .lbl-galaxy-name { color: var(--light); }
+/* The kinds of film around the horizon of Lookback, each where its line of sight runs out. */
+.lbl-kind { position: absolute; left: 0; top: 0; will-change: transform; opacity: 0; pointer-events: none; transition: opacity 0.5s var(--ease); white-space: nowrap; padding: 4px 8px; font-size: 10px; letter-spacing: 0.24em; text-transform: uppercase; color: color-mix(in srgb, var(--c) 82%, #fff); text-shadow: 0 0 10px rgba(5, 8, 14, 1), 0 0 3px rgba(5, 8, 14, 1); touch-action: none; }
+.lbl-kind.on { pointer-events: auto; }
+.lbl-kind:hover { color: #fff; }
+
+/* Tonight's comet: a head of cold light and a tail streaming back the way it came. */
+.comet-layer { position: absolute; inset: 0; pointer-events: none; }
+.comet { position: absolute; left: 0; top: 0; width: var(--tail, 120px); height: 28px; margin-top: -14px; padding: 0; border: 0; background: none; transform-origin: 0 50%; opacity: 0; pointer-events: none; cursor: pointer; will-change: transform, opacity; }
+.comet.on { pointer-events: auto; }
+.comet-tail { position: absolute; left: 0; top: 50%; width: 100%; height: 5px; margin-top: -2.5px; clip-path: polygon(0 0, 100% 50%, 0 100%); background: linear-gradient(90deg, rgba(236, 244, 255, 0.95), rgba(190, 216, 255, 0.5) 22%, rgba(150, 190, 255, 0.14) 62%, transparent); }
+.comet-tail::before { content: ''; position: absolute; left: 0; top: 50%; width: 135%; height: 16px; margin-top: -8px; clip-path: polygon(0 35%, 100% 50%, 0 65%); background: linear-gradient(90deg, rgba(150, 200, 255, 0.4), rgba(120, 170, 255, 0.12) 45%, transparent); filter: blur(3px); }
+.comet-head { position: absolute; left: 0; top: 50%; width: 10px; height: 10px; margin: -5px 0 0 -5px; border-radius: 50%; background: #fff; box-shadow: 0 0 7px 3px rgba(225, 238, 255, 0.95), 0 0 26px 9px rgba(150, 196, 255, 0.5), 0 0 70px 22px rgba(120, 170, 255, 0.18); transition: transform 0.3s var(--ease); }
+/* A fingertip catches it more easily than the eye sees it. */
+.comet-head::after { content: ''; position: absolute; inset: -16px; border-radius: 50%; }
+.comet:hover .comet-head, .comet:focus-visible .comet-head { transform: scale(1.35); }
+.comet:focus-visible { outline: none; }
+.comet:focus-visible .comet-head::after { box-shadow: 0 0 0 2px rgba(222, 198, 160, 0.8); inset: -9px; }
+.comet.caught .comet-head { animation: comet-flare 0.9s var(--ease) forwards; }
+.comet.caught .comet-tail { transition: opacity 0.5s; opacity: 0; }
+@keyframes comet-flare { 0% { transform: scale(1.3); } 35% { transform: scale(3.2); opacity: 1; } 100% { transform: scale(5); opacity: 0; } }
+/* A decade in Lookback: one line along the ruler of rings. */
+/* A kind of film through the decades of Lookback: a bar for each ring. */
+.kind-time { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 3px; align-items: end; height: 92px; margin-top: 10px; }
+.kind-decade { display: grid; grid-template-rows: 1fr auto; gap: 5px; height: 100%; padding: 0; color: var(--faint); }
+.kind-decade:disabled { opacity: 0.35; cursor: default; }
+.kind-bar { align-self: end; height: max(2px, var(--h)); border-radius: 3px 3px 1px 1px; background: color-mix(in srgb, var(--light) 45%, transparent); transition: background 0.2s; }
+.kind-decade:not(:disabled):hover .kind-bar, .kind-decade.on .kind-bar { background: var(--light); box-shadow: 0 0 12px color-mix(in srgb, var(--light) 50%, transparent); }
+.kind-label { font-size: 9px; letter-spacing: 0.04em; text-align: center; white-space: nowrap; }
+.kind-decade.on .kind-label { color: var(--ivory); }
+.sight-run + .sight-run { margin-top: 14px; }
+.sight-way { margin: 10px 0 4px; font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--faint); }
+.lbl-galaxy.ring { display: inline-flex; align-items: baseline; gap: 9px; padding: 4px 10px; }
+.lbl-galaxy.ring .lbl-galaxy-name { font-size: 19px; font-style: italic; }
 
 .lbl-arm { font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase; white-space: nowrap; color: var(--light); padding: 4px 8px; text-shadow: 0 0 10px rgba(5, 8, 14, 1), 0 0 3px rgba(5, 8, 14, 1); }
 .lbl-arm:hover { color: var(--ivory); }
@@ -231,8 +264,13 @@ button.crumb:hover { color: var(--ivory); }
 .dial-light:hover .dial-name, .dial-light.on .dial-name { max-width: 90px; margin-left: 9px; opacity: 1; }
 .dial-light.on { color: var(--c); background: color-mix(in srgb, var(--c) 13%, transparent); padding: 0 14px 0 11px; }
 .dial-light.on .dial-swatch { opacity: 1; box-shadow: 0 0 14px 1px var(--c); }
+/* Lookback is not a light but time: set a little apart, its swatch a point with rings around it. */
+.dial-light.time { position: relative; margin-left: 9px; }
+.dial-light.time::before { content: ''; position: absolute; left: -6px; top: 25%; bottom: 25%; width: 1px; background: var(--line-strong); }
+.dial-light.time .dial-swatch { background: radial-gradient(circle, var(--c) 0 22%, transparent 26% 46%, var(--c) 50% 58%, transparent 62% 78%, color-mix(in srgb, var(--c) 70%, transparent) 82%); }
 .dial-line { font-size: 11px; letter-spacing: 0.06em; color: var(--faint); text-shadow: 0 0 8px rgba(5, 8, 14, 1); white-space: nowrap; }
 .dial-line strong { font-weight: 500; color: var(--light); }
+.dial-say-short { display: none; }
 
 .zoom { justify-self: end; display: grid; gap: 2px; padding: 4px; border-radius: 999px; border: 1px solid var(--line); background: var(--glass); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
 .zoom button { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; color: var(--dim); }
@@ -466,6 +504,9 @@ button.figure:hover, .figure.on { border-color: var(--starlight); background: rg
 .enter-foot { max-width: 44em; margin-top: 44px; font-size: 12px; letter-spacing: 0.04em; color: var(--dim); text-shadow: 0 0 10px rgba(5, 8, 14, 1), 0 0 3px rgba(5, 8, 14, 1); }
 .enter-way.enter-back { padding-left: 7px; border-color: rgba(240, 201, 135, 0.45); text-transform: none; letter-spacing: 0.02em; font-size: 13px; }
 .enter-way.enter-back:hover { border-color: rgba(240, 201, 135, 0.8); }
+.enter-way.enter-comet { border-color: rgba(169, 200, 255, 0.4); color: #dfeaff; }
+.enter-way.enter-comet:hover { border-color: rgba(169, 200, 255, 0.85); background: rgba(169, 200, 255, 0.1); }
+.enter-way.enter-comet svg { color: #a9c8ff; filter: drop-shadow(0 0 5px rgba(169, 200, 255, 0.7)); }
 .enter-back-poster { flex: none; width: 19px; }
 .enter-back-poster .poster { border-radius: 2px; }
 .enter-back-name { max-width: 22em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -538,6 +579,10 @@ button.figure:hover, .figure.on { border-color: var(--starlight); background: rg
 .tab { display: inline-flex; align-items: center; gap: 6px; flex: none; height: 32px; padding: 0 12px; border-radius: 999px; font-size: 12px; color: var(--dim); white-space: nowrap; transition: color 0.25s, background 0.25s; }
 .tab:hover { color: var(--ivory); }
 .tab.on { color: var(--ivory); background: rgba(222, 198, 160, 0.12); box-shadow: inset 0 0 0 1px var(--line-strong); }
+.comet-card { margin: 16px 0 6px; padding: 16px 18px 4px; border-radius: 14px; border: 1px solid rgba(169, 200, 255, 0.3); background: radial-gradient(120% 140% at 0% 0%, rgba(169, 200, 255, 0.13), transparent 60%); }
+.comet-card-kicker { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 10.5px; letter-spacing: 0.2em; text-transform: uppercase; color: #a9c8ff; }
+.comet-card-kicker svg { filter: drop-shadow(0 0 4px rgba(169, 200, 255, 0.7)); }
+.comet-card-text { margin: 8px 0 0; font-family: var(--serif); font-size: 17px; line-height: 1.4; color: var(--ivory); }
 .tab-n { font-size: 10px; font-weight: 600; color: var(--starlight); }
 .mrow { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 2px; }
 .mrow > .frow { margin-right: 0; width: calc(100% + 12px); }
@@ -748,6 +793,13 @@ button.figure:hover, .figure.on { border-color: var(--starlight); background: rg
   .enter-field { height: 56px; margin-top: 34px; }
   .enter-way { height: 40px; padding: 0 16px; font-size: 11px; }
   .lbl-galaxy-name { font-size: 21px; }
+  /* Eight lights in one row: on a phone the lit one is named on the line beneath, not inside the row. */
+  .dial-light.on .dial-name { max-width: 0; margin-left: 0; opacity: 0; }
+  .dial-light.on { padding: 0 10px; }
+  .dial-light.time { margin-left: 7px; }
+  .dial-light.time::before { left: -5px; }
+  .dial-say { display: none; }
+  .dial-say-short { display: inline; }
 }
 
 @media (prefers-reduced-motion: reduce) {

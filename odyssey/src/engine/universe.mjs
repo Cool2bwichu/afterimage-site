@@ -9,10 +9,12 @@ import { decodeArray } from './codec.mjs';
 import { LIGHTS, LIGHT_IDS } from './lights.mjs';
 import { buildLightIndex, standardise, topK } from './similarity.mjs';
 import { mulberry32, hashString, gaussian } from './rng.mjs';
+import { layoutTime, TIME } from './time.mjs';
 
 export const STORY_CURVE_WEIGHT = 0.05; // the fortune curve is a rough instrument: a tiebreak, not a verdict
 export const LINK_BONUS = 0.22; // a drawn reading pulls two films together in white light
-export const SKIES = ['white', ...LIGHT_IDS];
+export const CHARTED_SKIES = ['white', ...LIGHT_IDS]; // laid out by the compiler
+export const SKIES = [...CHARTED_SKIES, TIME];         // and Lookback, laid out here from the white sky and the years
 export const UNLIT = 255;
 const NEIGHBOUR_FLOOR = 0.08; // below this a light has nothing to say about two films
 
@@ -122,15 +124,15 @@ export function openUniverse(bundle) {
   let model = createModel({ count: base, idf, lights: rows, curves, links });
   const scale = model.scale; // frozen: later stars never change how charted films compare
 
-  const positions = Object.fromEntries(SKIES.map(sky => [sky, decodeArray(bundle.positions[sky], 'f32')]));
-  const galaxyOf = Object.fromEntries(SKIES.map(sky => [sky, decodeArray(bundle.membership[sky], 'u8')]));
-  const armOf = Object.fromEntries(SKIES.map(sky => [sky, decodeArray(bundle.arms[sky], 'u8')]));
+  const positions = Object.fromEntries(CHARTED_SKIES.map(sky => [sky, decodeArray(bundle.positions[sky], 'f32')]));
+  const galaxyOf = Object.fromEntries(CHARTED_SKIES.map(sky => [sky, decodeArray(bundle.membership[sky], 'u8')]));
+  const armOf = Object.fromEntries(CHARTED_SKIES.map(sky => [sky, decodeArray(bundle.arms[sky], 'u8')]));
   const near = bundle.near ? decodeArray(bundle.near.white, 'u16') : new Uint16Array(0);
   const nearK = bundle.near ? bundle.near.k : 0;
 
   // How far out the unlit ring sits in each sky (measured from the chart itself).
   const ringOf = {};
-  for (const sky of SKIES) {
+  for (const sky of CHARTED_SKIES) {
     let reach = 0;
     const P = positions[sky];
     for (let i = 0; i < base; i += 1) {
@@ -147,7 +149,7 @@ export function openUniverse(bundle) {
 
   const universe = {
     bundle, base, films, traits, rows, positions, galaxyOf, armOf, near, nearK,
-    galaxies: bundle.galaxies,
+    galaxies: { ...bundle.galaxies },
     get count() { return films.length; },
     get model() { return model; },
     get idf() { return idf; },
@@ -243,7 +245,7 @@ export function openUniverse(bundle) {
         armOf[sky] = grown(armOf[sky], count, UNLIT);
       }
       const scratch = new Float32Array(count);
-      for (const { i } of fresh) placeStar(i, scratch);
+      for (const { i } of fresh) { placeStar(i, scratch); universe.time.place(i); }
       for (const listener of listeners) listener({ added: fresh.map(entry => entry.i), count });
       return added;
     },
@@ -251,7 +253,7 @@ export function openUniverse(bundle) {
 
   // A new star takes its place among the films it is most like, in each sky.
   function placeStar(i, scratch) {
-    for (const sky of SKIES) {
+    for (const sky of CHARTED_SKIES) {
       const P = positions[sky];
       const G = galaxyOf[sky];
       const random = mulberry32(hashString(`deep:${films[i].s}:${sky}`));
@@ -290,6 +292,9 @@ export function openUniverse(bundle) {
       armOf[sky][i] = armOf[sky][kin[0].i];
     }
   }
+
+  // Lookback is laid out from the white sky and the years, here, the same way every time.
+  universe.time = layoutTime(universe, UNLIT);
 
   return universe;
 }

@@ -9,8 +9,12 @@
 export const FORMAT = 'afterimage-odyssey';
 export const VERSION = 3;
 const LIGHTS = new Set(['white', 'story', 'feeling', 'image', 'idea', 'world', 'hands']);
+// The skies a voyager may have been looking at: the lights, and Lookback.
+const SKIES = new Set([...LIGHTS, 'time']);
 const MARKS = ['loved', 'seen', 'watchlist', 'hidden', 'visited'];
-const LIMITS = { slugs: 20000, found: 2400, routes: 60, stops: 40, arrivals: 400, wake: 240 };
+const LIMITS = { slugs: 20000, found: 2400, routes: 60, stops: 40, arrivals: 400, wake: 240, comets: 60 };
+const NIGHT = /^\d{4}-\d{2}-\d{2}$/;
+const WHY = new Set(['loved', 'visited', 'known']);
 
 const cut = (value, length = 700) => (typeof value === 'string' ? value.slice(0, length) : '');
 const isSlug = value => typeof value === 'string' && value.length > 0 && value.length <= 180;
@@ -36,6 +40,19 @@ export function cleanRoute(route) {
     savedAt: cut(route.savedAt, 60),
     stops,
     ...(isSlug(route.landed) ? { landed: route.landed } : {}),
+  };
+}
+
+/** A night's comet, as kept: { night, slug, from, light, why, caught }, or null if it is not one. */
+export function cleanComet(comet) {
+  if (!comet || typeof comet !== 'object' || typeof comet.night !== 'string' || !NIGHT.test(comet.night) || !isSlug(comet.slug)) return null;
+  return {
+    night: comet.night,
+    slug: comet.slug,
+    from: isSlug(comet.from) ? comet.from : null,
+    light: LIGHTS.has(comet.light) ? comet.light : null,
+    why: WHY.has(comet.why) ? comet.why : 'known',
+    caught: comet.caught === true,
   };
 }
 
@@ -92,7 +109,8 @@ export function exportArchive(state, now = new Date()) {
     found: [...(state.found || [])],
     arrivals: { ...(state.arrivals || {}) },
     routes: [...(state.routes || [])],
-    sky: LIGHTS.has(state.sky) ? state.sky : 'white',
+    comets: [...(state.comets || [])],
+    sky: SKIES.has(state.sky) ? state.sky : 'white',
   };
 }
 
@@ -161,7 +179,18 @@ export function mergeArchive(state, archive) {
       if (arrival) next.arrivals[slug] = arrival;
     }
   }
-  if (LIGHTS.has(archive.sky)) next.sky = archive.sky;
+  // Comets, by night: a night already kept here keeps its own film, and one caught in either is caught.
+  if (archive.comets !== undefined && (!Array.isArray(archive.comets) || archive.comets.length > 400)) throw new Error('The comets in this file are not readable.');
+  const comets = new Map((state.comets || []).map(comet => [comet.night, { ...comet }]));
+  counts.comets = 0;
+  for (const raw of archive.comets || []) {
+    const comet = cleanComet(raw);
+    if (!comet) continue;
+    const here = comets.get(comet.night);
+    if (!here) { comets.set(comet.night, comet); counts.comets += 1; } else if (here.slug === comet.slug && comet.caught) here.caught = true;
+  }
+  next.comets = [...comets.values()].sort((a, b) => (a.night < b.night ? -1 : a.night > b.night ? 1 : 0)).slice(-LIMITS.comets);
+  if (SKIES.has(archive.sky)) next.sky = archive.sky;
   next.entered = true;
   return { state: next, counts };
 }

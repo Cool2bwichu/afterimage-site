@@ -47,7 +47,7 @@ function along(rx, ry, angle) {
 
 export function createOrbits({ root, cosmos, universe, small = false, reducedMotion = false, insets = { left: 0, right: 0, top: 0, bottom: 0 }, onStar, onHover, onMode }) {
   const lines = svg('svg', { class: 'orbit-rings', 'aria-hidden': 'true' });
-  const moons = h('div.orbit-moons', { role: 'group', 'aria-label': 'Films nearest this one, one ring for each light' });
+  const moons = h('div.orbit-moons', { role: 'group', 'aria-label': 'The films nearest this one, in rings around it' });
   const words = svg('svg', { class: 'orbit-names', 'aria-hidden': 'true' });
   const layer = h('div.orbits', lines, moons, words);
   root.append(layer);
@@ -72,7 +72,9 @@ export function createOrbits({ root, cosmos, universe, small = false, reducedMot
     words.append(named);
     moons.append(box);
     const built = rings.map((ring, k) => {
-      const light = lightById(ring.light);
+      // A ring of Lookback (before, after, of its time) carries its own name and colour.
+      const light = ring.name ? { name: ring.name, color: ring.color } : lightById(ring.light);
+      const says = ring.says || `nearest by ${light.name.toLowerCase()}`;
       const path = svg('path', { class: 'orbit-ring', id: `orbit-ring-${id}-${k}` });
       path.style.setProperty('--c', light.color);
       group.append(path);
@@ -89,8 +91,8 @@ export function createOrbits({ root, cosmos, universe, small = false, reducedMot
         const film = universe.films[other];
         const element = h('button.orbit-moon', {
           type: 'button', tabindex: '-1', style: { '--c': light.color, '--hi': film.hi, '--lo': film.lo },
-          title: `${film.t} (${film.y}) · nearest by ${light.name.toLowerCase()}`,
-          'aria-label': `${film.t}, ${film.y}: near by ${light.name.toLowerCase()}`,
+          title: `${film.t} (${film.y}) · ${says}`,
+          'aria-label': `${film.t}, ${film.y}: ${says}`,
           onclick: event => { event.stopPropagation(); onStar?.(other, ring.light); },
           onpointerenter: () => onHover?.(other), onpointerleave: () => onHover?.(-1),
         }, poster(film, { words: false }), h('span.orbit-moon-title', film.t));

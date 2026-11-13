@@ -1,5 +1,5 @@
 // The six lights: six ways two films can be alike. The universe re-forms under
-// each one. White light is all of them together.
+// each one. White light is all of them together, and Lookback is time.
 export const LIGHTS = [
   {
     id: 'story', name: 'Story', color: '#f2b066',
@@ -52,7 +52,16 @@ export const WHITE = {
   short: 'everything at once',
 };
 
-export const ALL_LIGHTS = [WHITE, ...LIGHTS];
+// Not a seventh light but another way of looking: the same films placed by when
+// they were made (see time.mjs). It sits on the dial after the lights, on key 7.
+export const LOOKBACK = {
+  id: 'time', name: 'Lookback', color: '#ec8c66',
+  asks: 'When it was made',
+  line: 'The farther the star, the older its light: the present at the centre, a ring for each decade, the silent years at the horizon. A film keeps the direction of its kind, so looking outward from it is looking back along its line.',
+  short: 'when it was made',
+};
+
+export const ALL_LIGHTS = [WHITE, ...LIGHTS, LOOKBACK];
 export const LIGHT_IDS = LIGHTS.map(light => light.id);
 export const lightById = id => ALL_LIGHTS.find(light => light.id === id) || WHITE;
 export const lightIndex = id => LIGHT_IDS.indexOf(id);

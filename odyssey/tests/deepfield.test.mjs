@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { LIGHT_IDS } from '../src/engine/lights.mjs';
-import { SKIES, UNLIT } from '../src/engine/universe.mjs';
+import { CHARTED_SKIES, SKIES, UNLIT } from '../src/engine/universe.mjs';
 import { passage } from '../src/engine/voyage.mjs';
 import { normaliseReading, plainReading, readingSlug, reviveReading, starFromReading } from '../brain/reading.mjs';
 import { restoreStars, settleReadings } from '../brain/navigator.mjs';
@@ -93,7 +93,7 @@ test('a star with nothing to place it by waits on the outer ring', () => {
   const { universe, vocabulary } = open();
   const bare = normaliseReading({ title: 'Only A Name', year: 1971 }, vocabulary);
   const [index] = universe.addStars([{ film: { t: bare.title, y: bare.year, s: readingSlug(bare), hi: bare.hi, lo: bare.lo, deep: 1 }, rows: {} }]);
-  for (const sky of SKIES) {
+  for (const sky of CHARTED_SKIES) {
     assert.equal(universe.galaxyOf[sky][index], UNLIT);
     let reach = 0;
     for (let i = 0; i < universe.base; i += 1) {
@@ -101,6 +101,10 @@ test('a star with nothing to place it by waits on the outer ring', () => {
     }
     assert.ok(Math.hypot(universe.positions[sky][index * 3], universe.positions[sky][index * 3 + 2]) > reach, `${sky}: beyond everything lit`);
   }
+  // Its year is known, so Lookback places it in its decade, though in no kind's wedge.
+  const ring = universe.galaxies.time[universe.galaxyOf.time[index]];
+  assert.ok(ring && ring.from <= 1971 && ring.to >= 1971, 'its decade');
+  assert.equal(universe.armOf.time[index], UNLIT);
   // Asked for again, it is the same star.
   assert.deepEqual(universe.addStars([{ film: { t: bare.title, y: bare.year, s: readingSlug(bare) }, rows: {} }]), [index]);
 });

@@ -248,7 +248,8 @@ const namingOf = new WeakMap();
  */
 export function holdsArm(universe, star, arm) {
   if (!arm || star < 0) return false;
-  if (arm.name.startsWith('Around ')) return true;
+  // A kind of film in a decade of Lookback is named for the galaxy, not for traits: it holds all its films.
+  if (arm.whole || arm.name.startsWith('Around ')) return true;
   let naming = namingOf.get(arm);
   if (!naming) {
     const words = new Set(arm.name.split(' · '));

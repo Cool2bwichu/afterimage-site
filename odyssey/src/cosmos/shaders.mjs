@@ -332,9 +332,10 @@ uniform float uTime;
 out vec4 frag;
 void main() {
   float across = exp(-vUV.y * vUV.y * 7.0) * 0.55 + exp(-vUV.y * vUV.y * 60.0);
-  float ends = smoothstep(0.0, 0.035, vUV.x) * (1.0 - smoothstep(0.93, 1.0, vUV.x) * 0.75);
-  float brightness = 1.0;
   float style = vStyle.y;
+  // A contour (style 4) is one stroke drawn in pieces: its pieces do not fade at their ends.
+  float ends = style > 3.5 ? 1.0 : smoothstep(0.0, 0.035, vUV.x) * (1.0 - smoothstep(0.93, 1.0, vUV.x) * 0.75);
+  float brightness = 1.0;
   if (style > 0.5 && style < 1.5) {
     // Light travelling outward along a ray.
     float travel = fract(vUV.x * max(vLength, 1.0) / 190.0 - uTime * 0.42 + vStyle.z);
@@ -342,7 +343,7 @@ void main() {
   } else if (style > 1.5 && style < 2.5) {
     // A drawn line: dashes.
     brightness = 0.25 + 0.75 * smoothstep(0.42, 0.5, abs(fract(vUV.x * max(vLength, 1.0) / 13.0) - 0.5) * 2.0);
-  } else if (style > 2.5) {
+  } else if (style > 2.5 && style < 3.5) {
     // The wake: fainter the further back it lies.
     brightness = 0.4 + 0.6 * vStyle.z;
   }

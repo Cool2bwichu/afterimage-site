@@ -126,6 +126,7 @@ async function boot() {
     onStar: star => app?.focusStar(star),
     onGalaxy: g => app?.openGalaxy(g),
     onArm: (g, arm) => app?.openGalaxy(g, arm),
+    onKind: g => app?.showKind(g),
   });
   app = createApp({ root, universe, depth, cosmos, labels, pilot, store, search, small, reducedMotion, edition: config.edition || 'site' });
   window.__odyssey = { app, universe, cosmos, pilot, store };

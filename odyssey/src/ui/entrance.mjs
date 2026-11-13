@@ -109,10 +109,12 @@ export function createEntrance(app) {
 
   function drawWays() {
     const last = lastStar();
+    const comet = app.tonight();
     replace(ways,
       last >= 0 ? h('button.enter-way.enter-back', { type: 'button', title: `Back to ${films[last].t}, where you were last`, onclick: () => begin(() => app.focusStar(last)) },
         h('span.enter-back-poster', poster(films[last], { words: false, eager: true })),
         h('span.enter-back-name', `Back to ${films[last].t}`)) : null,
+      comet && !comet.caught ? h('button.enter-way.enter-comet', { type: 'button', title: 'A film the chart thinks you are missing crosses the sky tonight', onclick: () => begin(() => app.showComet()) }, icon('comet', 18), h('span', 'Tonight\'s comet')) : null,
       h('button.enter-way', { type: 'button', onclick: () => begin(() => app.panels.open('voyage')) }, icon('door', 18), h('span', 'Set out')),
       h('button.enter-way', { type: 'button', onclick: () => begin(() => app.startDrift()) }, icon('drift', 18), h('span', 'Drift')),
       h('button.enter-way', { type: 'button', onclick: () => begin(() => app.panels.open('course')) }, icon('compass', 18), h('span', 'Plot a course')),

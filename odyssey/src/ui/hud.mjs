@@ -35,7 +35,7 @@ export function createHud(app) {
 
   // ── Bottom: the dial of lights.
   const dialButtons = ALL_LIGHTS.map((light, n) => h('button.dial-light', {
-    type: 'button', style: { '--c': light.color }, title: `${light.name}: ${light.asks} (${n})`, 'aria-label': `${light.name}: ${light.asks}`,
+    type: 'button', class: light.id === 'time' ? 'time' : '', style: { '--c': light.color }, title: `${light.name}: ${light.asks} (${n})`, 'aria-label': `${light.name}: ${light.asks}`,
     onclick: () => app.setSky(light.id),
   }, h('span.dial-swatch'), h('span.dial-name', light.name)));
   const dialLine = h('p.dial-line');
@@ -128,7 +128,11 @@ export function createHud(app) {
       dialButtons[n].setAttribute('aria-pressed', String(on));
     });
     const light = lightById(state.sky);
-    replace(dialLine, h('strong', light.asks), state.sky === 'white' ? ' · all six lights together' : ` · alike in ${light.short}`);
+    const said = { white: ' · all six lights together', time: ' · the present at the centre, the past at the edge' }[state.sky];
+    // On a phone the row of lights is too narrow to name the lit one: the line beneath it does.
+    replace(dialLine,
+      h('span.dial-say', h('strong', light.asks), said || ` · alike in ${light.short}`),
+      h('span.dial-say-short', h('strong', light.name), ` · ${light.short}`));
   }
 
   function logbook() {
@@ -175,11 +179,23 @@ export function createHud(app) {
   function lit() {
     const set = state.current;
     current.hidden = !set;
-    if (!set) return;
-    current.style.setProperty('--c', set.colour || '#dec6a0');
-    currentLabel.textContent = set.label.charAt(0).toUpperCase() + set.label.slice(1);
-    currentNote.textContent = ` · ${plural(set.stars.size, 'film')}`;
-    current.title = set.note || '';
+    if (set) {
+      current.style.setProperty('--c', set.colour || '#dec6a0');
+      currentLabel.textContent = set.label.charAt(0).toUpperCase() + set.label.slice(1);
+      currentNote.textContent = ` · ${plural(set.stars.size, 'film')}`;
+      current.title = set.note || '';
+    }
+    keepClear();
+  }
+
+  // The names in the sky keep out from under the chip, measured once it has been laid out (a panel moves it).
+  let clearing = 0;
+  function keepClear() {
+    cancelAnimationFrame(clearing);
+    clearing = requestAnimationFrame(() => {
+      const box = current.hidden ? null : current.getBoundingClientRect();
+      app.labels?.setBlocked(box && box.width ? [[box.left - 6, box.top - 4, box.right + 6, box.bottom + 4]] : []);
+    });
   }
 
   function journey() {
@@ -245,6 +261,7 @@ export function createHud(app) {
       if (!what || what === 'marks' || what === 'drift' || what === 'tool' || what === 'focus') counts();
       if (!what || what === 'navigator') navigator();
       if (!what || what === 'current') lit();
+      else if (what === 'focus' || what === 'tool') keepClear();
       if (!what || what === 'voyage' || what === 'focus' || what === 'journey' || what === 'tool') journey();
       if (!what || what === 'journey') counts();
       if (!what || what === 'history') history();

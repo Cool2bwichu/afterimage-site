@@ -27,9 +27,9 @@ test('typed arrays survive the journey through the bundle', () => {
   assert.throws(() => decodeArray('AAAA', 'f64'));
 });
 
-test('there are six lights and white, each with a colour and a question', () => {
+test('there are six lights, white, and Lookback, each with a colour and a question', () => {
   assert.deepEqual(LIGHT_IDS, ['story', 'feeling', 'image', 'idea', 'world', 'hands']);
-  assert.equal(ALL_LIGHTS.length, 7);
+  assert.deepEqual(ALL_LIGHTS.map(light => light.id), ['white', ...LIGHT_IDS, 'time'], 'keys 0 to 7, in order');
   for (const light of ALL_LIGHTS) assert.ok(light.name && light.asks && /^#[0-9a-f]{6}$/.test(light.color));
   assert.equal(lightById('nothing').id, 'white');
 });
