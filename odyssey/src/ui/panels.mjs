@@ -7,6 +7,7 @@ import { rankSet, trail } from '../engine/journey.mjs';
 import { h, icon, replace, plural } from './dom.mjs';
 import { poster } from './posters.mjs';
 import { source } from './dossier.mjs';
+import { createGrip } from './grip.mjs';
 
 const MOODS = [
   'Something quiet for a rainy Sunday',
@@ -29,11 +30,11 @@ export function createPanels(app) {
   const { universe, state, films, pilot, cosmos, store } = app;
   const heading = h('h2.sheet-heading');
   const body = h('div.sheet-scroll', { tabindex: '-1' });
-  const sheet = h('aside.sheet.sheet-left.tools', { hidden: true },
-    h('button.sheet-grip', { type: 'button', 'aria-label': 'Make this panel taller or shorter', onclick: () => { sheet.classList.toggle('tall'); app.frameCosmos(); } }),
-    h('header.sheet-top', heading, h('button.sheet-close', { type: 'button', 'aria-label': 'Close', onclick: () => close() }, icon('close', 18))),
-    body);
+  const grip = h('button.sheet-grip', { type: 'button', 'aria-label': 'Make this panel taller or shorter' });
+  const header = h('header.sheet-top', heading, h('button.sheet-close', { type: 'button', 'aria-label': 'Close', onclick: () => close() }, icon('close', 18)));
+  const sheet = h('aside.sheet.sheet-left.tools', { hidden: true }, grip, header, body);
   app.root.querySelector('#app').append(sheet);
+  createGrip({ sheet, grip, handles: [header], onResize: () => app.frameCosmos(), onClose: () => close() });
   sheet.addEventListener('transitionend', event => { if (event.target === sheet && event.propertyName === 'height') app.frameCosmos(); });
 
   const memo = {
@@ -669,7 +670,7 @@ export function createPanels(app) {
       waiting.length ? h('div.figure-grid', waiting.map(entry => h('button.figure-cell', {
         type: 'button', class: on(entry.id) ? 'on' : '', title: `An unnamed figure: something to do with ${hint(entry).name}, with ${films[hint(entry).star].t} among its stars`,
         onclick: () => app.browse('constellation', entry.id),
-      }, h('span.figure-cell-hint', hint(entry).name), h('span.figure-cell-n', `${films[hint(entry).star].t} and ${entry.total - 1} more`)))) : null);
+      }, h('span.figure-cell-hint', films[hint(entry).star].t), h('span.figure-cell-n', `${hint(entry).name} · ${plural(entry.total, 'star')}`)))) : null);
   }
 
   // ── Nebulae.

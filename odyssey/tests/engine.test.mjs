@@ -235,6 +235,32 @@ test('a current is found by a word of its name', () => {
   assert.deepEqual(search.traits('he'), [], 'two letters are not a word');
 });
 
+test('finding forgives the way people type', () => {
+  const first = query => universe.films[search.films(query, 1)[0]?.star]?.t;
+  const titled = title => universe.films.findIndex(film => film.t === title);
+  // Each case only where the chart holds the film, so a recompile does not break it.
+  if (titled('8½') >= 0) assert.equal(first('8 1/2'), '8½', 'a fraction typed with a slash');
+  if (titled('The Godfather Part II') >= 0) {
+    assert.equal(first('godfather 2'), 'The Godfather Part II', 'a sequel by its number, either way it is written');
+    assert.ok(search.answers(titled('The Godfather Part II'), 'godfather 2'));
+  }
+  if (titled('2001: A Space Odyssey') >= 0) assert.equal(first('2001'), '2001: A Space Odyssey', 'a year alone may be a title');
+  if (titled('Blade Runner 2049') >= 0) assert.equal(first('blade runner 2049'), 'Blade Runner 2049');
+  const film = universe.films[VERTIGO];
+  assert.equal(first(film.t.toLowerCase().replace(/i/, '')), film.t, 'a slip of the keyboard');
+  assert.ok(search.answers(VERTIGO, film.d.split(' ').pop()), 'a director answers for their films');
+  assert.ok(!search.answers(VERTIGO, `${film.t} 1901`), 'a year that is not the film\'s does not');
+  if (titled('Aliens') >= 0) assert.ok(!search.answers(titled('Aliens'), 'alien'), 'alien is not Aliens');
+});
+
+test('everyday words for kinds of film find the chart\'s own currents', () => {
+  for (const word of ['western', 'heist', 'sci-fi', 'slasher', 'film noir', 'western films']) {
+    const found = search.traits(word);
+    assert.ok(found.length > 0 && found[0].score === 4, `${word} finds a current`);
+    assert.ok(universe.traits[found[0].trait].df >= 4);
+  }
+});
+
 test('nothing on the chart sits outside its sky', () => {
   // The unlit ring is the furthest anything charted goes: a guard for the camera's reach.
   for (const sky of ['white', 'story']) {

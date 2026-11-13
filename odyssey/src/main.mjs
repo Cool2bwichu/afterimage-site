@@ -10,16 +10,28 @@ import { createPilot } from './nav/pilot.mjs';
 import { createReadings } from './nav/readings.mjs';
 import { createApp, OVERVIEW } from './ui/app.mjs';
 
+/* global __CHART_BYTES__ */
 const root = document.getElementById('odyssey');
 const veil = document.getElementById('veil');
 const config = window.ODYSSEY || {};
 // A build may name each file outright (the claude.ai edition names them for their contents).
 const dataUrl = name => config[name] || `${config.data || './data/'}${name}.json`;
+// How big the chart is, as the build measured it: the veil shows how much of it has come.
+const CHART_BYTES = config.chartBytes || (typeof __CHART_BYTES__ === 'number' ? __CHART_BYTES__ : 0);
 
-function say(text, detail = '') {
+function say(text, detail = '', retry = false) {
   if (!veil) return;
   veil.querySelector('.veil-line').textContent = text;
   veil.querySelector('.veil-detail').textContent = detail;
+  veil.querySelector('.veil-bar')?.classList.remove('on');
+  if (retry && !veil.querySelector('.veil-retry')) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'veil-retry';
+    button.textContent = 'Try again';
+    button.addEventListener('click', () => window.location.reload());
+    veil.append(button);
+  }
 }
 
 async function fetchJson(url) {
@@ -28,12 +40,40 @@ async function fetchJson(url) {
   return response.json();
 }
 
+/** The chart, read as it arrives, so a slow connection shows how far along it is. */
+async function fetchChart(url) {
+  const started = performance.now();
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`${url}: ${response.status}`);
+  const plain = !response.headers.get('content-encoding');
+  const expected = CHART_BYTES || (plain ? Number(response.headers.get('content-length')) || 0 : 0);
+  const bar = veil?.querySelector('.veil-bar');
+  if (!response.body || !expected || !bar) return response.json();
+  const fill = bar.firstElementChild;
+  const reader = response.body.getReader();
+  const chunks = [];
+  let received = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    received += value.length;
+    // Only a wait long enough to notice is given a bar.
+    if (performance.now() - started > 450) bar.classList.add('on');
+    fill.style.width = `${Math.min(100, (received / expected) * 100).toFixed(1)}%`;
+  }
+  const bytes = new Uint8Array(received);
+  let at = 0;
+  for (const chunk of chunks) { bytes.set(chunk, at); at += chunk.length; }
+  return JSON.parse(new TextDecoder().decode(bytes));
+}
+
 async function boot() {
   const small = window.matchMedia('(max-width: 720px)').matches;
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   const [bundle, posters] = await Promise.all([
-    fetchJson(dataUrl('universe')),
+    fetchChart(dataUrl('universe')),
     config.posters ? fetchJson(config.posters).catch(() => null) : null,
   ]);
   // Inside claude.ai a page can show only what was published with it.
@@ -58,9 +98,15 @@ async function boot() {
   const overviewDistance = cosmos.reachOf('white') * (small ? OVERVIEW.reachSmall : OVERVIEW.reach);
   cosmos.camera.jumpTo({ target: [0, -30, 0], distance: overviewDistance * 1.25, yaw: 0.5, pitch: OVERVIEW.pitch, bias: OVERVIEW.bias });
 
-  // The deeper notes on each film are only read by the Navigator; they follow later.
+  // The deeper notes on each film are read only by a Navigator inside this page (a companion keeps
+  // its own copy), so they are fetched the first time one comes aboard, and never for anyone else.
   const depth = [];
-  fetchJson(dataUrl('depth')).then(file => { for (const film of file.films || []) depth.push(film); }).catch(() => {});
+  let deepening = false;
+  const deepen = () => {
+    if (deepening) return;
+    deepening = true;
+    fetchJson(dataUrl('depth')).then(file => { for (const film of file.films || []) depth.push(film); }).catch(() => { deepening = false; });
+  };
 
   // What the Navigator wrote of each star before anyone arrived (scripts/pre-read.mjs), fetched a shard at a time.
   const readings = config.readings === false ? null : createReadings({ url: config.readings || `${config.data || './data/'}readings/index.json` });
@@ -68,7 +114,10 @@ async function boot() {
   let app = null;
   const pilot = createPilot({
     universe, depth, search, store, readings, edition: config.edition || 'site',
-    onStatus: () => app?.refresh('navigator'),
+    onStatus: status => {
+      if (status?.mode === 'inpage') deepen();
+      app?.refresh('navigator');
+    },
     // A catalogue has answered for stars already in the sky: their plates take the posters, and their dossiers the rest.
     onFacts: films => { postersFound(films); app?.refresh('facts'); },
   });
@@ -99,5 +148,5 @@ async function boot() {
 
 boot().catch(error => {
   console.error(error);
-  say('The chart could not be opened.', 'Reload the page to try again.');
+  say('The chart could not be opened.', 'The connection may have dropped while it loaded.', true);
 });

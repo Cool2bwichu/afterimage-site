@@ -13,6 +13,7 @@ import { createDossier } from './dossier.mjs';
 import { createSearchView } from './search.mjs';
 import { createPanels } from './panels.mjs';
 import { createEntrance } from './entrance.mjs';
+import { h } from './dom.mjs';
 
 const RGB = Object.fromEntries(ALL_LIGHTS.map(light => [light.id, hexToRgb(light.color)]));
 const IVORY = [0.96, 0.94, 0.9];
@@ -24,6 +25,7 @@ const PALE = [0.8, 0.88, 1];
 export const OVERVIEW = { reach: 2.0, reachSmall: 3.4, pitch: 0.95, bias: 0.125 };
 const DRIFT_EVERY = 12500;
 const HUD_TOP = 76; // the instruments along the top of the screen, and where you are beneath them
+const KEYS = [['/', 'find a film'], ['0–6', 'change the light'], ['← → ↑ ↓', 'turn the sky'], ['+ −', 'nearer, further'], ['Backspace', 'go back'], ['Esc', 'leave or close'], ['L', 'love'], ['W', 'watchlist'], ['D', 'drift'], ['H', 'the whole universe'], ['?', 'these keys']];
 
 export function createApp({ root, universe, depth, cosmos, labels, pilot, store, search, small, reducedMotion, edition = 'site' }) {
   const state = {
@@ -852,7 +854,25 @@ export function createApp({ root, universe, depth, cosmos, labels, pilot, store,
     return light ? `light-${light}` : '';
   }
 
+  // The browser's tab, history and bookmarks name where you are.
+  const pageTitle = document.title || 'AFTERIMAGE · The Odyssey';
+  function updateTitle() {
+    if (edition === 'claude') return; // an Artifact keeps the name it was published with
+    let place = '';
+    if (state.focus >= 0) {
+      const film = films[state.focus];
+      place = state.journey && state.journey.landed ? `Tonight: ${film.t}` : `${film.t} (${film.y})`;
+    } else if (state.galaxy >= 0) {
+      const galaxy = (universe.galaxies[state.sky] || [])[state.galaxy];
+      const arm = galaxy && state.arm >= 0 ? galaxy.arms.find(entry => entry.arm === state.arm) : null;
+      place = arm ? arm.name : galaxy ? galaxy.name : '';
+    }
+    const next = place ? `${place} · The Odyssey` : pageTitle;
+    if (document.title !== next) document.title = next;
+  }
+
   function updateAddress({ push = false } = {}) {
+    updateTitle();
     const name = addressOf();
     const now = window.location.hash.replace(/^#/, '');
     if (name === now) return;
@@ -953,6 +973,16 @@ export function createApp({ root, universe, depth, cosmos, labels, pilot, store,
     if (j && j.landed && film) text = `Tonight: ${film.t} (${film.y}), found on a voyage from ${j.path.map(stop => films[stop.star].t).join(' → ')}`;
     const link = edition === 'claude' ? '' : window.location.href;
     const words = link ? `${text}\n${link}` : text;
+    // On a phone, the phone's own way of sharing; anywhere else, or if it cannot, the clipboard.
+    const touch = small || window.matchMedia?.('(pointer: coarse)').matches;
+    if (touch && link && typeof navigator.share === 'function') {
+      try {
+        await navigator.share({ title: film ? film.t : 'The Odyssey', text, url: link });
+        return;
+      } catch (error) {
+        if (error?.name === 'AbortError') return; // they closed it: nothing to do
+      }
+    }
     try {
       await navigator.clipboard.writeText(words);
       app.hud?.toast(link ? 'Copied: the link and the film' : 'Copied', { detail: text, tone: 'pale' });
@@ -1031,14 +1061,35 @@ export function createApp({ root, universe, depth, cosmos, labels, pilot, store,
       return;
     }
     if (typing || !state.entered) return;
-    if (event.key === '/') { event.preventDefault(); app.searchView.open(); }
-    else if (/^[0-6]$/.test(event.key)) setSky(ALL_LIGHTS[Number(event.key)].id);
-    else if (event.key === 'h' || event.key === 'Home') goHome();
-    else if (event.key === 'd') { if (state.drift) stopDrift(); else startDrift(); }
-    else if (event.key === 'l' && state.focus >= 0) toggle('loved', state.focus);
-    else if (event.key === 'w' && state.focus >= 0) toggle('watchlist', state.focus);
-    else if (event.key === 'Backspace' && app.canGoBack()) { event.preventDefault(); back(); }
+    const key = event.key.length === 1 ? event.key.toLowerCase() : event.key; // Caps Lock or Shift change nothing
+    if (key === '/') { event.preventDefault(); app.searchView.open(); }
+    else if (/^[0-6]$/.test(key)) setSky(ALL_LIGHTS[Number(key)].id);
+    else if (key === 'h' || key === 'Home') goHome();
+    else if (key === 'd') { if (state.drift) stopDrift(); else startDrift(); }
+    else if (key === 'l' && state.focus >= 0) toggle('loved', state.focus);
+    else if (key === 'w' && state.focus >= 0) toggle('watchlist', state.focus);
+    else if (key === 'Backspace' && app.canGoBack()) { event.preventDefault(); back(); }
+    else if (key === '?') showKeys();
+    else if (key === '+' || key === '=') cosmos.camera.zoom(0.74);
+    else if (key === '-' || key === '_') cosmos.camera.zoom(1.35);
+    else if (key.startsWith('Arrow') && !event.target.closest?.('.sheet, .search-box, .entrance, .toast')) {
+      // The arrows turn the sky, unless they are scrolling a panel.
+      event.preventDefault();
+      const step = event.shiftKey ? 2.2 : 1;
+      if (key === 'ArrowLeft') cosmos.camera.orbit(-44 * step, 0);
+      else if (key === 'ArrowRight') cosmos.camera.orbit(44 * step, 0);
+      else if (key === 'ArrowUp') cosmos.camera.orbit(0, -36 * step);
+      else if (key === 'ArrowDown') cosmos.camera.orbit(0, 36 * step);
+    }
   });
+
+  // Every key, on one card: ? shows it, and ? again puts it away.
+  let keysCard = null;
+  function showKeys() {
+    if (keysCard?.shown) { keysCard.close(); keysCard = null; return; }
+    const detail = h('span.keys', KEYS.map(([name, what]) => h('span.key', h('kbd', name), ` ${what}`)));
+    keysCard = app.hud?.toast('Keys', { detail, tone: 'pale', hold: 16000 }) || null;
+  }
 
   return app;
 }

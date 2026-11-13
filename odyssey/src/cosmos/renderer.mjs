@@ -542,8 +542,19 @@ export function createCosmos({ canvas, universe, reducedMotion = false, small = 
     camera.resize(width, height);
   }
 
+  // At rest, with nothing flying, no light changing and no hand on the sky, everything
+  // in it moves slowly enough to be drawn half as often: no one sees the difference,
+  // and a laptop or a phone keeps its battery while someone reads.
+  let stirred = 0;
+  let drawn = 0;
+  const stir = () => { stirred = performance.now(); };
+  for (const type of ['pointerdown', 'pointermove', 'wheel', 'keydown', 'touchstart']) window.addEventListener(type, stir, { passive: true, capture: true });
+
   function draw(now) {
     if (!running) return;
+    const resting = !camera.flying && !transition && !glowEasing && now - stirred > 4000;
+    if (resting && now - drawn < 30) { requestAnimationFrame(draw); return; }
+    drawn = now;
     const seconds = now / 1000;
     const dt = Math.min(0.1, last ? seconds - last : 0.016);
     last = seconds;
@@ -787,6 +798,7 @@ export function createCosmos({ canvas, universe, reducedMotion = false, small = 
     get clock() { return clock; },
     setSky, project, projectPoint, pick, positionOf, restingPlace, setLines, reachOf, sizeAt, resize,
     setFocus(i) { focus = i; refreshGlowGoals(); },
+    get hover() { return hover; },
     setHover(i) { if (hover !== i) { hover = i; refreshGlowGoals(); } },
     setHighlight(set) { highlight = set && set.size ? set : null; refreshGlowGoals(); },
     setRayEnds(list) { rayEnds = new Set(list); refreshGlowGoals(); },
@@ -794,6 +806,11 @@ export function createCosmos({ canvas, universe, reducedMotion = false, small = 
     setMarks({ loved, visited }) { if (loved) marks.loved = loved; if (visited) marks.visited = visited; refreshGlowGoals(); },
     onFrame(listener) { frameListeners.add(listener); return () => frameListeners.delete(listener); },
     onSettled(listener) { settled.add(listener); return () => settled.delete(listener); },
-    stop() { running = false; observer?.disconnect(); window.removeEventListener('resize', resize); },
+    stop() {
+      running = false;
+      observer?.disconnect();
+      window.removeEventListener('resize', resize);
+      for (const type of ['pointerdown', 'pointermove', 'wheel', 'keydown', 'touchstart']) window.removeEventListener(type, stir, { capture: true });
+    },
   };
 }

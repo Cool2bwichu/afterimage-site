@@ -1,18 +1,29 @@
 // The threshold. One question, and a few ways to set out; and for a voyager
 // who has been here before, the way back to the last star they reached.
-import { fold } from '../engine/search.mjs';
-import { h, icon, replace } from './dom.mjs';
+import { seek } from '../engine/search.mjs';
+import { LIGHT_IDS, lightById } from '../engine/lights.mjs';
+import { h, icon, replace, plural } from './dom.mjs';
 import { poster } from './posters.mjs';
 
-/** Whether a title holds what was typed as whole words: "mulholland" is in Mulholland Drive, "alien" is not in Aliens. */
-const holds = (title, query) => ` ${fold(title)} `.includes(` ${fold(query)} `);
 
 export function createEntrance(app) {
   const { universe, state, films, search, store } = app;
-  const input = h('input.enter-input', { type: 'search', autocomplete: 'off', spellcheck: 'false', placeholder: 'Name a film that stayed with you', 'aria-label': 'Name a film that stayed with you' });
-  const suggestions = h('div.enter-suggestions', { role: 'listbox' });
+  const input = h('input.enter-input', {
+    type: 'search', autocomplete: 'off', spellcheck: 'false', placeholder: 'Name a film that stayed with you', 'aria-label': 'Name a film that stayed with you',
+    role: 'combobox', 'aria-autocomplete': 'list', 'aria-controls': 'enter-suggestions', 'aria-expanded': 'false',
+  });
+  const suggestions = h('div.enter-suggestions', { role: 'listbox', id: 'enter-suggestions', 'aria-label': 'Suggestions' });
   let items = [];
   let active = 0;
+
+  /** Marks the suggestion Enter would take, for the eye and for a screen reader. */
+  function setActive(n) {
+    const rows = [...suggestions.children];
+    active = Math.max(0, Math.min(rows.length - 1, n));
+    rows.forEach((row, index) => { row.classList.toggle('on', index === active); row.setAttribute('aria-selected', String(index === active)); });
+    if (rows[active]) input.setAttribute('aria-activedescendant', rows[active].id);
+    else input.removeAttribute('aria-activedescendant');
+  }
 
   function begin(action) {
     state.entered = true;
@@ -30,19 +41,36 @@ export function createEntrance(app) {
   function suggest() {
     const query = input.value.trim();
     items = query ? search.films(query, 5).map(entry => entry.star) : [];
-    active = 0;
-    const nodes = items.map((star, n) => h('button.enter-suggestion', { type: 'button', role: 'option', class: n === 0 ? 'on' : '', onclick: () => begin(() => app.focusStar(star)) },
+    // A kind of film ("heist", "western") lights up every film of that kind.
+    const currents = query.length >= 2 ? search.traits(query, 2).filter(entry => entry.score >= 3 || (!items.length && entry.score >= 2)) : [];
+    let n = 0;
+    const option = (cls, onclick, ...children) => {
+      const at = n;
+      n += 1;
+      return h(`button.enter-suggestion${cls}`, { type: 'button', role: 'option', id: `enter-option-${at}`, onclick, onpointerenter: () => setActive(at) }, ...children);
+    };
+    const nodes = items.map(star => option('', () => begin(() => app.focusStar(star)),
       h('span.search-poster', poster(films[star], { words: false })),
       h('span.search-text', h('span.search-name', films[star].t, h('span.frow-year', String(films[star].y))), h('span.search-sub', films[star].d || ''))));
+    for (const { trait } of currents) {
+      const record = universe.traits[trait];
+      const light = lightById(LIGHT_IDS[record.l]);
+      nodes.push(option('.current', () => begin(() => app.showTrait(trait)),
+        h('span.search-dot', { style: { '--c': light.color } }),
+        h('span.search-text', h('span.search-name', record.s || record.t), h('span.search-sub', `Light up the ${plural(record.df || 0, 'film')} that share it · ${light.name}`))));
+    }
     // Offered only when nothing found already answers to what was typed.
-    if (query.length >= 2 && fold(query) && !items.some(star => holds(films[star].t, query))) {
-      nodes.push(h('button.enter-suggestion.beyond', { type: 'button', onclick: () => begin(() => { if (app.pilot.connected) app.chartFilm(query); else app.searchView.open({ query }); }) },
+    const kind = currents.some(entry => entry.score >= 3);
+    if (query.length >= 2 && seek(query) && !kind && !items.some(star => search.answers(star, query))) {
+      nodes.push(option('.beyond', () => begin(() => { if (app.pilot.connected) app.chartFilm(query); else app.searchView.open({ query }); }),
         h('span.search-dot.spark', icon('spark', 18)),
         h('span.search-text', h('span.search-name', `Chart “${query}”`), h('span.search-sub', 'Not on the chart? The Navigator can chart it from memory.'))));
     }
     replace(suggestions, nodes);
+    setActive(0);
     suggestions.classList.toggle('open', nodes.length > 0);
     layer.classList.toggle('suggesting', nodes.length > 0);
+    input.setAttribute('aria-expanded', String(nodes.length > 0));
   }
 
   input.addEventListener('input', suggest);
@@ -50,8 +78,7 @@ export function createEntrance(app) {
     const rows = [...suggestions.children];
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       event.preventDefault();
-      active = Math.max(0, Math.min(rows.length - 1, active + (event.key === 'ArrowDown' ? 1 : -1)));
-      rows.forEach((row, n) => row.classList.toggle('on', n === active));
+      setActive(active + (event.key === 'ArrowDown' ? 1 : -1));
     } else if (event.key === 'Enter') {
       event.preventDefault();
       rows[active]?.click();

@@ -15,23 +15,23 @@ export function createHud(app) {
     h('span.brand-mark', 'AFTERIMAGE'), h('span.brand-sub', 'The Odyssey'));
   const backButton = h('button.hud-back', { type: 'button', title: 'Back to where you were (Backspace)', 'aria-label': 'Back to where you were', hidden: true, onclick: () => app.back() }, icon('back', 16));
 
-  const tool = (name, label, glyph, action, extra = {}) => {
+  const tool = (name, label, glyph, action, key = '') => {
     const count = h('span.tool-count');
-    const button = h('button.tool', { type: 'button', title: label, 'aria-label': label, onclick: action, ...extra }, icon(glyph), h('span.tool-label', label), count);
+    const button = h('button.tool', { type: 'button', title: key ? `${label} (${key})` : label, 'aria-label': label, 'aria-keyshortcuts': key || null, onclick: action }, icon(glyph), h('span.tool-label', label), count);
     return { button, count, name };
   };
   const tools = {
-    search: tool('search', 'Find a film', 'search', () => app.searchView.open()),
+    search: tool('search', 'Find a film', 'search', () => app.searchView.open(), '/'),
     voyage: tool('voyage', 'Set out', 'compass', () => app.panels.toggle(state.tool?.name === 'course' ? 'course' : 'voyage')),
     sky: tool('sky', 'Your sky', 'heart', () => app.panels.toggle('sky')),
     figures: tool('figures', 'Constellations', 'constellation', () => app.panels.toggle('figures')),
     nebulae: tool('nebulae', 'Nebulae', 'nebula', () => app.panels.toggle('nebulae')),
-    drift: tool('drift', 'Drift', 'drift', () => (state.drift ? app.stopDrift() : app.startDrift())),
+    drift: tool('drift', 'Drift', 'drift', () => (state.drift ? app.stopDrift() : app.startDrift()), 'D'),
   };
   const navDot = h('span.nav-dot');
   const navLabel = h('span.nav-label', 'Finding the Navigator');
   const navChip = h('button.nav-chip', { type: 'button', 'aria-haspopup': 'dialog', onclick: () => app.panels.toggle('navigator') }, navDot, navLabel);
-  const top = h('header.hud-top', h('div.hud-left', h('div.hud-brandline', backButton, brand), crumbs), h('nav.hud-tools', { 'aria-label': 'Tools' }, Object.values(tools).map(entry => entry.button), navChip));
+  const top = h('div.hud-top', h('div.hud-left', h('div.hud-brandline', backButton, brand), crumbs), h('nav.hud-tools', { 'aria-label': 'Tools' }, Object.values(tools).map(entry => entry.button), navChip));
 
   // ── Bottom: the dial of lights.
   const dialButtons = ALL_LIGHTS.map((light, n) => h('button.dial-light', {
@@ -83,11 +83,11 @@ export function createHud(app) {
   const wake = h('div.wake', { role: 'group', 'aria-label': 'Your wake' }, wakeList, wakeLog);
 
   const zoom = h('div.zoom',
-    h('button', { type: 'button', 'aria-label': 'Closer', onclick: () => cosmos.camera.zoom(0.62) }, icon('plus', 16)),
-    h('button', { type: 'button', 'aria-label': 'Further', onclick: () => cosmos.camera.zoom(1.6) }, icon('minus', 16)),
+    h('button', { type: 'button', 'aria-label': 'Closer', title: 'Closer (+)', onclick: () => cosmos.camera.zoom(0.62) }, icon('plus', 16)),
+    h('button', { type: 'button', 'aria-label': 'Further', title: 'Further (−)', onclick: () => cosmos.camera.zoom(1.6) }, icon('minus', 16)),
     h('button', { type: 'button', 'aria-label': 'The whole universe', onclick: () => app.goHome() }, icon('home', 16)));
 
-  const bottom = h('footer.hud-bottom', wake, h('div.hud-centre', caption, voyage, jbar, dial), zoom);
+  const bottom = h('div.hud-bottom', wake, h('div.hud-centre', caption, voyage, jbar, dial), zoom);
   const layer = h('div.hud', top, h('div.hud-notices', current, working, toasts), bottom);
   app.root.querySelector('#app').append(layer);
 
@@ -230,6 +230,7 @@ export function createHud(app) {
       while (toasts.children.length > 3) toasts.firstChild.remove();
       requestAnimationFrame(() => item.classList.add('on'));
       setTimeout(close, hold);
+      return { close, get shown() { return item.isConnected && item.classList.contains('on'); } };
     },
     /** A long call in progress, with a way to stop it. Empty text clears it. */
     working(text) {

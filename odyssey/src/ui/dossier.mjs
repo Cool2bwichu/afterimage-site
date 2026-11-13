@@ -7,6 +7,7 @@ import { holdsArm } from '../engine/journey.mjs';
 import { traitsOf } from '../engine/voyage.mjs';
 import { h, icon, replace, plural } from './dom.mjs';
 import { poster } from './posters.mjs';
+import { createGrip } from './grip.mjs';
 
 const SOURCES = {
   chart: ['charted', 'Computed from the chart: what the two films are recorded as sharing.'],
@@ -29,12 +30,13 @@ const firstSentences = (text, max = 250) => {
 export function createDossier(app) {
   const { universe, state, films, cosmos, pilot } = app;
   const scroll = h('div.sheet-scroll', { tabindex: '-1' });
-  const grip = h('button.sheet-grip', { type: 'button', 'aria-label': 'Make this panel taller or shorter', onclick: () => { sheet.classList.toggle('tall'); app.frameCosmos(); } });
+  const grip = h('button.sheet-grip', { type: 'button', 'aria-label': 'Make this panel taller or shorter' });
   const sheet = h('aside.sheet.sheet-right.dossier', { 'aria-label': 'The star you have reached', hidden: true },
     grip,
     h('button.sheet-close', { type: 'button', 'aria-label': 'Leave this star', onclick: () => app.blur() }, icon('close', 18)),
     scroll);
   app.root.querySelector('#app').append(sheet);
+  createGrip({ sheet, grip, onResize: () => app.frameCosmos(), onClose: () => app.blur() });
   // The sky is framed again once the sheet has finished growing or shrinking.
   sheet.addEventListener('transitionend', event => { if (event.target === sheet && event.propertyName === 'height') app.frameCosmos(); });
 

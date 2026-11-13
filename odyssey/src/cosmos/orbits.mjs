@@ -61,6 +61,7 @@ export function createOrbits({ root, cosmos, universe, small = false, reducedMot
   let active = false;
   let lit = null; // the one light the sky is seen by, or null under white light
   let doors = new Set();
+  let hovered = -1; // a film pointed at anywhere (its row in a list, its star) shows on its ring too
 
   function build(star, rings) {
     const id = ++made;
@@ -103,6 +104,7 @@ export function createOrbits({ root, cosmos, universe, small = false, reducedMot
     const sys = { star, rings: built, group, named, box, alpha: 0, arrivedAt: -1, shown: true, x: null, y: null };
     markLit(sys);
     markDoors(sys);
+    markHover(sys);
     show(sys, false);
     return sys;
   }
@@ -158,6 +160,10 @@ export function createOrbits({ root, cosmos, universe, small = false, reducedMot
 
   function markDoors(sys) {
     for (const ring of sys.rings) for (const sat of ring.sats) sat.element.classList.toggle('door', doors.has(sat.star));
+  }
+
+  function markHover(sys) {
+    for (const ring of sys.rings) for (const sat of ring.sats) sat.element.classList.toggle('hover', sat.star === hovered);
   }
 
   function markLit(sys) {
@@ -246,12 +252,16 @@ export function createOrbits({ root, cosmos, universe, small = false, reducedMot
         const size = (0.8 + 0.2 * front) * scale * (on ? 1.08 : 1);
         sat.element.style.transform = `translate3d(${x.toFixed(1)}px, ${yy.toFixed(1)}px, 0) translate(-50%, -50%) scale(${size.toFixed(3)})`;
         sat.element.style.opacity = (shown * (0.62 + 0.38 * front) * (back ? 0.55 : 1)).toFixed(3);
-        sat.element.style.zIndex = String(100 + Math.round(front * 100));
+        sat.element.style.zIndex = String(sat.star === hovered ? 260 : 100 + Math.round(front * 100));
       }
     });
   }
 
   function frame(view, clock, dt) {
+    if ((cosmos.hover ?? -1) !== hovered) {
+      hovered = cosmos.hover ?? -1;
+      if (system) markHover(system);
+    }
     let goal = 0;
     if (system && view) {
       // A system unfolds once you have arrived, not while flying in.

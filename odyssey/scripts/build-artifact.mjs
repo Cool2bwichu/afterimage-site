@@ -157,6 +157,7 @@ function compose({ shell, css, config, app }) {
     '<link rel="preconnect" href="https://fonts.googleapis.com">',
     '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>',
     fonts,
+    `<link rel="preload" href="${config.universe}" as="fetch" crossorigin>`,
     `<style>\n${css.trim()}\n</style>`,
     body,
     `<script>window.ODYSSEY = ${JSON.stringify(config)};</script>`,
@@ -191,6 +192,7 @@ async function main() {
   const config = {
     edition: 'claude',
     universe: `./${await emit('data', 'universe', 'json', universeText)}`,
+    chartBytes: universeText.length,
     depth: `./${await emit('data', 'depth', 'json', await readFile(join(root, 'public', 'data', 'depth.json')))}`,
     // With none, the page does not look for them.
     readings: await emitReadings(),
