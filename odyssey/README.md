@@ -28,10 +28,33 @@ existing AFTERIMAGE site, its hosting, or its deployments.
   chart thinks you are missing: near a film you love, or, before you love any,
   a film few have found beside one everyone knows. Catch it to see the film and
   why it came; the comets caught are kept in Your sky and travel in the journal.
+- **Temper.** How a film treats you, read from the chart: dread, cruelty,
+  irony, ambiguity and how broken its telling is, each with its reason, for
+  1,541 films. Shown at every star, and any one can be bent: "like Heat, with
+  less cruelty" (`src/engine/temper.mjs`).
+- **Tonight's seeing.** Say what tonight can hold (how long, which language,
+  how much dread or cruelty, told straight or as a puzzle) and whatever does
+  not fit fades into haze, offered nowhere (`seeing.mjs`).
+- **Take a bearing.** Six quick choices between two well-known films, each
+  pair splitting what is left of the sky in two; then three films for tonight,
+  each with why it fits (`bearing.mjs`).
+- **Watching together.** A few films the other person loves, or a sky they
+  sent as a link, and the films where the two skies meet, with what each of
+  you will find in them (`together.mjs`).
+- **Wormholes.** At a star, a film far across the sky that is yet one of its
+  nearest in story, feeling or idea, in a few rare things they share. Shown in
+  the star's page, as a window beyond its system, and as a thread across the
+  sky; going through is a passage of its own (key J, `wormhole.mjs`).
 - **Rays and star systems.** From any star, one ray per light leads to the film
   nearest it under that light, with the reason said plainly. Arriving at a film
   draws its system: six orbits, one per light, with its nearest films circling
-  it.
+  it. Move away across the sky and the system folds; a button takes you back.
+- **Moving about.** The sky moves like a map. One finger (or the mouse) takes
+  hold of it and moves it across, and a flick glides on; two fingers pinch
+  about the point between them, twist to turn it, and slide up or down together
+  to tilt it; a double tap comes closer there. With a mouse, the right button
+  (or Alt) turns and tilts; the arrows move across, and Shift with them turns.
+  Whatever a finger takes hold of stays under it (`src/cosmos/camera.mjs`).
 - **Setting out.** A voyage from any film, one door at a time. Three doors open
   from each stop, each under its own light, each saying what the two films share
   and how much of home it keeps. Land when one feels like tonight's film: the
@@ -96,7 +119,7 @@ the pre-read has been run, the index there is empty and nothing changes.
 cd odyssey
 npm ci
 npm run dev        # http://localhost:5199
-npm test           # 78 tests: the chart, the engine, voyages and lists, the open universe, the brain, the pilot, journals, readings
+npm test           # 137 tests: the chart, the engine, voyages and lists, Lookback, the comet, temper, seeing, bearings, together, wormholes, the hands, the open universe, the brain, the pilot, journals, readings
 npm run build      # the static site, in dist/
 ```
 
@@ -114,8 +137,8 @@ site's origin in `AFTERIMAGE_ALLOWED_ORIGINS`. A deployment can also set
 | --- | --- |
 | `universe/` | The compiler: loads ATLAS, builds likeness under six lights, forms galaxies and arms, finds constellations, lays out each sky. `authored/` holds the hand-written names and vocabulary. |
 | `public/data/` | The compiled chart. Deterministic: the same corpus gives the same bytes. |
-| `src/engine/` | Likeness, search, gravity, passages, voyages and ranked lists (`journey.mjs`), Lookback (`time.mjs`), tonight's comet (`comet.mjs`), and the open universe (`addStars` is append-only, so charted films never move). Runs in the browser and in the companion. |
-| `src/cosmos/` | The WebGL sky: renderer, shaders, camera, labels, star systems, the comet. |
+| `src/engine/` | Likeness, search, gravity, passages, voyages and ranked lists (`journey.mjs`), Lookback (`time.mjs`), tonight's comet (`comet.mjs`), temper (`temper.mjs`), tonight's seeing (`seeing.mjs`), bearings (`bearing.mjs`), watching together (`together.mjs`), wormholes (`wormhole.mjs`), and the open universe (`addStars` is append-only, so charted films never move). Runs in the browser and in the companion. |
+| `src/cosmos/` | The WebGL sky: renderer, shaders, the camera and the hands that move it (`camera.mjs`), labels, star systems, the comet. |
 | `src/ui/` | The interface: entrance, dossier, panels, posters, and what the browser remembers (`store.mjs`) and carries in a journal (`archive.mjs`). |
 | `src/nav/pilot.mjs` | Finds the Navigator (in the page, through the companion, or not at all) and places what it returns. |
 | `src/nav/readings.mjs` | Finds the readings written ahead of time, a shard at a time. |

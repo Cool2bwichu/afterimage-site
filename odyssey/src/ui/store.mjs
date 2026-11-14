@@ -49,6 +49,7 @@ function read(saved) {
     arrivals: saved.arrivals && typeof saved.arrivals === 'object' ? saved.arrivals : {},
     sky: typeof saved.sky === 'string' ? saved.sky : 'white',
     entered: Boolean(saved.entered),
+    hands: Boolean(saved.hands), // told once how the hands move the sky
     companion: saved.companion && typeof saved.companion === 'object' ? saved.companion : null,
     readArrivals: saved.readArrivals !== false, // whether the Navigator reads each star on arrival
     // Tonight's seeing, kept for the night it was set: { night, length, language, tempers }.
@@ -83,7 +84,7 @@ export function createStore() {
     return {
       loved: [...state.loved], seen: [...state.seen], watchlist: [...state.watchlist], hidden: [...state.hidden],
       visited: [...state.visited].slice(-MAX_VISITED), wake: state.wake.slice(-MAX_WAKE), routes: state.routes.slice(-MAX_ROUTES),
-      found: state.found.slice(-MAX_READINGS), arrivals, sky: state.sky, entered: state.entered, comets: state.comets.slice(-MAX_COMETS),
+      found: state.found.slice(-MAX_READINGS), arrivals, sky: state.sky, entered: state.entered, hands: state.hands, comets: state.comets.slice(-MAX_COMETS),
       companion: state.companion, readArrivals: state.readArrivals, seeing: state.seeing, bearing: state.bearing, together: state.together,
     };
   }

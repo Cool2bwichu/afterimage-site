@@ -311,7 +311,11 @@ export function createOrbits({ root, cosmos, universe, small = false, reducedMot
     if (system && view) {
       // A system unfolds once you have arrived, not while flying in.
       if (system.arrivedAt < 0 && !cosmos.camera.flying) system.arrivedAt = clock;
-      if (system.arrivedAt >= 0 && cosmos.project(system.star, scratch)) goal = clamp((OUT - view.distance) / (OUT - IN), 0, 1);
+      if (system.arrivedAt >= 0 && cosmos.project(system.star, scratch)) {
+        goal = clamp((OUT - view.distance) / (OUT - IN), 0, 1);
+        // Taken away across the sky by the hands, the system folds as its star leaves the middle of the view.
+        if (goal > 0 && !cosmos.camera.following) goal *= clamp((0.78 - cosmos.camera.offCentre(scratch.x, scratch.y, insets)) / 0.36, 0, 1);
+      }
     }
     const nowActive = Boolean(system) && goal > 0.5;
     if (nowActive !== active) { active = nowActive; onMode?.(active); }

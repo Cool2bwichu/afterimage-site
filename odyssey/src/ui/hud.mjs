@@ -53,6 +53,9 @@ export function createHud(app) {
   let captionTimer = 0;
 
   const toasts = h('div.toasts', { 'aria-live': 'polite' });
+  // Once the hands have taken the sky well away from the star or galaxy you are at: the way back to it.
+  const returnLabel = h('span.return-label');
+  const returnButton = h('button.return', { type: 'button', hidden: true, onclick: () => app.recentre() }, icon('back', 15), returnLabel);
   const workingText = h('span.working-text');
   const working = h('div.working', { hidden: true }, h('span.working-pulse'), workingText,
     h('button.working-stop', { type: 'button', onclick: () => { pilot.cancel('tool'); api.working(''); } }, 'Stop'));
@@ -94,7 +97,7 @@ export function createHud(app) {
     h('button', { type: 'button', 'aria-label': 'The whole universe', onclick: () => app.goHome() }, icon('home', 16)));
 
   const bottom = h('div.hud-bottom', wake, h('div.hud-centre', caption, voyage, jbar, dial), zoom);
-  const layer = h('div.hud', top, h('div.hud-notices', current, working, toasts), bottom);
+  const layer = h('div.hud', top, h('div.hud-notices', current, working, returnButton, toasts), bottom);
   app.root.querySelector('#app').append(layer);
 
   function place() {
@@ -268,6 +271,14 @@ export function createHud(app) {
       workingText.textContent = text;
     },
     setEntered(on) { layer.classList.toggle('entered', on); },
+    /** The way back to where you were, by its name; nothing hides it. */
+    setReturn(name) {
+      returnButton.hidden = !name;
+      if (name) {
+        returnLabel.textContent = `Back to ${name}`;
+        returnButton.title = `Back to ${name}, as you left it`;
+      }
+    },
     update(what) {
       if (!what || what === 'focus' || what === 'sky') place();
       if (!what || what === 'sky') lights();

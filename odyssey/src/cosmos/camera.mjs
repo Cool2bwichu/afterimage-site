@@ -362,6 +362,16 @@ export function createCamera({ reducedMotion = false } = {}) {
     },
     /** How far from the middle of the universe the hands may take the target. */
     setBounds(radius) { bounds = radius > 0 ? radius : Infinity; },
+    /**
+     * How far a point on screen (in pixels) lies from where the target is drawn, as a share of the
+     * uncovered sky's half-width or half-height, whichever it is further along: 1 is at its edge.
+     */
+    offCentre(x, y, insets = { left: 0, right: 0, top: 0, bottom: 0 }) {
+      const [tx, ty] = targetOnScreen();
+      const halfW = Math.max(40, (width - insets.left - insets.right) / 2);
+      const halfH = Math.max(40, (height - insets.top - insets.bottom) / 2);
+      return Math.max(Math.abs(x - tx) / halfW, Math.abs(y - ty) / halfH);
+    },
     touch() { idle = 0; },
     setDrift(value) { drift = value; },
     on(listener) { listeners.add(listener); return () => listeners.delete(listener); },
@@ -370,7 +380,7 @@ export function createCamera({ reducedMotion = false } = {}) {
 
 const SLOP = { mouse: 4, pen: 7, touch: 9 }; // pixels a press may wander and still be a tap
 const TWIST = 0.17;   // radians two fingers may turn before the sky turns with them
-const DOUBLE_MS = 320; // a second tap this soon after the first, and this near it, is a double tap
+const DOUBLE_MS = 300; // a second tap begun this soon after the first was lifted, and this near it, is a double tap
 const DOUBLE_PX = 34;
 
 const wrapAngle = angle => Math.atan2(Math.sin(angle), Math.cos(angle));
@@ -550,7 +560,7 @@ export function attachControls(element, camera, { onTap, onDoubleTap, onHover, o
     // Nothing moved: a tap, unless it began on a surface (that answers its own click) or was something else.
     if (cancelled || fromOutside || spoiled || pointer.button !== 0 || now() - pointer.downAt > 600) return;
     const t = now();
-    if (lastTap && t - lastTap.at < DOUBLE_MS && Math.hypot(pointer.x - lastTap.x, pointer.y - lastTap.y) < DOUBLE_PX) {
+    if (lastTap && pointer.downAt - lastTap.at < DOUBLE_MS && Math.hypot(pointer.x - lastTap.x, pointer.y - lastTap.y) < DOUBLE_PX) {
       lastTap = null;
       (onDoubleTap || onTap)?.(pointer.x, pointer.y, event);
       return;

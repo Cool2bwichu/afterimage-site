@@ -37,7 +37,9 @@ const WORM = hexToRgb(WORMHOLE);
 export const OVERVIEW = { reach: 2.0, reachSmall: 3.4, pitch: 0.95, bias: 0.125 };
 const DRIFT_EVERY = 12500;
 const HUD_TOP = 76; // the instruments along the top of the screen, and where you are beneath them
-const KEYS = [['/', 'find a film'], ['0–6', 'change the light'], ['7', 'look back through time'], ['← → ↑ ↓', 'turn the sky'], ['+ −', 'nearer, further'], ['Backspace', 'go back'], ['Esc', 'leave or close'], ['L', 'love'], ['W', 'watchlist'], ['D', 'drift'], ['C', 'tonight\'s comet'], ['J', 'through a wormhole'], ['B', 'take a bearing'], ['T', 'watching together'], ['H', 'the whole universe'], ['?', 'these keys']];
+const KEYS = [['/', 'find a film'], ['0–6', 'change the light'], ['7', 'look back through time'], ['← → ↑ ↓', 'move across the sky'], ['Shift + arrows', 'turn and tilt it'], ['+ −', 'nearer, further'], ['Backspace', 'go back'], ['Esc', 'leave or close'], ['L', 'love'], ['W', 'watchlist'], ['D', 'drift'], ['C', 'tonight\'s comet'], ['J', 'through a wormhole'], ['B', 'take a bearing'], ['T', 'watching together'], ['H', 'the whole universe'], ['?', 'these keys']];
+// And what the mouse does.
+const HANDS = [['Drag', 'move across'], ['Right-drag', 'turn and tilt'], ['Wheel', 'nearer, further'], ['Double-click', 'closer, there']];
 
 export function createApp({ root, universe, depth, deepen = () => Promise.reject(new Error('no deeper notes here')), cosmos, labels, pilot, store, search, small, reducedMotion, edition = 'site' }) {
   const state = {
@@ -100,6 +102,12 @@ export function createApp({ root, universe, depth, deepen = () => Promise.reject
   // "the 1960s", "before 1930": a decade of Lookback, said inside a sentence.
   const when = galaxy => (/^The /.test(galaxy.name) ? `in ${galaxy.name.replace(/^The /, 'the ')}` : galaxy.name.replace(/^Before/, 'before'));
   app.when = when;
+  // The edges of each sky: the hands may take you a little past its furthest galaxy, and no further.
+  const edges = new Map();
+  const edgeOf = sky => {
+    if (!edges.has(sky)) edges.set(sky, cosmos.reachOf(sky) * 1.3);
+    return edges.get(sky);
+  };
 
   // ── Where the cosmos sits behind the panels.
   // What covers the sky, in CSS pixels from each edge: the panels, the
@@ -578,6 +586,7 @@ export function createApp({ root, universe, depth, deepen = () => Promise.reject
     if (sky === state.sky || !lightById(sky)) return;
     state.sky = sky;
     store.set('sky', sky);
+    cosmos.camera.setBounds(edgeOf(sky));
     root.style.setProperty('--light', lightById(sky).color);
     const camera = cosmos.camera;
     if (state.focus >= 0) {
@@ -1426,21 +1435,88 @@ export function createApp({ root, universe, depth, deepen = () => Promise.reject
     }
   }
 
-  // ── Hands on the sky.
+  // ── Hands on the sky. One finger (or the mouse) takes hold of it and moves it across; two pinch,
+  // twist and tilt it; a double tap comes closer there.
   attachControls(cosmos.canvas, cosmos.camera, {
     onTap(x, y) {
       const star = cosmos.pick(x, y, small ? 1.5 : 1);
-      if (star >= 0) focusStar(star);
+      if (star < 0) return;
+      // The star you are at, from somewhere the hands took you: back to it, as it was.
+      if (star === state.focus && !cosmos.camera.following) recentre();
+      else focusStar(star);
+    },
+    onDoubleTap(x, y) {
+      const camera = cosmos.camera;
+      if (camera.flying) return;
+      const star = cosmos.pick(x, y, small ? 1.5 : 1);
+      if (star >= 0) {
+        if (star === state.focus) recentre();
+        else focusStar(star);
+        return;
+      }
+      // At a star, a double tap well away from it means that part of the sky, not the star.
+      if (camera.following && state.focus >= 0) {
+        const p = cosmos.project(state.focus, {});
+        const { width, height } = cosmos.size;
+        if (!p || Math.hypot(p.x - x, p.y - y) > Math.min(width, height) * 0.22) camera.setFollow(null);
+      }
+      camera.zoom(0.5, x, y);
     },
     onHover(x, y) {
       const star = x < 0 ? -1 : cosmos.pick(x, y);
       cosmos.setHover(star);
       labels.setContext({ hover: star });
-      cosmos.canvas.style.cursor = star >= 0 ? 'pointer' : '';
+      cosmos.canvas.style.cursor = star >= 0 ? 'pointer' : 'grab';
     },
     onGesture() { if (state.drift) stopDrift(); },
     // Names, poster cards and the moons of a star system lie over the sky: a drag that starts on one still moves it.
     surfaces: [document.getElementById('labels')].filter(Boolean),
+  });
+
+  /** Back to the star you are at, or the galaxy you opened, once the hands have taken the sky elsewhere. */
+  function recentre() {
+    if (state.focus >= 0) {
+      const star = state.focus;
+      cosmos.camera.flyTo({ target: cosmos.restingPlace(star), distance: small ? 118 : 150, pitch: 0.5, follow: () => cosmos.positionOf(star) });
+    } else if (state.galaxy >= 0) openGalaxy(state.galaxy, state.arm);
+    else overview();
+  }
+
+  // Taken well away from the star (or galaxy) you are at, the sky offers the way back to it: for a star once
+  // its system has folded away, for a galaxy once its heart has left the sky you can see.
+  const spot = {};
+  function wandered() {
+    const camera = cosmos.camera;
+    if (!state.entered || camera.flying || camera.following) return '';
+    if (state.focus >= 0) {
+      const p = cosmos.project(state.focus, spot);
+      return !p || camera.offCentre(p.x, p.y, covered) > 0.62 ? films[state.focus].t : '';
+    }
+    const galaxy = state.galaxy >= 0 ? (universe.galaxies[state.sky] || [])[state.galaxy] : null;
+    if (!galaxy?.centre) return '';
+    const p = cosmos.projectPoint(galaxy.centre[0], galaxy.centre[1], galaxy.centre[2], spot);
+    return !p || camera.offCentre(p.x, p.y, covered) > 1.05 ? galaxy.name : '';
+  }
+  let wanderedFrom = '';
+  cosmos.onFrame(() => {
+    const name = wandered();
+    if (name === wanderedFrom) return;
+    wanderedFrom = name;
+    app.hud?.setReturn(name);
+  });
+
+  // The first time the sky is reached since the hands changed, a word on how to move about it.
+  cosmos.camera.on(what => {
+    if (what !== 'arrived' || store.state.hands || !state.entered) return;
+    store.set('hands', true);
+    const touch = small || window.matchMedia?.('(pointer: coarse)').matches;
+    app.hud?.toast('Moving around the sky', {
+      detail: touch
+        ? 'One finger moves you across it. Pinch to come nearer, twist two fingers to turn it, and slide two fingers up or down together to tilt it. Double-tap to come closer.'
+        : 'Drag to move across it. Right-drag (or Alt-drag) turns and tilts it, the wheel brings you nearer, and a double-click comes closer there. Press ? for every key.',
+      tone: 'pale',
+      hold: 14000,
+    });
   });
 
   /** Says where you are in words, for a friend: the link where there is one, and the film's name always. */
@@ -1488,7 +1564,7 @@ export function createApp({ root, universe, depth, deepen = () => Promise.reject
     tonight, catchComet, showComet, cometReason, setSeeing, outsideSeeing,
     takeBearing, chooseBearing, skipBearing, undoBearing, taking: () => taking, bearingTaken: () => Boolean(keptBearing()),
     theirStars, theirName, addTheirs, dropTheirs, nameTheirs, setTheirs, bothSkies, sideOf, receiveSky, sendSky,
-    throughWormhole,
+    throughWormhole, recentre,
     colours: { yours: YOURS, theirs: THEIRS, together: TOGETHER, bearing: BEARING, wormhole: WORMHOLE },
     canGoBack: () => depthNow > 0,
     between: (a, b) => between(universe, a, b, 4, notFor),
@@ -1503,6 +1579,7 @@ export function createApp({ root, universe, depth, deepen = () => Promise.reject
   app.entrance = createEntrance(app);
 
   // ── Begin: put back what was found before, then go where the address says.
+  cosmos.camera.setBounds(edgeOf(state.sky));
   state.restoring = true;
   pilot.restore();
   cosmos.setHaze(haze);
@@ -1564,13 +1641,22 @@ export function createApp({ root, universe, depth, deepen = () => Promise.reject
     else if (key === '+' || key === '=') cosmos.camera.zoom(0.74);
     else if (key === '-' || key === '_') cosmos.camera.zoom(1.35);
     else if (key.startsWith('Arrow') && !event.target.closest?.('.sheet, .search-box, .entrance, .toast')) {
-      // The arrows turn the sky, unless they are scrolling a panel.
+      // The arrows move across the sky, and with Shift turn and tilt it, unless they are scrolling a panel.
       event.preventDefault();
-      const step = event.shiftKey ? 2.2 : 1;
-      if (key === 'ArrowLeft') cosmos.camera.orbit(-44 * step, 0);
-      else if (key === 'ArrowRight') cosmos.camera.orbit(44 * step, 0);
-      else if (key === 'ArrowUp') cosmos.camera.orbit(0, -36 * step);
-      else if (key === 'ArrowDown') cosmos.camera.orbit(0, 36 * step);
+      if (state.drift) stopDrift();
+      const camera = cosmos.camera;
+      if (event.shiftKey) {
+        if (key === 'ArrowLeft') camera.orbit(-64, 0);
+        else if (key === 'ArrowRight') camera.orbit(64, 0);
+        else if (key === 'ArrowUp') camera.orbit(0, -50);
+        else if (key === 'ArrowDown') camera.orbit(0, 50);
+      } else {
+        const step = Math.min(cosmos.size.width, cosmos.size.height) * 0.12;
+        if (key === 'ArrowLeft') camera.pan(step, 0);
+        else if (key === 'ArrowRight') camera.pan(-step, 0);
+        else if (key === 'ArrowUp') camera.pan(0, step);
+        else if (key === 'ArrowDown') camera.pan(0, -step);
+      }
     }
   });
 
@@ -1578,7 +1664,9 @@ export function createApp({ root, universe, depth, deepen = () => Promise.reject
   let keysCard = null;
   function showKeys() {
     if (keysCard?.shown) { keysCard.close(); keysCard = null; return; }
-    const detail = h('span.keys', KEYS.map(([name, what]) => h('span.key', h('kbd', name), ` ${what}`)));
+    const detail = h('span.keys-all',
+      h('span.keys', KEYS.map(([name, what]) => h('span.key', h('kbd', name), ` ${what}`))),
+      h('span.keys.keys-hands', HANDS.map(([name, what]) => h('span.key', h('kbd', name), ` ${what}`))));
     keysCard = app.hud?.toast('Keys', { detail, tone: 'pale', hold: 16000 }) || null;
   }
 
