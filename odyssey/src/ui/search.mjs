@@ -44,9 +44,10 @@ export function createSearchView(app) {
   function choose(n) {
     const item = items[n];
     if (!item) return;
-    const chosen = item.go;
+    // What the box was opened to pick for is held before closing it, which forgets it.
+    const picking = pick;
     close();
-    chosen();
+    item.go(picking);
   }
 
   function render() {
@@ -97,7 +98,7 @@ export function createSearchView(app) {
     const film = films[star];
     return {
       kind: 'film',
-      go: () => (pick ? pick(star) : app.focusStar(star)),
+      go: picking => (picking ? picking(star) : app.focusStar(star)),
       render: () => {
         const g = universe.galaxyOf[state.sky][star];
         const galaxy = g !== UNLIT ? universe.galaxies[state.sky][g] : null;
@@ -138,10 +139,10 @@ export function createSearchView(app) {
     const connected = pilot.connected;
     return {
       kind: 'beyond',
-      go: async () => {
+      go: async picking => {
         if (!connected) { app.panels.open('navigator'); return; }
         const star = await app.chartFilm(query);
-        if (star >= 0 && pick) pick(star);
+        if (star >= 0 && picking) picking(star);
       },
       render: () => [
         h('span.search-dot.spark', icon('spark', 18)),

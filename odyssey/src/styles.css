@@ -265,6 +265,12 @@ button.crumb:hover { color: var(--ivory); }
 .dial-light.on { color: var(--c); background: color-mix(in srgb, var(--c) 13%, transparent); padding: 0 14px 0 11px; }
 .dial-light.on .dial-swatch { opacity: 1; box-shadow: 0 0 14px 1px var(--c); }
 /* Lookback is not a light but time: set a little apart, its swatch a point with rings around it. */
+/* Tonight's seeing, at the head of the dial: moonlight when something is set. */
+.dial-seeing { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; margin-right: 9px; border-radius: 999px; color: var(--faint); transition: background 0.3s, color 0.3s; }
+.dial-seeing::after { content: ''; position: absolute; right: -6px; top: 25%; bottom: 25%; width: 1px; background: var(--line-strong); }
+.dial-seeing:hover, .dial-seeing.open { color: var(--ivory); background: rgba(244, 239, 229, 0.06); }
+.dial-seeing.on { color: #c9d7f2; background: rgba(201, 215, 242, 0.12); }
+.dial-seeing.on svg { filter: drop-shadow(0 0 6px rgba(201, 215, 242, 0.8)); fill: currentColor; fill-opacity: 0.35; }
 .dial-light.time { position: relative; margin-left: 9px; }
 .dial-light.time::before { content: ''; position: absolute; left: -6px; top: 25%; bottom: 25%; width: 1px; background: var(--line-strong); }
 .dial-light.time .dial-swatch { background: radial-gradient(circle, var(--c) 0 22%, transparent 26% 46%, var(--c) 50% 58%, transparent 62% 78%, color-mix(in srgb, var(--c) 70%, transparent) 82%); }
@@ -420,6 +426,113 @@ textarea.panel-input { min-height: 96px; }
 .loved-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
 .loved { transition: transform 0.3s var(--ease); }
 .loved:hover { transform: translateY(-3px); }
+/* Tonight's seeing. */
+.dossier-haze { margin-top: 8px; font-size: 12px; line-height: 1.45; color: #c9d7f2; }
+.dossier-haze svg { display: inline; vertical-align: -2px; margin-right: 5px; }
+.dossier-haze .quiet { margin-left: 2px; }
+
+.seeing-count { font-size: 13px; color: var(--dim); }
+.seeing-count strong { font-family: var(--serif); font-size: 26px; font-weight: 400; color: #c9d7f2; margin-right: 2px; }
+.seeing-group { display: grid; gap: 7px; }
+.seeing-label { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; font-size: 12.5px; color: var(--ivory); }
+.seeing-hint { font-size: 11px; color: var(--faint); }
+.seeing-seg .seg { padding: 0 11px; }
+.seeing-temper-title { margin-top: 6px; }
+/* Take a bearing: two films at a time, and where the choices point. */
+.setout-bearing { display: grid; grid-template-columns: 40px 1fr auto; gap: 14px; align-items: center; padding: 12px 16px 12px 12px; border-radius: 14px; border: 1px solid rgba(216, 196, 142, 0.42); background: linear-gradient(110deg, rgba(216, 196, 142, 0.1), rgba(216, 196, 142, 0.015)); text-align: left; transition: border-color 0.25s, background 0.25s; }
+.setout-bearing:hover { border-color: #d8c48e; background: linear-gradient(110deg, rgba(216, 196, 142, 0.16), rgba(216, 196, 142, 0.03)); }
+.setout-bearing .setout-kicker, .setout-bearing .setout-go, .setout-bearing-icon { color: #d8c48e; }
+.setout-bearing-icon { display: grid; place-items: center; }
+.setout-sub { font-size: 12px; line-height: 1.4; color: var(--dim); }
+.bearing-ask { margin: 0; font-family: var(--serif); font-style: italic; font-size: 23px; line-height: 1.15; color: var(--ivory); }
+.bearing-pair { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: start; gap: 12px; }
+.bearing-or { align-self: center; margin-top: -54px; font-family: var(--serif); font-style: italic; font-size: 17px; color: var(--faint); }
+.bearing-pole { display: grid; gap: 7px; align-content: start; justify-items: start; min-width: 0; padding: 8px; margin: -8px; border-radius: 14px; text-align: left; transition: background 0.25s, transform 0.3s var(--ease); }
+@media (hover: hover) {
+  .bearing-pole:hover { background: rgba(216, 196, 142, 0.07); }
+  .bearing-pole:hover .poster { box-shadow: 0 0 0 1.5px #d8c48e, 0 0 26px color-mix(in srgb, var(--hi) 55%, transparent); }
+}
+.bearing-pole:active { transform: scale(0.98); }
+.bearing-poster { display: block; width: 100%; }
+.bearing-poster .poster { transition: box-shadow 0.3s var(--ease); }
+.bearing-pole:focus-visible .poster { box-shadow: 0 0 0 1.5px #d8c48e, 0 0 26px color-mix(in srgb, var(--hi) 55%, transparent); }
+.bearing-hint { margin: -6px 0 0; font-size: 12.5px; line-height: 1.45; color: var(--dim); }
+.bearing-name { font-family: var(--serif); font-size: 18px; font-weight: 500; line-height: 1.1; overflow-wrap: anywhere; }
+.bearing-words { font-size: 11.5px; line-height: 1.4; color: var(--dim); }
+.bearing-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; }
+.bearing-foot .pip.on { background: #d8c48e; border-color: #d8c48e; box-shadow: 0 0 6px #d8c48e; }
+.bearing-acts { display: flex; gap: 6px; }
+.bearing-chosen { display: flex; flex-wrap: wrap; gap: 6px; }
+.bearing-chip { display: inline-grid; grid-template-columns: 18px minmax(0, auto); align-items: center; gap: 7px; max-width: 100%; padding: 3px 10px 3px 4px; border-radius: 8px; border: 1px solid var(--line); font-size: 11.5px; color: var(--dim); }
+.bearing-chip-poster { width: 18px; }
+.bearing-chip-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bearing-pick { display: grid; gap: 2px; padding-top: 10px; border-top: 1px solid var(--line); }
+.bearing-as { margin: 0; font-size: 9.5px; letter-spacing: 0.16em; text-transform: uppercase; color: #d8c48e; }
+/* Watching together: two skies, and the films for both. */
+.together-side { display: flex; align-items: baseline; gap: 8px; margin: 4px 0 -4px; font-size: 9.5px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--c); }
+.together-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--c); box-shadow: 0 0 8px var(--c); align-self: center; }
+.together-count { letter-spacing: 0.04em; text-transform: none; font-size: 11.5px; color: var(--faint); }
+.together-films { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
+.together-film { position: relative; }
+.together-film-face { display: block; width: 100%; transition: transform 0.3s var(--ease); }
+.together-film-face:hover { transform: translateY(-3px); }
+.together-drop { position: absolute; top: -6px; right: -6px; display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: var(--glass-deep); border: 1px solid var(--line-strong); color: var(--dim); }
+.together-drop:hover { color: var(--ivory); border-color: var(--ivory); }
+.together-drop::after { content: ''; position: absolute; inset: -6px; }
+.together-name, .together-paste { width: 100%; height: 38px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--line); background: rgba(244, 239, 229, 0.04); color: var(--ivory); font: inherit; font-size: 13px; }
+.together-name:focus, .together-paste:focus { outline: none; border-color: var(--line-strong); background: rgba(244, 239, 229, 0.07); }
+.together-name::placeholder, .together-paste::placeholder { color: var(--faint); }
+.together-paste-note { margin: -8px 0 0; font-size: 12px; color: var(--dim); }
+.together-paste-note:empty { display: none; }
+.together-meet { margin: 0; font-family: var(--serif); font-style: italic; font-size: 17px; line-height: 1.3; }
+.together-why { display: grid; gap: 3px; }
+.together-reason { font-size: 12px; line-height: 1.4; color: var(--dim); }
+.together-who { margin-right: 6px; font-size: 9.5px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--c); }
+.setout-together { border-color: rgba(169, 184, 255, 0.36); background: linear-gradient(110deg, rgba(169, 184, 255, 0.09), rgba(169, 184, 255, 0.012)); }
+.setout-together:hover { border-color: #a9b8ff; background: linear-gradient(110deg, rgba(169, 184, 255, 0.15), rgba(169, 184, 255, 0.03)); }
+.setout-together .setout-kicker, .setout-together .setout-go, .setout-together .setout-bearing-icon { color: #a9b8ff; }
+
+/* A wormhole: the short way through to somewhere the map says is far. */
+.dsec-wormhole .dsec-title { color: #eab8ff; }
+.worm-kick { display: inline-flex; align-items: center; }
+.worm-kick .kick-dot { width: 6px; height: 6px; margin-right: 7px; }
+.worm-far { font-size: 11.5px; line-height: 1.45; color: var(--faint); }
+.dsec-wormhole .frow-go { opacity: 0.8; transform: none; color: #e48cff; }
+.dsec-wormhole .frow:hover .frow-go { opacity: 1; transform: scale(1.12); }
+/* Going through: the sky is drawn into the star you are at, a light comes up the throat, and the far side opens. */
+.warp { position: absolute; inset: 0; z-index: 15; overflow: hidden; pointer-events: none; --x: 50%; --y: 50%; }
+.warp > div { position: absolute; left: var(--x); top: var(--y); border-radius: 50%; will-change: transform, opacity; }
+.warp-shade { width: 320vmax; height: 320vmax; margin: -160vmax 0 0 -160vmax;
+  background: radial-gradient(circle, rgba(18, 6, 30, 0.2) 0, rgba(12, 4, 22, 0.78) 9%, rgba(5, 3, 12, 0.94) 22%);
+  animation: warp-shade 1.6s cubic-bezier(0.5, 0, 0.4, 1) forwards; }
+.warp-rings { width: 300vmax; height: 300vmax; margin: -150vmax 0 0 -150vmax;
+  background:
+    repeating-radial-gradient(circle, rgba(228, 140, 255, 0) 0 1.15vmax, rgba(236, 170, 255, 0.5) 1.4vmax, rgba(228, 140, 255, 0) 1.9vmax),
+    repeating-conic-gradient(from 0deg, rgba(228, 140, 255, 0) 0deg 9deg, rgba(228, 140, 255, 0.22) 11deg, rgba(228, 140, 255, 0) 14deg);
+  -webkit-mask-image: radial-gradient(circle, transparent 0, #000 3%, #000 13%, transparent 26%);
+  mask-image: radial-gradient(circle, transparent 0, #000 3%, #000 13%, transparent 26%);
+  animation: warp-rings 1.6s cubic-bezier(0.55, 0, 0.35, 1) forwards; }
+.warp-light { width: 60vmax; height: 60vmax; margin: -30vmax 0 0 -30vmax;
+  background: radial-gradient(circle, rgba(255, 246, 255, 0.95) 0, rgba(246, 210, 255, 0.86) 10%, rgba(222, 150, 250, 0.62) 28%, rgba(150, 70, 210, 0.3) 50%, rgba(90, 30, 150, 0) 70%);
+  animation: warp-light 1.6s cubic-bezier(0.6, 0, 0.3, 1) forwards; }
+@keyframes warp-shade { 0% { opacity: 0; transform: scale(2.2); } 36% { opacity: 1; transform: scale(1); } 48% { opacity: 1; transform: scale(0.9); } 100% { opacity: 0; transform: scale(2.6); } }
+@keyframes warp-rings { 0% { opacity: 0; transform: scale(2.4) rotate(0deg); } 18% { opacity: 0.45; } 40% { opacity: 1; transform: scale(0.42) rotate(-70deg); } 52% { opacity: 0.2; transform: scale(0.3) rotate(-95deg); } 64% { opacity: 0.9; transform: scale(0.9) rotate(-120deg); } 100% { opacity: 0; transform: scale(3.2) rotate(-170deg); } }
+@keyframes warp-light { 0% { opacity: 0; transform: scale(0.02); } 30% { opacity: 1; transform: scale(0.08); } 40% { transform: scale(0.5); } 47% { opacity: 1; transform: scale(5.5); } 58% { opacity: 0.92; transform: scale(5.5); } 100% { opacity: 0; transform: scale(6); } }
+/* Its temper: five readings, and the films it bends into. */
+.temper { display: grid; gap: 8px; }
+.temper-row { display: grid; grid-template-columns: 76px minmax(60px, 1fr) minmax(96px, auto); align-items: center; gap: 12px; }
+.temper-name { font-size: 9.5px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--starlight); }
+.temper-track { position: relative; height: 3px; border-radius: 3px; background: rgba(244, 239, 229, 0.08); }
+.temper-fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 3px; background: #e6b38a; box-shadow: 0 0 8px rgba(230, 179, 138, 0.55); }
+.temper-word { font-size: 12px; color: var(--dim); white-space: nowrap; }
+.bend { display: grid; gap: 9px; margin-top: 8px; }
+.bend-lead { font-family: var(--serif); font-style: italic; font-size: 18px; line-height: 1.2; color: var(--ivory); }
+.bend-chip { min-height: 30px; }
+.bend-chip.on { color: #fff; border-color: var(--c); background: color-mix(in srgb, var(--c) 22%, transparent); }
+.temper-reasons { display: grid; gap: 8px; margin-top: 8px; }
+.temper-why-title { font-size: 9.5px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--starlight); }
+.veil-text.temper-why { display: grid; gap: 7px; font-family: var(--sans); font-style: normal; font-size: 12.5px; line-height: 1.5; color: rgba(244, 239, 229, 0.82); }
+.temper-reason strong { font-weight: 500; color: var(--starlight); }
 .taste-lights { display: grid; gap: 7px; }
 .taste-light { display: grid; grid-template-columns: 62px 1fr; align-items: center; gap: 10px; }
 .taste-name { font-size: 9.5px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--c); }
@@ -668,12 +781,27 @@ button.figure:hover, .figure.on { border-color: var(--starlight); background: rg
 .orbit-name.lit { font-size: 10.5px; font-weight: 600; letter-spacing: 0.3em; }
 .orbit-moon { position: absolute; left: 0; top: 0; width: 36px; pointer-events: auto; touch-action: none; will-change: transform, opacity; transform-origin: 50% 50%; }
 .orbit-moon .poster { box-shadow: 0 0 0 1px color-mix(in srgb, var(--c) 65%, transparent), 0 0 16px color-mix(in srgb, var(--c) 40%, transparent), 0 6px 14px rgba(0, 0, 0, 0.5); transition: box-shadow 0.3s, transform 0.3s var(--ease); }
-.orbit-moon:hover .poster, .orbit-moon-title { position: absolute; left: 50%; top: calc(100% + 4px); width: 120px; margin-left: -60px; font-size: 10px; line-height: 1.15; text-align: center; color: rgba(244, 239, 229, 0.88); text-shadow: 0 0 6px rgba(5, 8, 14, 1), 0 0 2px rgba(5, 8, 14, 1); opacity: 0; transition: opacity 0.25s; pointer-events: none; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; }
+.orbit-moon-title { position: absolute; left: 50%; top: calc(100% + 4px); width: 120px; margin-left: -60px; font-size: 10px; line-height: 1.15; text-align: center; color: rgba(244, 239, 229, 0.88); text-shadow: 0 0 6px rgba(5, 8, 14, 1), 0 0 2px rgba(5, 8, 14, 1); opacity: 0; transition: opacity 0.25s; pointer-events: none; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; }
 .orbit-moon:hover .orbit-moon-title, .orbit-moon.hover .orbit-moon-title, .orbit-moon.door .orbit-moon-title { opacity: 1; }
 .orbit-moon.hover .poster { transform: scale(1.12); box-shadow: 0 0 0 1.5px var(--c), 0 0 26px color-mix(in srgb, var(--c) 70%, transparent), 0 8px 18px rgba(0, 0, 0, 0.55); }
 .orbit-moon.lit .poster { box-shadow: 0 0 0 1.5px var(--c), 0 0 22px color-mix(in srgb, var(--c) 60%, transparent), 0 6px 14px rgba(0, 0, 0, 0.5); }
 .orbit-moon.door .poster { box-shadow: 0 0 0 2px var(--c), 0 0 26px var(--c), 0 8px 18px rgba(0, 0, 0, 0.55); }
 .orbit-moon.door::after { content: ''; position: absolute; inset: -6px; border-radius: 7px; border: 1px solid var(--c); opacity: 0.7; animation: door-pulse 2.6s ease-in-out infinite; pointer-events: none; }
+/* A wormhole beyond the last ring: a round window onto a film far across the sky, its rim slowly turning. */
+.orbit-hole { position: absolute; left: 0; top: 0; width: 40px; height: 40px; pointer-events: auto; touch-action: none; will-change: transform, opacity; transform-origin: 50% 50%; }
+.orbit-hole::before, .orbit-hole::after { content: ''; position: absolute; border-radius: 50%; pointer-events: none; }
+.orbit-hole::before { inset: -7px; background: conic-gradient(from 0deg, transparent 0deg, var(--c) 70deg, transparent 150deg, transparent 180deg, var(--c) 250deg, transparent 330deg);
+  -webkit-mask-image: radial-gradient(circle, transparent 0 62%, #000 66% 72%, transparent 78%); mask-image: radial-gradient(circle, transparent 0 62%, #000 66% 72%, transparent 78%);
+  opacity: 0.85; animation: hole-turn 7s linear infinite; }
+.orbit-hole::after { inset: -14px; border: 1px dashed color-mix(in srgb, var(--c) 55%, transparent); opacity: 0.55; animation: hole-turn 23s linear infinite reverse; }
+.orbit-hole-lens { position: absolute; inset: 0; display: block; border-radius: 50%; overflow: hidden;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--c) 70%, transparent), 0 0 22px color-mix(in srgb, var(--c) 55%, transparent), inset 0 0 12px rgba(5, 3, 12, 0.9); }
+.orbit-hole-lens .poster { position: absolute; left: 0; top: 50%; width: 100%; transform: translateY(-50%); border-radius: 0; box-shadow: none; filter: saturate(0.9) brightness(0.92); }
+.orbit-hole-lens::after { content: ''; position: absolute; inset: 0; border-radius: 50%; background: radial-gradient(circle, transparent 45%, color-mix(in srgb, var(--c) 30%, rgba(5, 3, 12, 0.7)) 100%); }
+.orbit-hole .orbit-moon-title { color: color-mix(in srgb, var(--c) 40%, var(--ivory)); }
+.orbit-hole:hover .orbit-moon-title, .orbit-hole.hover .orbit-moon-title { opacity: 1; }
+.orbit-hole:hover .orbit-hole-lens, .orbit-hole.hover .orbit-hole-lens { box-shadow: 0 0 0 1.5px var(--c), 0 0 30px var(--c), inset 0 0 12px rgba(5, 3, 12, 0.9); }
+@keyframes hole-turn { to { transform: rotate(360deg); } }
 @keyframes door-pulse { 0%, 100% { transform: scale(1); opacity: 0.65; } 50% { transform: scale(1.12); opacity: 0.15; } }
 .labels.system .lbl-card.focus .lbl-card-title { opacity: 0; }
 
@@ -749,6 +877,8 @@ button.figure:hover, .figure.on { border-color: var(--starlight); background: rg
   .brand { padding-block: 10px; margin-block: -10px; }
   .dial-light { height: 40px; padding: 0 10px; }
   .dial-light.on { padding: 0 12px 0 10px; }
+  .dial-seeing { width: 36px; height: 40px; margin-right: 7px; }
+  .dial-seeing::after { right: -5px; }
   .orbit-moon::before { content: ''; position: absolute; inset: -9px -7px; }
   .dossier-kicker a, .dossier-kicker button { padding-block: 6px; margin-block: -6px; }
   .crumbs { padding-block: 8px; margin-block: -8px; }
@@ -786,12 +916,17 @@ button.figure:hover, .figure.on { border-color: var(--starlight); background: rg
   .vland-title { font-size: 26px; }
   .vnow-title { font-size: 24px; }
   .orbit-moon { width: 26px; }
+  .orbit-hole { width: 34px; height: 34px; }
   .orbit-moon-title { font-size: 9px; width: 96px; margin-left: -48px; }
   .figure-mark-name { font-size: 14px; }
   .search-scrim { padding-top: 8vh; }
   .search-input, .enter-input { font-size: 20px; }
   .enter-field { height: 56px; margin-top: 34px; }
   .enter-way { height: 40px; padding: 0 16px; font-size: 11px; }
+  .bearing-pair { justify-content: center; grid-template-columns: minmax(0, 120px) auto minmax(0, 120px); }
+  .bearing-or { margin-top: -48px; }
+  .bearing-name { font-size: 16.5px; }
+  .bearing-ask { font-size: 21px; }
   .lbl-galaxy-name { font-size: 21px; }
   /* Eight lights in one row: on a phone the lit one is named on the line beneath, not inside the row. */
   .dial-light.on .dial-name { max-width: 0; margin-left: 0; opacity: 0; }
@@ -804,4 +939,5 @@ button.figure:hover, .figure.on { border-color: var(--starlight); background: rg
 
 @media (prefers-reduced-motion: reduce) {
   .odyssey *, .odyssey *::before, .odyssey *::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; }
+  .warp { display: none; }
 }

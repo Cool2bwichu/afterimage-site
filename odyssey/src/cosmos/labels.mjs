@@ -27,7 +27,7 @@ export function createLabels({ root, cosmos, universe, small = false, onStar, on
   let kinds = []; // in Lookback, the kinds of film named around the horizon, each at its line of sight
   let hidden = false;
   let sinceSelect = 1;
-  const context = { focus: -1, hover: -1, rays: new Map(), highlight: null, loved: new Set(), lit: null, system: false, ring: -1 };
+  const context = { focus: -1, hover: -1, rays: new Map(), highlight: null, loved: new Set(), lit: null, system: false, ring: -1, haze: null };
   const insets = { left: 0, right: 0, bottom: 0 }; // the parts of the sky that panels cover
   const fixed = [];  // boxes of the galaxy and arm names now showing: star names keep clear of them
   let blocked = [];  // boxes of notices laid over the sky (the lit set's chip): no name is put under them
@@ -211,6 +211,8 @@ export function createLabels({ root, cosmos, universe, small = false, onStar, on
       const special = i === context.focus || i === context.hover || i === hoverFromLabel || context.rays.has(i);
       const lit = context.highlight ? context.highlight.has(i) : false;
       if (!special && !lit && (!titleMode || moving)) continue;
+      // A film in tonight's haze is not named unless something lights it.
+      if (!special && !lit && context.haze && context.haze.has(i)) continue;
       const pos = cosmos.positionOf(i, scratchPos);
       const w = m[3] * pos[0] + m[7] * pos[1] + m[11] * pos[2] + m[15];
       if (w <= 0.5) continue;

@@ -7,6 +7,9 @@
 // films, and the ring breaks around it the way a contour line breaks around its
 // height on a map. Under one light, that light's ring is drawn bright and the
 // others step back. Leave a star and its system folds away rather than vanishing.
+//
+// Beyond the last ring, if the star has one, drifts a wormhole: a round window
+// onto a film far across the sky that is yet one of its nearest in one deep thing.
 import { lightById } from '../engine/lights.mjs';
 import { h } from '../ui/dom.mjs';
 import { poster } from '../ui/posters.mjs';
@@ -45,7 +48,7 @@ function along(rx, ry, angle) {
   return (sum * width) / 3;
 }
 
-export function createOrbits({ root, cosmos, universe, small = false, reducedMotion = false, insets = { left: 0, right: 0, top: 0, bottom: 0 }, onStar, onHover, onMode }) {
+export function createOrbits({ root, cosmos, universe, small = false, reducedMotion = false, insets = { left: 0, right: 0, top: 0, bottom: 0 }, onStar, onHole, onHover, onMode }) {
   const lines = svg('svg', { class: 'orbit-rings', 'aria-hidden': 'true' });
   const moons = h('div.orbit-moons', { role: 'group', 'aria-label': 'The films nearest this one, in rings around it' });
   const words = svg('svg', { class: 'orbit-names', 'aria-hidden': 'true' });
@@ -62,6 +65,8 @@ export function createOrbits({ root, cosmos, universe, small = false, reducedMot
   let lit = null; // the one light the sky is seen by, or null under white light
   let doors = new Set();
   let hovered = -1; // a film pointed at anywhere (its row in a list, its star) shows on its ring too
+  let holes = { star: -1, list: [] }; // the wormholes at a star: [{ star, colour, says }]
+  const HOLE_ANGLES = [2.25, -0.8]; // where each starts: low on the left, high on the right
 
   function build(star, rings) {
     const id = ++made;
@@ -103,12 +108,32 @@ export function createOrbits({ root, cosmos, universe, small = false, reducedMot
       const gaps = ring.stars.map((_, n) => turn + ((n + 0.5) / per) * TAU);
       return { ...ring, path, name, route, sats, gaps, gap: -1, fade: 1, width: 0, speed: reducedMotion ? 0 : 0.05 / (1 + 0.38 * k) };
     });
-    const sys = { star, rings: built, group, named, box, alpha: 0, arrivedAt: -1, shown: true, x: null, y: null };
+    const sys = { star, rings: built, holes: [], group, named, box, alpha: 0, arrivedAt: -1, shown: true, x: null, y: null };
     markLit(sys);
     markDoors(sys);
     markHover(sys);
+    buildHoles(sys);
     show(sys, false);
     return sys;
+  }
+
+  /** The wormholes beyond a system's last ring, as the app last said they are. */
+  function buildHoles(sys) {
+    for (const hole of sys.holes) hole.element.remove();
+    const list = holes.star === sys.star ? holes.list : [];
+    sys.holes = list.map((hole, n) => {
+      const film = universe.films[hole.star];
+      const element = h('button.orbit-hole', {
+        type: 'button', tabindex: '-1', style: { '--c': hole.colour, '--hi': film.hi, '--lo': film.lo },
+        title: `A wormhole to ${film.t} (${film.y}) · ${hole.says}`,
+        'aria-label': `A wormhole to ${film.t}, ${film.y}: ${hole.says}`,
+        onclick: event => { event.stopPropagation(); onHole?.(n); },
+        onpointerenter: () => onHover?.(hole.star), onpointerleave: () => onHover?.(-1),
+      }, h('span.orbit-hole-lens', poster(film, { words: false })), h('span.orbit-moon-title', film.t));
+      sys.box.append(element);
+      return { star: hole.star, element, angle: HOLE_ANGLES[n % HOLE_ANGLES.length] };
+    });
+    markHover(sys);
   }
 
   function show(sys, on) {
@@ -145,6 +170,7 @@ export function createOrbits({ root, cosmos, universe, small = false, reducedMot
       back.box.inert = false;
       if (system) retire(system);
       system = back;
+      buildHoles(back);
       return;
     }
     const before = system;
@@ -166,6 +192,7 @@ export function createOrbits({ root, cosmos, universe, small = false, reducedMot
 
   function markHover(sys) {
     for (const ring of sys.rings) for (const sat of ring.sats) sat.element.classList.toggle('hover', sat.star === hovered);
+    for (const hole of sys.holes) hole.element.classList.toggle('hover', hole.star === hovered);
   }
 
   function markLit(sys) {
@@ -192,7 +219,8 @@ export function createOrbits({ root, cosmos, universe, small = false, reducedMot
     const near = clamp(150 / view.distance, 0.72, 1.4);
     const { width, height } = cosmos.size;
     const moon = (small ? 22 : 30) * near; // half a film's height, about
-    const outer = ((small ? 74 : 128) + (sys.rings.length - 1) * (small ? 19 : 38)) * near;
+    const beyond = sys.holes.length ? 1.4 : 0; // the wormholes drift a ring beyond the last
+    const outer = ((small ? 74 : 128) + (sys.rings.length - 1 + beyond) * (small ? 19 : 38)) * near;
     const roomY = Math.min(sys.y - insets.top, height - insets.bottom - sys.y) - moon;
     const roomX = Math.min(sys.x - insets.left, width - insets.right - sys.x) - moon * 0.7;
     const fit = clamp(Math.min(roomY / (outer * TILT), roomX / outer), 0.62, 1);
@@ -257,6 +285,21 @@ export function createOrbits({ root, cosmos, universe, small = false, reducedMot
         sat.element.style.zIndex = String(sat.star === hovered ? 260 : 100 + Math.round(front * 100));
       }
     });
+
+    // The wormholes come last, out of the dark beyond the rings, and drift slowly round.
+    const far = r0 + (sys.rings.length - 1 + 1.4) * step;
+    sys.holes.forEach((hole, n) => {
+      const grown = reducedMotion ? 1 : easeOut(clamp((since - 0.7 - n * 0.25) / 1.3, 0, 1));
+      const a = hole.angle + (reducedMotion ? 0 : clock * 0.014);
+      const reach = far * (0.75 + 0.25 * grown);
+      const x = sys.x + Math.cos(a) * reach;
+      const yy = sys.y + Math.sin(a) * reach * TILT;
+      const front = (Math.sin(a) + 1) / 2;
+      const size = (0.86 + 0.14 * front) * scale * (0.6 + 0.4 * grown);
+      hole.element.style.transform = `translate3d(${x.toFixed(1)}px, ${yy.toFixed(1)}px, 0) translate(-50%, -50%) scale(${size.toFixed(3)})`;
+      hole.element.style.opacity = (sys.alpha * grown * (0.72 + 0.28 * front)).toFixed(3);
+      hole.element.style.zIndex = String(hole.star === hovered ? 260 : 100 + Math.round(front * 100));
+    });
   }
 
   function frame(view, clock, dt) {
@@ -290,6 +333,12 @@ export function createOrbits({ root, cosmos, universe, small = false, reducedMot
   const off = cosmos.onFrame(frame);
   return {
     setSystem,
+    /** The wormholes at a star: [{ star, colour, says }], drifting beyond its last ring. */
+    setHoles(star, list) {
+      const same = holes.star === star && holes.list.length === list.length && holes.list.every((hole, n) => hole.star === list[n].star);
+      holes = { star, list };
+      if (!same && system && system.star === star) buildHoles(system);
+    },
     /** The films behind the doors of a voyage wear a ring of their own. */
     setDoors(list) {
       doors = new Set(list);

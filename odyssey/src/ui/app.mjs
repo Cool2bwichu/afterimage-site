@@ -6,6 +6,11 @@ import { prism, passage, between, driftNext, carriers, constellationProgress, sh
 import { doors, homeLikeness, rings, routeOf, typicality } from '../engine/journey.mjs';
 import { heightAt, lineage, timeRings, TIME, TIME_RINGS } from '../engine/time.mjs';
 import { cometBond, cometFor, cometPath, nightOf } from '../engine/comet.mjs';
+import { TEMPER_COLOUR, TEMPER_IDS, bend, temperById, temperOf, temperWord } from '../engine/temper.mjs';
+import { CLEAR_SKY, cleanSeeing, describeSeeing, hazeOf, isClear, outside } from '../engine/seeing.mjs';
+import { bearingResult, bearingStrength, createBearing, reasonOf } from '../engine/bearing.mjs';
+import { bondOf, decodeSky, encodeSky, skiesMeet, together } from '../engine/together.mjs';
+import { wormholes } from '../engine/wormhole.mjs';
 import { attachControls } from '../cosmos/camera.mjs';
 import { createOrbits } from '../cosmos/orbits.mjs';
 import { createFigures } from '../cosmos/figures.mjs';
@@ -25,13 +30,16 @@ const STARLIGHT = [0.87, 0.78, 0.63];
 const GOLD = [0.94, 0.79, 0.53];
 const SILVER = [0.61, 0.73, 0.73];
 const PALE = [0.8, 0.88, 1];
+const SEEING = '#c9d7f2'; // tonight's seeing: moonlight
+const WORMHOLE = '#e48cff'; // a wormhole: the short way through
+const WORM = hexToRgb(WORMHOLE);
 // The whole universe in one look: how far back, how steeply, and how far the camera leans toward the viewer.
 export const OVERVIEW = { reach: 2.0, reachSmall: 3.4, pitch: 0.95, bias: 0.125 };
 const DRIFT_EVERY = 12500;
 const HUD_TOP = 76; // the instruments along the top of the screen, and where you are beneath them
-const KEYS = [['/', 'find a film'], ['0–6', 'change the light'], ['7', 'look back through time'], ['← → ↑ ↓', 'turn the sky'], ['+ −', 'nearer, further'], ['Backspace', 'go back'], ['Esc', 'leave or close'], ['L', 'love'], ['W', 'watchlist'], ['D', 'drift'], ['C', 'tonight\'s comet'], ['H', 'the whole universe'], ['?', 'these keys']];
+const KEYS = [['/', 'find a film'], ['0–6', 'change the light'], ['7', 'look back through time'], ['← → ↑ ↓', 'turn the sky'], ['+ −', 'nearer, further'], ['Backspace', 'go back'], ['Esc', 'leave or close'], ['L', 'love'], ['W', 'watchlist'], ['D', 'drift'], ['C', 'tonight\'s comet'], ['J', 'through a wormhole'], ['B', 'take a bearing'], ['T', 'watching together'], ['H', 'the whole universe'], ['?', 'these keys']];
 
-export function createApp({ root, universe, depth, cosmos, labels, pilot, store, search, small, reducedMotion, edition = 'site' }) {
+export function createApp({ root, universe, depth, deepen = () => Promise.reject(new Error('no deeper notes here')), cosmos, labels, pilot, store, search, small, reducedMotion, edition = 'site' }) {
   const state = {
     sky: 'white',
     focus: -1,
@@ -41,6 +49,7 @@ export function createApp({ root, universe, depth, cosmos, labels, pilot, store,
     arrivalState: 'idle', // idle | looking (for a reading written ahead) | asking | draft | read | failed | waiting | offline
     arrivalNote: '',
     rays: [],             // the six rays of the focused star: [{ light, star, shared, claim, watch, read }]
+    holes: [],            // its wormholes: [{ star, light, sim, rank, shared }]
     deep: new Map(),      // star → [{ star, light, claim }] found by looking deeper from it
     deepState: 'idle',
     current: null,        // a lit set: { kind, id, label, note, stars: Set, colour, light, strength? }
@@ -67,16 +76,21 @@ export function createApp({ root, universe, depth, cosmos, labels, pilot, store,
     visited: toStars(store.state.visited),
   });
   let marks = sets();
-  // Films never offered as somewhere to go next: the ones set aside, and the ones already watched.
+  // Tonight's seeing, kept for the night it was set, and the haze over the films outside it.
+  let seeing = store.state.seeing && store.state.seeing.night === nightOf() ? cleanSeeing(store.state.seeing) : cleanSeeing(CLEAR_SKY);
+  let haze = hazeOf(universe, seeing);
+  // Films never offered as somewhere to go next: the ones set aside, the ones already watched, and tonight's haze.
   let notFor = new Set();
-  const excluding = () => { notFor = new Set([...marks.hidden, ...marks.seen]); };
+  const excluding = () => { notFor = new Set([...marks.hidden, ...marks.seen, ...haze]); };
   excluding();
 
   const app = {
-    root, universe, depth, cosmos, labels, pilot, store, search, state, small, reducedMotion, edition,
+    root, universe, depth, deepen, cosmos, labels, pilot, store, search, state, small, reducedMotion, edition,
     films, starOf, slugOf,
     get marks() { return marks; },
     get notFor() { return notFor; },
+    get seeing() { return seeing; },
+    get haze() { return haze; },
     on(listener) { listeners.add(listener); return () => listeners.delete(listener); },
   };
   const refresh = what => { for (const listener of listeners) listener(what); };
@@ -119,13 +133,17 @@ export function createApp({ root, universe, depth, cosmos, labels, pilot, store,
   }
 
   function drawRays() {
-    if (state.focus < 0) { cosmos.setLines('rays', []); cosmos.setRayEnds([]); return; }
+    if (state.focus < 0) { cosmos.setLines('rays', []); cosmos.setLines('wormhole', []); cosmos.setRayEnds([]); return; }
     const list = leading();
     // Inside a star system the rings say it; the lines wait until you draw back.
     cosmos.setLines('rays', state.system ? [] : list.map((ray, n) => ({
       a: state.focus, b: ray.star, colour: [...RGB[ray.light], 0.85], width: 2.6, style: 1, phase: n * 0.17, wait: n * 0.07, grow: 0.9,
     })));
-    cosmos.setRayEnds(list.map(ray => ray.star));
+    // A wormhole is drawn last and slowest: a thread of beads running off across the sky.
+    cosmos.setLines('wormhole', state.system ? [] : state.holes.map((hole, n) => ({
+      a: state.focus, b: hole.star, colour: [...WORM, 0.85], width: 2.4, style: 5, phase: n * 0.37, wait: 0.7 + n * 0.3, grow: 1.8,
+    })));
+    cosmos.setRayEnds([...list.map(ray => ray.star), ...state.holes.map(hole => hole.star)]);
   }
 
   function drawLinks() {
@@ -224,11 +242,12 @@ export function createApp({ root, universe, depth, cosmos, labels, pilot, store,
       for (const step of line.forth) if (!rays.has(step.star)) rays.set(step.star, TIME_RINGS.after.color);
     }
     for (const item of (state.focus >= 0 && state.deep.get(state.focus)) || []) rays.set(item.star, '#cfe0ff');
+    for (const hole of state.holes) if (!rays.has(hole.star)) rays.set(hole.star, WORMHOLE);
     if (state.voyage) for (const stop of state.voyage.stops) if (!rays.has(stop.star)) rays.set(stop.star, '#dec6a0');
     if (state.journey) for (const stop of state.journey.path) if (!rays.has(stop.star)) rays.set(stop.star, '#f0c987');
     // In Lookback the kinds of film are named only in the decade you are in.
     const ring = state.sky !== TIME ? -1 : state.focus >= 0 ? universe.galaxyOf.time[state.focus] : state.galaxy;
-    labels.setContext({ focus: state.focus, rays, highlight: state.current ? state.current.stars : null, loved: marks.loved, ring });
+    labels.setContext({ focus: state.focus, rays, highlight: state.current ? state.current.lit || state.current.stars : null, loved: marks.loved, ring });
   }
 
   function syncMarks() {
@@ -243,6 +262,7 @@ export function createApp({ root, universe, depth, cosmos, labels, pilot, store,
   const orbits = createOrbits({
     root: document.getElementById('labels'), cosmos, universe, small, reducedMotion, insets: covered,
     onStar: (star, light) => focusStar(star, { light: LIGHT_IDS.includes(light) || state.focus < 0 ? light : closestLight(universe, state.focus, star).light }),
+    onHole: n => throughWormhole(n),
     onHover: star => cosmos.setHover(star),
     onMode: active => {
       state.system = active;
@@ -260,16 +280,26 @@ export function createApp({ root, universe, depth, cosmos, labels, pilot, store,
     for (const door of openDoors()) { first.set(door.light, door.star); taken.add(door.star); }
     for (const ray of state.rays) if (!first.has(ray.light) && !taken.has(ray.star)) { first.set(ray.light, ray.star); taken.add(ray.star); }
     orbits.setLight(likeness());
+    let built;
     if (state.sky === TIME) {
       // Seen in time, a film's system is what came before it, what came after, and what was made beside it.
       const line = lineOf(state.focus);
-      orbits.setSystem(state.focus, timeRings(universe, state.focus, { exclude: notFor, per: small ? 2 : 3, back: line.back, forth: line.forth }));
+      built = timeRings(universe, state.focus, { exclude: notFor, per: small ? 2 : 3, back: line.back, forth: line.forth });
     } else {
       // Under one light its ring goes innermost, where it shows best; on a phone the
       // innermost ring runs behind the film's own card, so the rings keep their order there.
       const lead = small || state.sky === 'white' ? null : state.sky;
-      orbits.setSystem(state.focus, rings(universe, state.focus, { first, exclude: notFor, per: small ? 2 : 3, lead }));
+      built = rings(universe, state.focus, { first, exclude: notFor, per: small ? 2 : 3, lead });
     }
+    // A wormhole leads somewhere the rings do not already show.
+    const shown = new Set(built.flatMap(ring => ring.stars));
+    if (state.holes.some(hole => shown.has(hole.star))) {
+      state.holes = holesAt(state.focus, shown);
+      drawRays(); labelContext();
+      refresh('holes');
+    }
+    orbits.setHoles(state.focus, state.holes.map(hole => ({ star: hole.star, colour: WORMHOLE, says: `far across the sky, yet near in ${lightById(hole.light).short}` })));
+    orbits.setSystem(state.focus, built);
     orbits.setDoors(openDoors().map(door => door.star));
   }
 
@@ -295,8 +325,10 @@ export function createApp({ root, universe, depth, cosmos, labels, pilot, store,
     const night = nightOf();
     let kept = store.state.comets.find(other => other.night === night);
     if (kept && starOf(kept.slug) < 0) kept = null; // its film has left the chart: another is chosen
+    // Until it is caught its film is unknown, so if tonight's seeing hazes it, one that fits is chosen instead.
+    if (kept && !kept.caught && haze.has(starOf(kept.slug))) kept = null;
     if (!kept) {
-      const exclude = new Set([...marks.hidden, ...marks.seen, ...marks.watchlist]);
+      const exclude = new Set([...marks.hidden, ...marks.seen, ...marks.watchlist, ...haze]);
       for (const other of store.state.comets) { const star = starOf(other.slug); if (star >= 0) exclude.add(star); }
       const visited = store.state.wake.map(starOf).filter(star => star >= 0);
       const picked = cometFor(universe, { night, loved: [...marks.loved], visited, exclude });
@@ -355,11 +387,26 @@ export function createApp({ root, universe, depth, cosmos, labels, pilot, store,
     app.hud?.caption('Tonight\'s comet · catch it to see the film it carries', COMET, 6500);
   }
   // A new night brings a new comet, even to a sky left open.
-  setInterval(() => { if (comet && comet.night !== nightOf()) { tonight(); refresh('comet'); } }, 60000);
+  setInterval(() => {
+    if (comet && comet.night !== nightOf()) { tonight(); refresh('comet'); }
+    // Tonight's seeing was for tonight: a new night begins under a clear sky.
+    if (store.state.seeing && store.state.seeing.night !== nightOf()) setSeeing(CLEAR_SKY);
+    // And tonight's bearing: a new night is found afresh.
+    if (store.state.bearing && store.state.bearing.night !== nightOf()) {
+      store.set('bearing', null);
+      if (state.current?.kind === 'bearing' && !taking) setCurrent(null);
+      refresh('bearing');
+    }
+  }, 60000);
 
   // ── Arriving at a star.
   function computedRays(star) {
     return prism(universe, star, { exclude: notFor }).map(ray => ({ light: ray.light, star: ray.star, shared: ray.shared, claim: '', watch: '', read: false }));
+  }
+  /** The wormholes at a star: never a film a ray or a ring already leads to, or one that is not offered. */
+  function holesAt(star, shown = null) {
+    if (star < 0) return [];
+    return wormholes(universe, star, { exclude: new Set([...notFor, ...state.rays.map(ray => ray.star), ...(shown || [])]) });
   }
 
   function applyArrival(star, arrival, done) {
@@ -379,6 +426,7 @@ export function createApp({ root, universe, depth, cosmos, labels, pilot, store,
       return charted;
     }).filter(Boolean);
     state.arrivalState = done ? 'read' : 'draft';
+    state.holes = holesAt(star);
     drawRays();
     updateSystem();
     labelContext();
@@ -411,9 +459,10 @@ export function createApp({ root, universe, depth, cosmos, labels, pilot, store,
   /**
    * Goes to a star.
    * @param {number} star
-   * @param {{ quiet?: boolean, light?: string, instant?: boolean, drifting?: boolean, keepVoyage?: boolean, history?: boolean }} [how]
+   * @param {{ quiet?: boolean, light?: string, instant?: boolean, drifting?: boolean, keepVoyage?: boolean, history?: boolean, through?: string }} [how]
    *   quiet: do not ask the Navigator (drifting, passing through); light: the ray travelled along;
-   *   history: arrived by going back or forward, so nothing is added to the way back
+   *   history: arrived by going back or forward, so nothing is added to the way back;
+   *   through: arrived through a wormhole, said so in these words
    */
   function focusStar(star, how = {}) {
     if (!(star >= 0 && star < universe.count)) return;
@@ -430,6 +479,7 @@ export function createApp({ root, universe, depth, cosmos, labels, pilot, store,
     state.arrivalState = 'idle';
     state.arrivalNote = '';
     state.rays = computedRays(star);
+    state.holes = holesAt(star);
     state.deepState = 'idle';
     extendJourney(star, how.light);
     store.visit(slugOf(star));
@@ -442,9 +492,14 @@ export function createApp({ root, universe, depth, cosmos, labels, pilot, store,
     const camera = cosmos.camera;
     const near = small ? 118 : 150;
     if (how.instant) camera.jumpTo({ target: place, distance: near, pitch: 0.5 });
-    else camera.flyTo({ target: place, distance: near, pitch: 0.5, swoop: from >= 0 ? (star % 2 ? 0.34 : -0.34) : 0.5, follow: () => cosmos.positionOf(star) });
+    else if (how.through) {
+      // Out of a wormhole: already at the far film, far back and turned, and drawn in toward it.
+      camera.jumpTo({ target: place, distance: near * 3.4, pitch: 0.66, yaw: camera.state.yaw - 1.1 });
+      camera.flyTo({ target: place, distance: near, pitch: 0.5, swoop: 1.1, duration: reducedMotion ? 0.001 : 2.1, follow: () => cosmos.positionOf(star) });
+    } else camera.flyTo({ target: place, distance: near, pitch: 0.5, swoop: from >= 0 ? (star % 2 ? 0.34 : -0.34) : 0.5, follow: () => cosmos.positionOf(star) });
 
-    if (from >= 0 && from !== star && how.light) {
+    if (how.through) app.hud?.caption(how.through, WORMHOLE, 6500);
+    else if (from >= 0 && from !== star && how.light) {
       const shared = sharedTraits(universe, how.light, from, star, 3).map(entry => universe.traits[entry.trait].s || universe.traits[entry.trait].t);
       app.hud?.caption(shared.length ? `${lightById(how.light).name} · ${shared.join(' · ')}` : lightById(how.light).name, lightById(how.light).color);
     }
@@ -476,6 +531,28 @@ export function createApp({ root, universe, depth, cosmos, labels, pilot, store,
     });
   }
 
+  // ── Wormholes: at a star, a film far across the sky that is yet one of its nearest in one deep thing.
+  let warping = false;
+  /** Goes through a wormhole: the sky is drawn into the star you are at, and opens again at the far film. */
+  function throughWormhole(n = 0) {
+    const hole = state.holes[n];
+    const from = state.focus;
+    if (!hole || from < 0 || warping) return;
+    if (state.drift) stopDrift();
+    const shared = hole.shared.slice(0, 2).map(trait => universe.traits[trait].s || universe.traits[trait].t);
+    const through = `Through a wormhole from ${films[from].t} \u00b7 alike in ${lightById(hole.light).short}${shared.length ? `: ${shared.join(' \u00b7 ')}` : ''}`;
+    const go = () => { if (state.focus === from) focusStar(hole.star, { light: hole.light, through }); }; // unless gone elsewhere meanwhile
+    if (reducedMotion) { go(); return; }
+    // Drawn in where the star is on screen, or the middle of the open sky.
+    const at = cosmos.project(from) || { x: (covered.left + cosmos.size.width - covered.right) / 2, y: cosmos.size.height / 2 };
+    const warp = h('div.warp', { 'aria-hidden': 'true', style: { '--x': `${Math.round(at.x)}px`, '--y': `${Math.round(at.y)}px` } },
+      h('div.warp-shade'), h('div.warp-rings'), h('div.warp-light'));
+    root.querySelector('#app').append(warp);
+    warping = true;
+    setTimeout(go, 800); // when the light fills the sky
+    setTimeout(() => { warp.remove(); warping = false; }, 1650);
+  }
+
   function blur({ history = false } = {}) {
     clearTimeout(arrivalTimer);
     pilot.cancel('arrival');
@@ -484,6 +561,7 @@ export function createApp({ root, universe, depth, cosmos, labels, pilot, store,
     state.galaxy = -1;
     state.arm = -1;
     state.rays = [];
+    state.holes = [];
     cosmos.setFocus(-1);
     cosmos.camera.setFollow(null);
     orbits.setSystem(-1);
@@ -544,6 +622,7 @@ export function createApp({ root, universe, depth, cosmos, labels, pilot, store,
     pilot.cancel('arrival');
     state.focus = -1;
     state.rays = [];
+    state.holes = [];
     state.galaxy = g;
     const arm = armIndex >= 0 ? galaxy.arms.find(entry => entry.arm === armIndex) : null;
     state.arm = arm ? armIndex : -1;
@@ -584,6 +663,7 @@ export function createApp({ root, universe, depth, cosmos, labels, pilot, store,
       // What may be offered next has changed: the rays, the doors and the rings are drawn again.
       const kept = state.arrival;
       state.rays = computedRays(state.focus);
+      state.holes = holesAt(state.focus);
       if (kept) applyArrival(state.focus, kept, state.arrivalState === 'read');
       if (state.journey && !state.journey.landed) computeDoors();
       drawRays(); updateSystem(); labelContext();
@@ -591,10 +671,169 @@ export function createApp({ root, universe, depth, cosmos, labels, pilot, store,
     refresh('marks');
   }
 
+  /** Sets tonight's seeing: the films outside it fade into haze, and nothing in the haze is offered next. */
+  function setSeeing(next) {
+    const was = describeSeeing(seeing);
+    seeing = cleanSeeing(next);
+    store.set('seeing', isClear(seeing) ? null : { night: nightOf(), ...seeing });
+    haze = hazeOf(universe, seeing);
+    cosmos.setHaze(haze);
+    labels.setContext({ haze: haze.size ? haze : null });
+    marksChanged();
+    if (!comet || !comet.caught) { tonight(); refresh('comet'); } // an uncaught comet keeps to tonight's seeing
+    refresh('seeing');
+    const now = describeSeeing(seeing);
+    if (now !== was) app.hud?.caption(now ? `Tonight · ${now} · ${plural(universe.count - haze.size, 'film')} in view, the rest in haze` : 'A clear sky · every film in view again', SEEING, 6000);
+  }
+  /** Why a film is outside tonight's seeing, in short phrases; empty if it is in view. */
+  const outsideSeeing = star => (haze.has(star) ? outside(universe, star, seeing) : []);
+
+  // ── Take a bearing: a few choices between two films everyone knows, and the sky turns toward tonight's film.
+  const BEARING = '#d8c48e';
+  let taking = null; // the bearing under way, if one is
+  // Never offered at the end: what is never offered anywhere, and the films already loved. Never shown as a landmark: what is set aside or in the haze.
+  const bearingAway = () => new Set([...notFor, ...marks.loved]);
+  const bearingVeil = () => new Set([...marks.hidden, ...haze]);
+  /** Tonight's bearing, if one was taken, as [[chosen, passed over]] in stars. */
+  function keptBearing() {
+    const kept = store.state.bearing;
+    if (!kept || kept.night !== nightOf()) return null;
+    const choices = kept.choices.map(pair => pair.map(starOf)).filter(pair => pair.every(star => star >= 0));
+    return choices.length ? choices : null;
+  }
+  const bearingNames = choices => {
+    const names = [...new Set(choices.map(pair => pair[0]))].map(star => films[star].t);
+    return names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}` : names[0] || '';
+  };
+  /** Why a film answers tonight's bearing, in a line: the films chosen it is nearest, and what it shares with the first. */
+  function bearingReason(reason) {
+    const near = reason.near.map(star => films[star].t);
+    const shared = reason.shared.map(trait => universe.traits[trait].s || universe.traits[trait].t);
+    if (!near.length) return '';
+    return `Near ${near.join(' and ')}, which you chose${shared.length ? ` \u00b7 ${shared.join(' \u00b7 ')}` : ''}`;
+  }
+  /** Turns the sky toward a few films: their middle, close enough to see most of them. */
+  function aimAt(stars) {
+    if (!stars.length) return;
+    const P = universe.positions[state.sky];
+    let x = 0; let y = 0; let z = 0;
+    for (const star of stars) { x += P[star * 3]; y += P[star * 3 + 1]; z += P[star * 3 + 2]; }
+    x /= stars.length; y /= stars.length; z /= stars.length;
+    const reach = stars.map(star => Math.hypot(P[star * 3] - x, P[star * 3 + 2] - z)).sort((a, b) => a - b);
+    const far = reach[Math.floor(reach.length * 0.7)] || 0;
+    cosmos.camera.setFollow(null);
+    cosmos.camera.flyTo({ target: [x, y, z], distance: Math.min(2200, Math.max(480, far * (small ? 3.4 : 2.4))), pitch: 0.9 });
+  }
+  /** Lights what the bearing leans toward so far: fewer films with every choice, the sky turning toward them. */
+  function lightBearing() {
+    const bearing = taking;
+    if (!bearing || !bearing.round) { if (state.current?.kind === 'bearing') setCurrent(null); return; }
+    const n = Math.round(320 / 1.7 ** (bearing.round - 1));
+    const lit = bearing.lit(n);
+    setCurrent({
+      kind: 'bearing', id: 'live', label: 'Tonight\'s bearing', note: `${bearing.round} of ${bearing.rounds} choices made: toward ${bearingNames(bearing.choices)}`,
+      stars: new Set(lit), colour: BEARING, light: 'white', strength: bearingStrength(bearing.weight, lit),
+    });
+    aimAt(lit.slice(0, Math.max(8, Math.round(n / 3))));
+  }
+  /** Takes a bearing: the one under way, tonight's if one was taken, or a new one (always, when asked afresh). */
+  function takeBearing({ fresh = false } = {}) {
+    if (state.drift) stopDrift();
+    if (fresh || (!taking && !keptBearing())) {
+      taking = createBearing(universe, { exclude: bearingAway(), veil: bearingVeil(), seed: (Date.now() ^ Math.floor(Math.random() * 0x7fffffff)) >>> 0 });
+      if (state.current?.kind === 'bearing') setCurrent(null);
+    } else if (!taking && state.current?.kind !== 'bearing') {
+      const set = setOf('bearing', 'tonight');
+      if (set) show(set, { frame: false });
+    }
+    if (state.focus >= 0 || state.galaxy >= 0) blur();
+    app.panels.open('bearing');
+  }
+  /** One film of the pair is nearer tonight. After the last choice the bearing is kept for the night and the sky turns to it. */
+  function chooseBearing(star) {
+    if (!taking) return;
+    taking.choose(star);
+    if (!taking.done) { lightBearing(); refresh('bearing'); return; }
+    store.set('bearing', { night: nightOf(), choices: taking.choices.map(pair => pair.map(slugOf)) });
+    taking = null;
+    const set = setOf('bearing', 'tonight');
+    if (set) { show(set, { frame: false }); aimAt(set.result.picks.map(pick => pick.star).concat(set.result.stars.slice(0, 9))); }
+    refresh('bearing');
+    if (set) app.hud?.caption(`Tonight's bearing \u00b7 the sky has turned toward ${films[set.result.picks[0].star].t}`, BEARING, 6500);
+  }
+  const skipBearing = () => { if (taking) { taking.skip(); refresh('bearing'); } };
+
+  // ── Watching together: two skies, and the films each person would choose for reasons of their own.
+  const YOURS = '#f0c987';
+  const THEIRS = '#a9b8ff';
+  const TOGETHER = '#e3cfee';
+  const theirStars = () => (store.state.together?.slugs || []).map(starOf).filter(star => star >= 0);
+  const theirName = () => store.state.together?.name || '';
+  /** Sets the other sky: the films the other person loves, and their name if given. */
+  function setTheirs(slugs, name = theirName()) {
+    const clean = [...new Set(slugs)].filter(slug => starOf(slug) >= 0).slice(0, 60);
+    const named = String(name || '').replace(/\s+/g, ' ').trim().slice(0, 24);
+    store.set('together', clean.length || named ? { name: named, slugs: clean } : null);
+    if (state.current?.kind === 'together') { const set = setOf('together', 'now'); if (set) setCurrent(set); else setCurrent(null); }
+    refresh('together');
+  }
+  const addTheirs = star => setTheirs([...(store.state.together?.slugs || []), slugOf(star)]);
+  const dropTheirs = star => setTheirs((store.state.together?.slugs || []).filter(slug => slug !== slugOf(star)));
+  const nameTheirs = name => setTheirs(store.state.together?.slugs || [], name);
+  /** What the two skies come to: the films for both, under which lights they meet, and the films both love. */
+  function bothSkies() {
+    const mine = [...marks.loved];
+    const theirs = theirStars();
+    if (!mine.length || !theirs.length) return null;
+    return {
+      mine, theirs, name: theirName(),
+      both: together(universe, mine, theirs, { exclude: notFor, k: 12 }),
+      lights: skiesMeet(universe, mine, theirs),
+      shared: theirs.filter(star => marks.loved.has(star)),
+    };
+  }
+  /** Why a film is for one of you, in a line: "Near Heat · Obsession · Cerebral horror". */
+  function sideOf(side, star) {
+    if (side.from < 0) return '';
+    const shared = bondOf(universe, side.from, star).map(trait => universe.traits[trait].s || universe.traits[trait].t);
+    return `Near ${films[side.from].t}${shared.length ? ` \u00b7 ${shared.join(' \u00b7 ')}` : ''}`;
+  }
+  /** A sky someone sent: it becomes the other sky, and the films for both of you are shown. */
+  function receiveSky(sky) {
+    const stars = sky.slugs.map(starOf).filter(star => star >= 0);
+    if (!stars.length) return false;
+    store.set('together', { name: sky.name || '', slugs: stars.map(slugOf) });
+    refresh('together');
+    app.panels.open('together');
+    app.hud?.caption(`${sky.name ? `${sky.name}\u2019s sky` : 'A sky sent to you'} \u00b7 ${plural(stars.length, 'film')} they love`, THEIRS, 6000);
+    return true;
+  }
+  /** Your sky, to send: a link where there is one, or a line to paste into theirs. */
+  async function sendSky() {
+    const slugs = [...store.state.loved].slice(-60);
+    if (!slugs.length) return;
+    const line = encodeSky(slugs);
+    const link = edition === 'claude' ? '' : `${window.location.origin}${window.location.pathname}#${encodeURIComponent(line)}`;
+    const text = `My sky in the Odyssey: ${plural(slugs.length, 'film')} I love. Open it to see the films for both of us.`;
+    const touch = small || window.matchMedia?.('(pointer: coarse)').matches;
+    if (touch && link && typeof navigator.share === 'function') {
+      try { await navigator.share({ title: 'My sky', text, url: link }); return; } catch (error) { if (error?.name === 'AbortError') return; }
+    }
+    const words = link ? `${text}\n${link}` : line;
+    try {
+      await navigator.clipboard.writeText(words);
+      app.hud?.toast(link ? 'Copied: a link to your sky' : 'Copied: your sky, as a line', { detail: link ? 'Send it to the person you are watching with.' : 'They paste it into Watching together, in their own Odyssey.', tone: 'pale' });
+    } catch {
+      app.hud?.toast('Copy this to send your sky', { detail: words, hold: 16000 });
+    }
+  }
+
+  const undoBearing = () => { if (taking) { taking.undo(); lightBearing(); refresh('bearing'); } };
+
   // ── Lit sets: a current (everything carrying a trait), a nebula, a constellation, a galaxy or one of its systems.
   function setCurrent(current) {
     state.current = current;
-    cosmos.setHighlight(current ? current.stars : null);
+    cosmos.setHighlight(current ? current.lit || current.stars : null); // lit: more than is listed (the films each loves, for two skies)
     cosmos.setLines('figure', current && current.figure ? current.figure : []);
     figures.setLit(current && current.kind === 'constellation' ? current.id : -1);
     labelContext();
@@ -640,6 +879,65 @@ export function createApp({ root, universe, depth, cosmos, labels, pilot, store,
         kind, id, known, label: known ? constellation.name : 'An unnamed figure',
         note: known ? traits.join(' and ') : `Something to do with ${hint.name}; ${films[hint.star].t} is one of its stars. Visit three of them to learn its name.`,
         stars, colour: '#dec6a0', light: 'white', figure: figureOf(stars),
+      };
+    }
+    if (kind === 'bend') {
+      // A film bent along one of its readings: the films most like it with that one clearly changed.
+      const [at, id2, way] = String(id).split(':');
+      const star = Number(at);
+      const direction = Number(way);
+      const temper = temperById(id2);
+      const own = star >= 0 && star < universe.count ? temperOf(films[star]) : null;
+      const n = TEMPER_IDS.indexOf(id2);
+      if (!temper || !own || !(own[n] >= 0)) return null;
+      const found = bend(universe, star, id2, direction, { exclude: notFor });
+      if (!found.length) return null;
+      const film = films[star];
+      const top = found[0].score || 1;
+      const name = temper.name.toLowerCase();
+      return {
+        kind, id, from: star, label: `Like ${film.t}, but ${direction < 0 ? temper.less : temper.more}`,
+        note: `The films most like ${film.t} with clearly ${direction < 0 ? 'less' : 'more'} ${name}, and the rest of its temper kept. ${film.t} reads ${own[n]} for ${name}: ${temperWord(id2, own[n])}.`,
+        stars: new Set(found.map(entry => entry.star)), colour: TEMPER_COLOUR, light: 'white',
+        strength: new Map(found.map(entry => [entry.star, entry.score / top])),
+        rows: new Map(found.map(entry => [entry.star, `${temper.name} ${entry.value} against ${film.t}\u2019s ${own[n]}`])),
+      };
+    }
+    if (kind === 'together') {
+      // The films for both of you: each with a thread to the film you love it is nearest, and one to theirs.
+      const skies = bothSkies();
+      if (!skies || !skies.both.length) return null;
+      const name = skies.name || 'them';
+      const warm = hexToRgb(YOURS);
+      const cool = hexToRgb(THEIRS);
+      const figure = [];
+      skies.both.forEach((entry, n) => {
+        if (entry.mine.from >= 0) figure.push({ a: entry.mine.from, b: entry.star, colour: [...warm, 0.6], width: 1.3, style: 0, grow: 1.3, wait: n * 0.09 });
+        if (entry.theirs.from >= 0) figure.push({ a: entry.theirs.from, b: entry.star, colour: [...cool, 0.6], width: 1.3, style: 0, grow: 1.3, wait: n * 0.09 + 0.05 });
+      });
+      const top = skies.both[0].score || 1;
+      return {
+        kind, id, label: 'For both of you', skies,
+        note: `Each near a film you love and near one ${name === 'them' ? 'they love' : `${name} loves`}: gold threads to yours, blue to theirs`,
+        stars: new Set(skies.both.map(entry => entry.star)), colour: TOGETHER, light: 'white', figure,
+        lit: new Set([...skies.both.map(entry => entry.star), ...skies.mine, ...skies.theirs]),
+        strength: new Map(skies.both.map(entry => [entry.star, entry.score / top])),
+        rows: new Map(skies.both.map(entry => [entry.star, [sideOf(entry.mine, entry.star) && `For you: ${sideOf(entry.mine, entry.star)}`, sideOf(entry.theirs, entry.star) && `For ${name}: ${sideOf(entry.theirs, entry.star)}`].filter(Boolean).join(' / ')])),
+      };
+    }
+    if (kind === 'bearing') {
+      // Where tonight's bearing points: the films the sky leans toward after the choices made.
+      const choices = keptBearing();
+      if (!choices) return null;
+      const result = bearingResult(universe, choices, { exclude: bearingAway(), galaxyOf: universe.galaxyOf.white });
+      if (!result) return null;
+      const cache = new Map();
+      const scoresOf = star => { if (!cache.has(star)) cache.set(star, universe.model.scores('white', star)); return cache.get(star); };
+      return {
+        kind, id, label: 'Tonight\'s bearing', result, choices,
+        note: `Where your ${choices.length} choices point: toward ${bearingNames(choices)}, and away from the films passed over`,
+        stars: new Set(result.stars), colour: BEARING, light: 'white', strength: result.strength,
+        rows: new Map(result.stars.map(star => [star, bearingReason(reasonOf(universe, star, choices, scoresOf))])),
       };
     }
     if (kind === 'kind') {
@@ -717,6 +1015,8 @@ export function createApp({ root, universe, depth, cosmos, labels, pilot, store,
   const showConstellation = index => show(setOf('constellation', index));
   // A kind of film named at the horizon of Lookback: every film of that kind, lit from the present to the silent years.
   const showKind = g => show(setOf('kind', g), { frame: false });
+  /** "Like this, but gentler": a star bent along one of its readings, lit and listed. */
+  const bendTo = (star, temper, direction) => browse('bend', `${star}:${temper}:${direction}`);
   /** Lights a set and opens its list of films. */
   function browse(kind, id, arm = -1) {
     const set = kind === 'galaxy' || kind === 'arm' ? show(setOf(kind, id, arm), { frame: false }) : show(setOf(kind, id, arm));
@@ -981,11 +1281,11 @@ export function createApp({ root, universe, depth, cosmos, labels, pilot, store,
     if (star < 0) {
       const lit = [];
       const G = universe.galaxyOf[state.sky];
-      for (let i = 0; i < universe.base; i += 1) if (films[i].rn >= 3 && G[i] !== UNLIT && !marks.hidden.has(i)) lit.push(i);
+      for (let i = 0; i < universe.base; i += 1) if (films[i].rn >= 3 && G[i] !== UNLIT && !marks.hidden.has(i) && !haze.has(i)) lit.push(i);
       star = lit[Math.floor(Math.random() * lit.length)] ?? 0;
       focusStar(star, { quiet: true, drifting: true });
     } else {
-      const next = driftNext(universe, star, new Set([...marks.visited, ...marks.hidden]), likeness());
+      const next = driftNext(universe, star, new Set([...marks.visited, ...marks.hidden, ...haze]), likeness());
       if (!next) { stopDrift(); return; }
       const light = next.light === 'white' ? closestLight(universe, star, next.star).light : next.light;
       focusStar(next.star, { quiet: true, drifting: true, light });
@@ -1078,6 +1378,7 @@ export function createApp({ root, universe, depth, cosmos, labels, pilot, store,
     else if (galaxy) { found.galaxy = Number(galaxy[1]); if (galaxy[2] !== undefined) found.arm = Number(galaxy[2]); }
     else if (place.startsWith('voyage-')) found.voyage = place.slice(7).split('~').filter(Boolean).slice(0, 40);
     else if (place.startsWith('light-')) found.light = place.slice(6);
+    else if (place.startsWith('sky')) found.sky = decodeSky(place);
     if (light) found.light = light;
     return found;
   }
@@ -1093,6 +1394,13 @@ export function createApp({ root, universe, depth, cosmos, labels, pilot, store,
       labels.rebuild();
       drawEpochs();
       refresh('sky');
+    }
+    if (address.sky) {
+      // A sky someone sent: taken in once, and the address put back to where the voyager is.
+      const taken = receiveSky(address.sky);
+      written = '';
+      try { window.history.replaceState({ odyssey: depthNow }, '', window.location.pathname + window.location.search); } catch { /* a sandboxed frame may refuse */ }
+      if (taken) return true;
     }
     if (address.voyage) {
       const route = routeOf(universe, address.voyage);
@@ -1173,11 +1481,15 @@ export function createApp({ root, universe, depth, cosmos, labels, pilot, store,
 
   Object.assign(app, {
     focusStar, blur, setSky, goHome, openGalaxy, overview, toggle, reloadKept,
-    setCurrent, showTrait, showRegister, showConstellation, showKind, browse, setOf, widen,
+    setCurrent, showTrait, showRegister, showConstellation, showKind, bendTo, browse, setOf, widen,
     lookDeeper, chartFilm, beginVoyage, endVoyage, voyageTo, plotPassage,
     setOut, takeDoor, stepBack, land, endJourney, showKeptRoute, homeOf, openDoors,
     startDrift, stopDrift, checkConstellations, followAddress, back, share, hintOf,
-    tonight, catchComet, showComet, cometReason,
+    tonight, catchComet, showComet, cometReason, setSeeing, outsideSeeing,
+    takeBearing, chooseBearing, skipBearing, undoBearing, taking: () => taking, bearingTaken: () => Boolean(keptBearing()),
+    theirStars, theirName, addTheirs, dropTheirs, nameTheirs, setTheirs, bothSkies, sideOf, receiveSky, sendSky,
+    throughWormhole,
+    colours: { yours: YOURS, theirs: THEIRS, together: TOGETHER, bearing: BEARING, wormhole: WORMHOLE },
     canGoBack: () => depthNow > 0,
     between: (a, b) => between(universe, a, b, 4, notFor),
     progress: () => constellationProgress(universe, marks.visited),
@@ -1193,6 +1505,8 @@ export function createApp({ root, universe, depth, cosmos, labels, pilot, store,
   // ── Begin: put back what was found before, then go where the address says.
   state.restoring = true;
   pilot.restore();
+  cosmos.setHaze(haze);
+  labels.setContext({ haze: haze.size ? haze : null });
   syncMarks();
   checkConstellations();
   state.restoring = false;
@@ -1240,6 +1554,9 @@ export function createApp({ root, universe, depth, cosmos, labels, pilot, store,
     else if (key === 'h' || key === 'Home') goHome();
     else if (key === 'd') { if (state.drift) stopDrift(); else startDrift(); }
     else if (key === 'c') catchComet();
+    else if (key === 'j' && state.holes.length) throughWormhole(0);
+    else if (key === 'b') takeBearing();
+    else if (key === 't') app.panels.toggle('together');
     else if (key === 'l' && state.focus >= 0) toggle('loved', state.focus);
     else if (key === 'w' && state.focus >= 0) toggle('watchlist', state.focus);
     else if (key === 'Backspace' && app.canGoBack()) { event.preventDefault(); back(); }

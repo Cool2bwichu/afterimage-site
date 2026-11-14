@@ -51,7 +51,26 @@ function read(saved) {
     entered: Boolean(saved.entered),
     companion: saved.companion && typeof saved.companion === 'object' ? saved.companion : null,
     readArrivals: saved.readArrivals !== false, // whether the Navigator reads each star on arrival
+    // Tonight's seeing, kept for the night it was set: { night, length, language, tempers }.
+    seeing: saved.seeing && typeof saved.seeing === 'object' && typeof saved.seeing.night === 'string' ? saved.seeing : null,
+    // Tonight's bearing, as the choices made: { night, choices: [[chosen slug, passed-over slug]] }.
+    bearing: cleanBearing(saved.bearing),
+    // The other sky, for watching together: { name, slugs }, the films the other person loves.
+    together: cleanTogether(saved.together),
   };
+}
+
+function cleanTogether(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const slugs = list(raw.slugs).slice(0, 60);
+  const name = typeof raw.name === 'string' ? raw.name.slice(0, 24) : '';
+  return slugs.length || name ? { name, slugs } : null;
+}
+
+function cleanBearing(raw) {
+  if (!raw || typeof raw !== 'object' || typeof raw.night !== 'string' || !Array.isArray(raw.choices)) return null;
+  const choices = raw.choices.filter(pair => Array.isArray(pair) && pair.length === 2 && pair.every(slug => typeof slug === 'string')).slice(0, 12);
+  return choices.length ? { night: raw.night, choices } : null;
 }
 
 export function createStore() {
@@ -65,7 +84,7 @@ export function createStore() {
       loved: [...state.loved], seen: [...state.seen], watchlist: [...state.watchlist], hidden: [...state.hidden],
       visited: [...state.visited].slice(-MAX_VISITED), wake: state.wake.slice(-MAX_WAKE), routes: state.routes.slice(-MAX_ROUTES),
       found: state.found.slice(-MAX_READINGS), arrivals, sky: state.sky, entered: state.entered, comets: state.comets.slice(-MAX_COMETS),
-      companion: state.companion, readArrivals: state.readArrivals,
+      companion: state.companion, readArrivals: state.readArrivals, seeing: state.seeing, bearing: state.bearing, together: state.together,
     };
   }
 
@@ -179,7 +198,7 @@ export function createStore() {
     },
     clear() {
       for (const key of [...MARKS, 'visited']) state[key].clear();
-      state.wake.length = 0; state.found.length = 0; state.routes = []; state.arrivals = {}; state.comets = [];
+      state.wake.length = 0; state.found.length = 0; state.routes = []; state.arrivals = {}; state.comets = []; state.seeing = null; state.bearing = null; state.together = null;
       write();
     },
   };

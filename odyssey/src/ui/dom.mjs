@@ -73,7 +73,11 @@ const ICONS = {
   upload: '<path d="M12 15V4M7.5 8.5 12 4l4.5 4.5"/><path d="M5 19.5h14"/>',
   undo: '<path d="M9 14 4.5 9.5 9 5"/><path d="M4.5 9.5H14a5.5 5.5 0 0 1 0 11h-3"/>',
   orbit: '<circle cx="12" cy="12" r="2.4"/><ellipse cx="12" cy="12" rx="9.5" ry="4.6" transform="rotate(-18 12 12)"/>',
+  moon: '<path d="M19.5 14.6A8 8 0 0 1 9.4 4.5a8 8 0 1 0 10.1 10.1Z"/>',
   comet: '<circle cx="16.6" cy="7.4" r="2.7"/><path d="M14.6 9.4 4 20"/><path d="M12.6 7.2 6.5 13.3" opacity=".6"/><path d="M16.8 11.4 10.7 17.5" opacity=".6"/>',
+  bearing: '<circle cx="12" cy="12" r="8.5"/><path d="M12 3.5v2.6M12 17.9v2.6M3.5 12h2.6M17.9 12h2.6" opacity=".6"/><path d="m8.6 15.4 6.8-6.8"/><circle cx="15.4" cy="8.6" r="1.3"/>',
+  together: '<path d="M8.5 4.5l1.3 3.7 3.7 1.3-3.7 1.3-1.3 3.7-1.3-3.7-3.7-1.3 3.7-1.3 1.3-3.7Z"/><path d="M16 11l1 2.8 2.8 1-2.8 1-1 2.8-1-2.8-2.8-1 2.8-1 1-2.8Z"/>',
+  wormhole: '<ellipse cx="12" cy="12" rx="9.5" ry="4.3"/><ellipse cx="12" cy="12.4" rx="5.4" ry="2.3" opacity=".75"/><ellipse cx="12" cy="12.7" rx="1.9" ry=".8" opacity=".55"/>',
 };
 
 export function icon(name, size = 18) {

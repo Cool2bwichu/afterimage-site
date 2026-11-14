@@ -223,6 +223,7 @@ export function createCosmos({ canvas, universe, reducedMotion = false, small = 
   let dim = 0;
   let dimGoal = 0;
   let veil = 0; // the rest of the sky stepping back while a star system is open
+  let haze = null; // Set<number> | null: films outside tonight's seeing, dimmed unless lit
 
   function allocate(needed) {
     const next = needed + HEADROOM;
@@ -478,7 +479,7 @@ export function createCosmos({ canvas, universe, reducedMotion = false, small = 
       if (i === hover) value = Math.max(value, 1.1) + 0.35;
       if (i === focus) value = 2;
       glowGoal[i] = value;
-      const mark = (marks.loved.has(i) ? 1 : 0) + (marks.visited.has(i) ? 2 : 0) + (universe.isDeep(i) ? 4 : 0);
+      const mark = (marks.loved.has(i) ? 1 : 0) + (marks.visited.has(i) ? 2 : 0) + (universe.isDeep(i) ? 4 : 0) + (haze && haze.has(i) ? 8 : 0);
       if (data[i * 4 + 2] !== mark) { data[i * 4 + 2] = mark; dataDirty = true; }
     }
     dimGoal = Math.max(highlight ? 0.74 : 0, veil);
@@ -828,6 +829,8 @@ export function createCosmos({ canvas, universe, reducedMotion = false, small = 
     setHighlight(set) { highlight = set && set.size ? set : null; refreshGlowGoals(); },
     setRayEnds(list) { rayEnds = new Set(list); refreshGlowGoals(); },
     setVeil(amount) { if (veil !== amount) { veil = amount; refreshGlowGoals(); } },
+    /** Films outside tonight's seeing fade into haze (a lit one still shows). */
+    setHaze(set) { haze = set && set.size ? set : null; refreshGlowGoals(); },
     setMarks({ loved, visited }) { if (loved) marks.loved = loved; if (visited) marks.visited = visited; refreshGlowGoals(); },
     onFrame(listener) { frameListeners.add(listener); return () => frameListeners.delete(listener); },
     onSettled(listener) { settled.add(listener); return () => settled.delete(listener); },

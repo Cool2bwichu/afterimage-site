@@ -2,8 +2,11 @@
 // of films, your own sky and journal, the constellations, the nebulae,
 // collisions, passages, and the Navigator's own controls.
 import { lightById } from '../engine/lights.mjs';
-import { gravity, taste } from '../engine/voyage.mjs';
+import { gravity, sharedTraits, taste } from '../engine/voyage.mjs';
 import { rankSet, trail } from '../engine/journey.mjs';
+import { LENGTHS, LANGUAGES, LIMITS, isClear } from '../engine/seeing.mjs';
+import { TEMPERS } from '../engine/temper.mjs';
+import { decodeSky } from '../engine/together.mjs';
 import { h, icon, replace, plural } from './dom.mjs';
 import { poster } from './posters.mjs';
 import { source } from './dossier.mjs';
@@ -24,7 +27,7 @@ const ORDERS = [
   ['unfamiliar', 'Less known', 'The truest, leaning toward films fewer people know'],
 ];
 const SKY_TABS = [['loved', 'Loved'], ['watchlist', 'Watchlist'], ['seen', 'Watched'], ['voyages', 'Voyages'], ['comets', 'Comets'], ['aside', 'Set aside'], ['journal', 'Journal']];
-const BACK_TO = { figures: 'Constellations', nebulae: 'Nebulae', sky: 'Your sky', voyage: 'Set out' };
+const BACK_TO = { figures: 'Constellations', nebulae: 'Nebulae', sky: 'Your sky', voyage: 'Set out', bearing: 'Tonight\'s bearing', together: 'Watching together' };
 
 export function createPanels(app) {
   const { universe, state, films, pilot, cosmos, store } = app;
@@ -97,6 +100,16 @@ export function createPanels(app) {
       if (wake.length >= 6) break;
     }
     const nodes = [note('A voyage begins at a film and goes somewhere. At every star three doors open, each under its own light, each a film near this one and a little further from where you began. Take doors until one feels like tonight\'s film, then land.')];
+    nodes.push(h('button.setout-bearing', { type: 'button', onclick: () => app.takeBearing() },
+      h('span.setout-bearing-icon', icon('bearing', 22)),
+      h('span.setout-text', h('span.setout-kicker', 'Not sure where to begin?'), h('span.setout-title', app.taking() ? 'Go on with your bearing' : app.bearingTaken() ? 'Tonight\'s bearing' : 'Take a bearing'),
+        h('span.setout-sub', 'Six quick choices between two films, and the sky turns toward tonight\'s')),
+      h('span.setout-go', icon('arrow', 16))));
+    nodes.push(h('button.setout-bearing.setout-together', { type: 'button', onclick: () => open('together') },
+      h('span.setout-bearing-icon', icon('together', 22)),
+      h('span.setout-text', h('span.setout-kicker', 'Watching with someone?'), h('span.setout-title', 'Watching together'),
+        h('span.setout-sub', 'Where your two skies meet, and the films for both of you')),
+      h('span.setout-go', icon('arrow', 16))));
     if (state.focus >= 0) {
       const film = films[state.focus];
       nodes.push(h('button.setout-here', { type: 'button', onclick: () => app.setOut(state.focus) },
@@ -330,16 +343,19 @@ export function createPanels(app) {
     arm: () => (set.sky === 'time' ? 'A kind of film in a decade' : 'A star system'),
     kind: () => 'A kind of film, in every decade',
     sky: () => 'Your sky',
+    bend: () => 'Like this, but…',
+    bearing: () => (set.id === 'live' ? 'A bearing being taken' : 'Where your choices point'),
+    together: () => 'Watching together',
   }[set.kind] || (() => 'A set of films'))();
   const setKey = set => `${set.kind}:${set.id}:${set.arm ?? ''}:${set.stars.size}:${set.light || ''}`;
 
   function ranking(set) {
     const list = memo.list;
-    const exclude = new Set(app.marks.hidden);
+    const exclude = new Set([...app.marks.hidden, ...app.haze]);
     if (list.hideWatched) for (const star of app.marks.seen) exclude.add(star);
     const loved = [...app.marks.loved];
     const order = list.order === 'yours' && !loved.length ? 'truest' : list.order;
-    const key = `${list.key}|${order}|${list.hideWatched}|${loved.join()}|${app.marks.hidden.size}|${app.marks.seen.size}`;
+    const key = `${list.key}|${order}|${list.hideWatched}|${loved.join()}|${app.marks.hidden.size}|${app.marks.seen.size}|${app.haze.size}`;
     if (list.rankKey !== key) {
       list.ranked = rankSet(universe, [...set.stars], { light: set.light || 'white', loved, exclude, order, strength: set.strength || null });
       list.rankKey = key;
@@ -357,6 +373,7 @@ export function createPanels(app) {
     const ranked = ranking(set);
     const hidden = [...set.stars].filter(star => app.marks.hidden.has(star)).length;
     const watched = list.hideWatched ? [...set.stars].filter(star => app.marks.seen.has(star) && !app.marks.hidden.has(star)).length : 0;
+    const hazed = [...set.stars].filter(star => app.haze.has(star) && !app.marks.hidden.has(star) && !(list.hideWatched && app.marks.seen.has(star))).length;
     const loved = app.marks.loved.size;
     const order = list.order === 'yours' && !loved ? 'truest' : list.order;
 
@@ -368,7 +385,7 @@ export function createPanels(app) {
       const seen = [...set.stars].filter(star => app.marks.visited.has(star)).length;
       nodes.push(h('p.set-progress', h('span.pips', [...set.stars].map((star, n) => h('span.pip', { class: n < seen ? 'on' : '' }))), `${seen} of ${set.stars.size} stars visited`));
     }
-    const left = [hidden ? `${hidden} set aside` : '', watched ? `${watched} watched` : ''].filter(Boolean);
+    const left = [hidden ? `${hidden} set aside` : '', watched ? `${watched} watched` : '', hazed ? `${hazed} outside tonight's seeing` : ''].filter(Boolean);
     nodes.push(h('p.set-count', h('strong', ranked.length.toLocaleString('en')), ` ${ranked.length === 1 ? 'film' : 'films'}${left.length ? ` · ${left.join(', ')} not shown` : ''}`));
     nodes.push(h('div.segmented', { role: 'radiogroup', 'aria-label': 'Order' }, ORDERS.map(([id, label, hint]) => {
       const disabled = id === 'yours' && !loved;
@@ -397,12 +414,17 @@ export function createPanels(app) {
     const why = entry => {
       const film = films[entry.star];
       if (order === 'yours' && entry.from >= 0 && entry.pull > 0.05) return `Near ${films[entry.from].t}, which you love`;
+      if (set.rows && set.rows.has(entry.star)) {
+        // A bent film: how far it moved, and what it still shares with the film it was bent from.
+        const shared = set.from >= 0 ? sharedTraits(universe, 'white', set.from, entry.star, 2).map(found => traitName(found.trait)) : [];
+        return [set.rows.get(entry.star), shared.length ? `Both: ${shared.join(' · ')}` : ''].filter(Boolean).join(' · ');
+      }
       if (order === 'unfamiliar' && (film.rn ?? 1) <= 1) return [film.d, 'seldom seen'].filter(Boolean).join(' · ');
       return film.d || '';
     };
     nodes.push(h('div.set-rows', ranked.slice(0, list.shown).map(entry => filmRow(entry.star, {
       bodyNode: [why(entry) ? h('span.frow-shared', why(entry)) : null,
-        h('span.srow-meter', { title: `Carries it ${Math.round(entry.strength * 100)}% as fully as the truest film here`, style: { '--w': `${Math.max(4, Math.round(entry.strength * 100))}%` } },
+        h('span.srow-meter', { title: set.kind === 'bend' || set.kind === 'bearing' ? `${Math.round(entry.strength * 100)}% as near as the nearest film here` : `Carries it ${Math.round(entry.strength * 100)}% as fully as the truest film here`, style: { '--w': `${Math.max(4, Math.round(entry.strength * 100))}%` } },
           order === 'yours' ? h('span.srow-pull', { style: { '--w': `${Math.max(2, Math.round(entry.pull * 100))}%` } }) : null)],
       extra: badges(entry.star),
       onGo: () => go(entry.star),
@@ -411,7 +433,7 @@ export function createPanels(app) {
       nodes.push(h('button.act.act-more', { type: 'button', onclick: () => { const top = body.scrollTop; list.shown += PAGE; renderSet(); body.scrollTop = top; } },
         h('span', `Show ${Math.min(PAGE, ranked.length - list.shown)} more of ${ranked.length.toLocaleString('en')}`)));
     }
-    if (!ranked.length) nodes.push(note('Every film here is set aside or watched.'));
+    if (!ranked.length) nodes.push(note(hazed ? 'Every film here is set aside, watched, or outside tonight\'s seeing.' : 'Every film here is set aside or watched.'));
     nodes.push(h('p.panel-note', h('button.quiet.quiet-first', { type: 'button', onclick: () => { app.setCurrent(null); close(); } }, 'Put the lights back')));
     replace(body, nodes);
   }
@@ -459,7 +481,8 @@ export function createPanels(app) {
       h('div.loved-grid', [...store.state.loved].reverse().map(app.starOf).filter(i => i >= 0).slice(0, 18).map(star => posterButton(star, () => go(star)))),
       h('div.panel-actions',
         h('button.act', { type: 'button', onclick: () => app.searchView.open({ title: 'A film you love', pick: star => { if (!app.marks.loved.has(star)) app.toggle('loved', star, true); open('sky'); } }) }, icon('plus', 16), h('span', 'Add a film')),
-        h('button.act', { type: 'button', onclick: () => { app.setCurrent({ kind: 'sky', id: 0, label: 'Your sky', note: 'the films you love, and what they pull toward you', stars: new Set([...loved, ...pulled.map(entry => entry.star)]), colour: '#f0c987', light: 'white' }); app.widen(); } }, icon('eye', 16), h('span', 'Light it up'))),
+        h('button.act', { type: 'button', onclick: () => { app.setCurrent({ kind: 'sky', id: 0, label: 'Your sky', note: 'the films you love, and what they pull toward you', stars: new Set([...loved, ...pulled.map(entry => entry.star)]), colour: '#f0c987', light: 'white' }); app.widen(); } }, icon('eye', 16), h('span', 'Light it up')),
+        h('button.act', { type: 'button', onclick: () => open('together') }, icon('together', 16), h('span', 'Watching together'))),
     ];
 
     if (loved.length >= 2) {
@@ -853,7 +876,156 @@ export function createPanels(app) {
     return h('p.panel-note', button);
   }
 
-  const RENDER = { voyage: renderVoyage, course: renderCourse, set: renderSet, sky: renderSky, figures: renderFigures, nebulae: renderNebulae, collide: renderCollide, passage: renderPassage, navigator: renderNavigator };
+  // ── Take a bearing: two films at a time, and the sky turns toward tonight's.
+  const AS = { best: 'Where it points', aside: 'A step aside', little: 'Seldom seen' };
+  function renderBearing() {
+    const bearing = app.taking();
+    const words = list => list.map(traitName).join(' \u00b7 ');
+    if (bearing && !bearing.done) {
+      heading.textContent = 'Take a bearing';
+      const pair = bearing.pair();
+      if (!pair) {
+        replace(body, note('There are no two films left to choose between. Tonight\'s seeing may be holding too few: open it up, or take back a step.'),
+          h('div.panel-actions', bearing.round ? h('button.act', { type: 'button', onclick: () => app.undoBearing() }, icon('undo', 15), h('span', 'Back a step')) : null,
+            h('button.act', { type: 'button', onclick: () => open('seeing') }, icon('moon', 15), h('span', 'Tonight\'s seeing'))));
+        return;
+      }
+      const pole = (star, said) => h('button.bearing-pole', {
+        type: 'button', onclick: () => app.chooseBearing(star),
+        onpointerenter: () => cosmos.setHover(star), onpointerleave: () => cosmos.setHover(-1),
+        'aria-label': `${films[star].t}, ${films[star].y}${said.length ? `: ${words(said)}` : ''}`,
+      },
+      h('span.bearing-poster', poster(films[star], { words: true, eager: true })),
+      h('span.bearing-name', films[star].t, h('span.frow-year', String(films[star].y))),
+      said.length ? h('span.bearing-words', words(said)) : null);
+      replace(body,
+        h('p.bearing-ask', bearing.round ? 'And now?' : 'Which is nearer tonight?'),
+        bearing.round ? null : h('p.bearing-hint', 'Seen or not, choose the one nearer to what you want. Six times, and the sky turns toward tonight\'s film.'),
+        h('div.bearing-pair', pole(pair.a, pair.words[0]), h('span.bearing-or', { 'aria-hidden': 'true' }, 'or'), pole(pair.b, pair.words[1])),
+        h('div.bearing-foot',
+          h('span.pips', { role: 'img', 'aria-label': `${bearing.round} of ${bearing.rounds} chosen` }, Array.from({ length: bearing.rounds }, (_, n) => h('span.pip', { class: n < bearing.round ? 'on' : '' }))),
+          h('span.bearing-acts',
+            bearing.round ? h('button.quiet', { type: 'button', onclick: () => app.undoBearing() }, 'Back a step') : null,
+            h('button.quiet', { type: 'button', title: 'Two other films, and nothing learned', onclick: () => app.skipBearing() }, 'Neither'))));
+      return;
+    }
+    heading.textContent = 'Tonight\'s bearing';
+    const set = app.setOf('bearing', 'tonight');
+    if (!set) {
+      replace(body, note('No bearing taken tonight. Six quick choices between two films, and the sky turns toward tonight\'s film.'),
+        h('div.panel-actions', h('button.act', { type: 'button', onclick: () => app.takeBearing({ fresh: true }) }, icon('bearing', 16), h('span', 'Take a bearing'))));
+      return;
+    }
+    const { result, choices } = set;
+    replace(body,
+      h('p.bearing-ask', 'The sky has turned toward these'),
+      h('div.bearing-chosen', { 'aria-label': 'Your choices' }, choices.map(([chosen, passed]) => h('span.bearing-chip', { title: `${films[chosen].t} over ${films[passed].t}` },
+        h('span.bearing-chip-poster', poster(films[chosen], { words: false })), h('span.bearing-chip-name', films[chosen].t)))),
+      result.picks.map(pick => h('div.bearing-pick', { style: { '--c': '#d8c48e' } },
+        h('p.bearing-as', AS[pick.as]),
+        filmRow(pick.star, { bodyNode: h('span.frow-shared', set.rows.get(pick.star) || films[pick.star].d || ''), extra: badges(pick.star), onGo: () => go(pick.star) }))),
+      h('div.panel-actions',
+        h('button.act', { type: 'button', onclick: () => { if (state.current?.kind !== 'bearing' || state.current.id !== 'tonight') app.setCurrent(set); open('set'); } }, icon('list', 16), h('span', `All ${set.stars.size} it points toward`)),
+        h('button.act', { type: 'button', onclick: () => app.takeBearing({ fresh: true }) }, icon('bearing', 16), h('span', 'Take another bearing'))),
+      note('Tonight\'s bearing is kept until five in the morning.'));
+  }
+
+  // ── Watching together: two skies, and the films for both.
+  function renderTogether() {
+    heading.textContent = 'Watching together';
+    const colours = app.colours;
+    const theirs = app.theirStars();
+    const name = app.theirName();
+    const mine = [...store.state.loved].reverse().map(app.starOf).filter(star => star >= 0);
+    const skies = app.bothSkies();
+    const their = name ? `${name}\u2019s` : 'Their';
+    const pickTheirs = () => app.searchView.open({ title: name ? `A film ${name} loves` : 'A film they love', pick: star => { app.addTheirs(star); open('together'); } });
+    const filmChip = (star, drop) => h('span.together-film',
+      h('button.together-film-face', { type: 'button', title: `${films[star].t} (${films[star].y})`, onclick: () => go(star), onpointerenter: () => cosmos.setHover(star), onpointerleave: () => cosmos.setHover(-1) }, poster(films[star], { words: false })),
+      drop ? h('button.together-drop', { type: 'button', 'aria-label': `Take ${films[star].t} out of ${their.toLowerCase()} sky`, title: 'Take it out', onclick: drop }, icon('close', 11)) : null);
+    const paste = h('input.together-paste', {
+      type: 'text', autocomplete: 'off', spellcheck: 'false', placeholder: 'Or paste a sky they sent you', 'aria-label': 'Paste a sky they sent you',
+      onkeydown: event => { if (event.key === 'Enter') take(); },
+      onpaste: () => setTimeout(take, 0),
+    });
+    const pasteNote = h('p.together-paste-note', { role: 'status' });
+    function take() {
+      const sky = decodeSky(paste.value);
+      const stars = sky ? sky.slugs.map(app.starOf).filter(star => star >= 0) : [];
+      if (!stars.length) { pasteNote.textContent = paste.value.trim() ? 'That is not a sky the Odyssey can read.' : ''; return; }
+      app.setTheirs(stars.map(app.slugOf), sky.name || name);
+      open('together');
+    }
+    const nodes = [note('Two skies, and the films that sit in both. Each film for both of you is near something you love and near something they love, so each of you has a reason of your own to want it.')];
+
+    nodes.push(h('p.together-side', { style: { '--c': colours.yours } }, h('span.together-dot'), 'Your sky', h('span.together-count', mine.length ? plural(mine.length, 'film') + ' you love' : '')));
+    if (mine.length) nodes.push(h('div.together-films', mine.slice(0, 12).map(star => filmChip(star, null))));
+    else nodes.push(note('Love a few films first: they are your half of the sky.'), h('div.panel-actions', h('button.act', { type: 'button', onclick: () => app.searchView.open({ title: 'A film you love', pick: star => { app.toggle('loved', star, true); open('together'); } }) }, icon('heart', 16), h('span', 'Name a film you love'))));
+
+    nodes.push(h('p.together-side', { style: { '--c': colours.theirs } }, h('span.together-dot'), `${their} sky`, h('span.together-count', theirs.length ? plural(theirs.length, 'film') + ' they love' : '')));
+    nodes.push(h('input.together-name', { type: 'text', autocomplete: 'off', spellcheck: 'false', maxlength: '24', placeholder: 'Their name, if you like', 'aria-label': 'Their name', value: name, onchange: event => app.nameTheirs(event.target.value) }));
+    if (theirs.length) nodes.push(h('div.together-films', theirs.map(star => filmChip(star, () => app.dropTheirs(star)))));
+    nodes.push(h('div.panel-actions', h('button.act', { type: 'button', onclick: pickTheirs }, icon('plus', 16), h('span', theirs.length ? 'Add another film they love' : 'Name a film they love'))));
+    nodes.push(paste, pasteNote);
+    if (!theirs.length) nodes.push(note('Three or more films on each side is best: the more each of you names, the truer the films for both.'));
+
+    if (skies) {
+      const [first, second] = skies.lights;
+      const last = skies.lights[skies.lights.length - 1];
+      nodes.push(title('Where your skies meet'),
+        h('p.together-meet', `Closest in ${lightById(first.light).short} and ${lightById(second.light).short}; furthest apart in ${lightById(last.light).short}.`),
+        h('div.taste-lights', skies.lights.map(entry => h('div.taste-light', { style: { '--c': lightById(entry.light).color, '--w': `${Math.max(3, Math.round(entry.share * 100))}%` }, title: `${lightById(entry.light).name}: ${lightById(entry.light).short}` },
+          h('span.taste-name', lightById(entry.light).name), h('span.taste-bar')))));
+      if (skies.shared.length) nodes.push(title('You both love'), h('div.together-films', skies.shared.map(star => filmChip(star, null))));
+      if (skies.both.length) {
+        nodes.push(title('For both of you'));
+        nodes.push(h('div.set-rows', skies.both.slice(0, 8).map(entry => filmRow(entry.star, {
+          bodyNode: h('span.together-why',
+            app.sideOf(entry.mine, entry.star) ? h('span.together-reason', { style: { '--c': colours.yours } }, h('span.together-who', 'For you'), app.sideOf(entry.mine, entry.star)) : null,
+            app.sideOf(entry.theirs, entry.star) ? h('span.together-reason', { style: { '--c': colours.theirs } }, h('span.together-who', name ? `For ${name}` : 'For them'), app.sideOf(entry.theirs, entry.star)) : null),
+          extra: badges(entry.star),
+          onGo: () => go(entry.star),
+        }))));
+        nodes.push(h('div.panel-actions',
+          h('button.act', { type: 'button', onclick: () => { const set = app.setOf('together', 'now'); if (!set) return; app.setCurrent(set); app.widen([...set.stars]); if (app.small) close(); } }, icon('constellation', 16), h('span', 'Show them on the sky')),
+          h('button.act', { type: 'button', onclick: () => app.browse('together', 'now') }, icon('list', 16), h('span', `All ${skies.both.length}`))));
+      } else nodes.push(note('Nothing on the chart sits near both skies yet, outside what is watched, set aside or in tonight\'s haze. Name another film or two.'));
+    }
+    nodes.push(title('Your sky, to send'),
+      note(app.edition === 'claude' ? 'Copy your sky as a line, and the person you are watching with pastes it into Watching together in their own Odyssey.' : 'Send your sky as a link: opened in their Odyssey, it becomes their other sky, and they see the films for both of you too.'),
+      h('div.panel-actions',
+        h('button.act', { type: 'button', disabled: !mine.length, onclick: () => app.sendSky() }, icon('share', 16), h('span', app.edition === 'claude' ? 'Copy your sky' : 'Send your sky')),
+        theirs.length || name ? h('button.quiet.quiet-first', { type: 'button', onclick: () => app.setTheirs([], '') }, `Clear ${their.toLowerCase()} sky`) : null));
+    replace(body, nodes);
+  }
+
+  // ── Tonight's seeing: what tonight can hold.
+  function renderSeeing() {
+    heading.textContent = 'Tonight\'s seeing';
+    const seeing = app.seeing;
+    const choose = next => app.setSeeing({ ...seeing, ...next, tempers: { ...seeing.tempers, ...(next.tempers || {}) } });
+    const group = (label, options, chosen, pick, hint = '') => h('div.seeing-group',
+      h('p.seeing-label', label, hint ? h('span.seeing-hint', hint) : null),
+      h('div.segmented.seeing-seg', { role: 'radiogroup', 'aria-label': label }, options.map(([id, text]) => h('button.seg', {
+        type: 'button', role: 'radio', 'aria-checked': String(chosen === id), class: chosen === id ? 'on' : '',
+        onclick: () => pick(id),
+      }, text))));
+    const inView = universe.count - app.haze.size;
+    replace(body,
+      note('Astronomers call how clear the air is on a given night its seeing. Set what tonight can hold, and the films that do not fit fade into haze. Nothing in the haze is offered next: not by a ray, a door, a star system or your sky. Any film can still be found and visited.'),
+      h('p.seeing-count', h('strong', inView.toLocaleString('en')), ` of ${universe.count.toLocaleString('en')} films in view tonight`),
+      group('How long have you got?', LENGTHS.map(entry => [entry.id, { any: 'Any', 150: 'Under 2½ h', 120: 'Under 2 h', 100: 'Under 100 min' }[entry.id]]), seeing.length, id => choose({ length: id })),
+      group('Spoken in', LANGUAGES.map(entry => [entry.id, { any: 'Any language', english: 'English', other: 'Another language' }[entry.id]]), seeing.language, id => choose({ language: id })),
+      h('p.panel-title.seeing-temper-title', 'How it treats you'),
+      TEMPERS.map(temper => group(temper.name, [['any', 'Any'], ['low', LIMITS[temper.id].low.label], ['high', LIMITS[temper.id].high.label]],
+        seeing.tempers[temper.id] || 'any',
+        id => choose({ tempers: { [temper.id]: id === 'any' ? undefined : id } }),
+        `0 is ${temper.low}, 100 ${temper.high}`)),
+      note('A film the chart has no running time or reading for is kept in view. Tonight\'s seeing lasts until five in the morning.'),
+      isClear(seeing) ? null : h('div.panel-actions', h('button.act', { type: 'button', onclick: () => app.setSeeing(null) }, icon('close', 15), h('span', 'Clear the sky'))));
+  }
+
+  const RENDER = { together: renderTogether, bearing: renderBearing, seeing: renderSeeing, voyage: renderVoyage, course: renderCourse, set: renderSet, sky: renderSky, figures: renderFigures, nebulae: renderNebulae, collide: renderCollide, passage: renderPassage, navigator: renderNavigator };
 
   function open(name, data) {
     if (!RENDER[name]) return;
@@ -900,6 +1072,12 @@ export function createPanels(app) {
     else if (what === 'comet' && name === 'sky') again(name);
     else if (what === 'focus' && name === 'figures') again(name);
     else if (what === 'sky' && name === 'voyage' && !state.journey) again(name);
+    else if (what === 'seeing' && ['seeing', 'set', 'sky', 'bearing'].includes(name)) again(name);
+    else if (what === 'bearing' && name === 'bearing') open(name, {}); // each new pair is seen from the top
+    else if (what === 'bearing' && name === 'voyage' && !state.journey) again(name);
+    else if (what === 'marks' && name === 'bearing' && !app.taking()) again(name);
+    else if ((what === 'marks' || what === 'together') && name === 'together') again(name);
+    else if (what === 'seeing' && name === 'together') again(name);
   });
 
   return {

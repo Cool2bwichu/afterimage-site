@@ -238,16 +238,18 @@ void main() {
   float loved = mod(marks, 2.0) >= 1.0 ? 1.0 : 0.0;
   float visited = mod(floor(marks / 2.0), 2.0) >= 1.0 ? 1.0 : 0.0;
   float deep = mod(floor(marks / 4.0), 2.0) >= 1.0 ? 1.0 : 0.0;
+  // Outside tonight's seeing: faint and small, unless something lights it.
+  float haze = (mod(floor(marks / 8.0), 2.0) >= 1.0 ? 1.0 : 0.0) * (1.0 - clamp(glow, 0.0, 1.0));
   float lift = min(glow, 2.0);
   float world = aData.x * (1.0 + 0.55 * lift + 0.25 * loved);
   float px = world * uFocal / clip.w * 2.0;
   float least = (1.5 + aColour.a * 2.0 + lift * 2.6 + loved * 1.2) * uDpr;
-  float size = clamp(px, least, 300.0 * uDpr);
+  float size = clamp(px, least, 300.0 * uDpr) * mix(1.0, 0.62, haze);
   float twinkle = 1.0 + 0.13 * sin(uTime * (0.7 + fract(aData.y * 7.3) * 1.4) + aData.y * 40.0);
   float fog = mix(1.0, 0.42, smoothstep(uDistance * 1.25, uDistance * 3.4, clip.w));
   float renown = 0.3 + 0.7 * aColour.a;
   float lit = mix(1.0 - uDim, 1.0, clamp(glow, 0.0, 1.0));
-  vBright = renown * twinkle * fog * lit * (1.0 + 0.55 * lift + 0.2 * visited) * mix(0.5, 1.0, clamp(px / least, 0.0, 1.0));
+  vBright = renown * twinkle * fog * lit * (1.0 + 0.55 * lift + 0.2 * visited) * mix(0.5, 1.0, clamp(px / least, 0.0, 1.0)) * mix(1.0, 0.2, haze);
   vSize = size;
   vP = aCorner;
   vColour = mix(aColour.rgb, uTint, uTintMix);
@@ -334,7 +336,7 @@ void main() {
   float across = exp(-vUV.y * vUV.y * 7.0) * 0.55 + exp(-vUV.y * vUV.y * 60.0);
   float style = vStyle.y;
   // A contour (style 4) is one stroke drawn in pieces: its pieces do not fade at their ends.
-  float ends = style > 3.5 ? 1.0 : smoothstep(0.0, 0.035, vUV.x) * (1.0 - smoothstep(0.93, 1.0, vUV.x) * 0.75);
+  float ends = style > 3.5 && style < 4.5 ? 1.0 : smoothstep(0.0, 0.035, vUV.x) * (1.0 - smoothstep(0.93, 1.0, vUV.x) * 0.75);
   float brightness = 1.0;
   if (style > 0.5 && style < 1.5) {
     // Light travelling outward along a ray.
@@ -346,6 +348,10 @@ void main() {
   } else if (style > 2.5 && style < 3.5) {
     // The wake: fainter the further back it lies.
     brightness = 0.4 + 0.6 * vStyle.z;
+  } else if (style > 4.5 && style < 5.5) {
+    // A wormhole: a thread of beads drawn off along it, toward the far end, over a faint glow.
+    float bead = abs(fract(vUV.x * max(vLength, 1.0) / 17.0 - uTime * 1.5 + vStyle.z) - 0.5) * 2.0;
+    brightness = 0.24 + 1.0 * smoothstep(0.6, 0.95, bead);
   }
   frag = vec4(vColour.rgb * vColour.a * across * ends * brightness, 1.0);
 }

@@ -6,6 +6,7 @@ import { UNLIT } from '../engine/universe.mjs';
 import { holdsArm } from '../engine/journey.mjs';
 import { closestLight, sharedTraits, traitsOf } from '../engine/voyage.mjs';
 import { TIME, TIME_RINGS } from '../engine/time.mjs';
+import { TEMPERS, TEMPER_COLOUR, bendsOf, temperOf, temperWord } from '../engine/temper.mjs';
 import { h, icon, replace, plural } from './dom.mjs';
 import { poster } from './posters.mjs';
 import { createGrip } from './grip.mjs';
@@ -64,11 +65,11 @@ export function createDossier(app) {
   const section = (name, title, ...children) => h(`section.dsec.dsec-${name}`, title ? h('h3.dsec-title', title) : null, ...children);
   const traitName = trait => universe.traits[trait].s || universe.traits[trait].t;
 
-  function filmRow(star, { light = null, colour = null, kicker = '', body = null, onGo, tag = null }) {
+  function filmRow(star, { light = null, colour = null, kicker = '', body = null, onGo, tag = null, go = 'arrow', title = null }) {
     const film = films[star];
     const tint = colour || (light ? lightById(light).color : null);
     return h('button.frow', {
-      type: 'button', style: tint ? { '--c': tint } : null, class: tint ? 'has-light' : '',
+      type: 'button', style: tint ? { '--c': tint } : null, class: tint ? 'has-light' : '', title,
       onclick: onGo || (() => app.focusStar(star, light ? { light } : {})),
       onpointerenter: () => cosmos.setHover(star), onpointerleave: () => cosmos.setHover(-1),
     },
@@ -77,7 +78,7 @@ export function createDossier(app) {
       kicker ? h('span.frow-kicker', kicker, tag) : null,
       h('span.frow-title', film.t, h('span.frow-year', String(film.y))),
       body),
-    h('span.frow-go', icon('arrow', 15)));
+    h('span.frow-go', icon(go, 15)));
   }
 
   // The plain facts of a film, and the ways out to the rest of the web.
@@ -110,12 +111,14 @@ export function createDossier(app) {
       h('button.quiet', { type: 'button', onclick: () => app.toggle('hidden', star, false) }, 'Undo'));
     const kicker = h('p.dossier-kicker');
     const meta = h('p.dossier-meta', metaOf(film));
+    const hazeLine = h('p.dossier-haze', { hidden: true });
     const head = h('header.dossier-head', { style: { '--hi': film.hi, '--lo': film.lo } },
       h('div.dossier-poster', poster(film, { eager: true, size: 'large' })),
       h('div.dossier-id',
         kicker,
         h('h2.dossier-title', film.t),
         meta,
+        hazeLine,
         deep ? h('p.dossier-deep', source('memory')) : null),
       h('div.dossier-acts', love, save, seen, aside),
       asideNote);
@@ -125,6 +128,9 @@ export function createDossier(app) {
     const sight = section('sight', null);
     sight.hidden = true;
     const rays = section('rays', null);
+    const holes = section('wormhole', null);
+    holes.hidden = true;
+    const temperBox = section('temper', null);
     const deeper = section('deeper', null);
 
     const drawn = (linesOf.get(star) || []).filter(line => line.other < universe.count).sort((a, b) => b.strength - a.strength).slice(0, 8);
@@ -159,15 +165,117 @@ export function createDossier(app) {
         h('button.act', { type: 'button', onclick: () => app.share() }, icon('share', 17), h('span', 'Share'))),
       links);
 
-    parts = { star, kicker, meta, links, love, save, seen, aside, asideNote, voyage, essence, sight, rays, deeper };
+    parts = { star, kicker, meta, links, love, save, seen, aside, asideNote, voyage, essence, sight, rays, holes, temper: temperBox, deeper, haze: hazeLine };
     // The rays come before anything that may give the story away. In Lookback the line of sight comes first.
-    replace(scroll, head, voyage, essence, sight, rays, recall, deeper, lines, traitsSection, shape, tools);
+    replace(scroll, head, voyage, essence, sight, rays, holes, temperBox, recall, deeper, lines, traitsSection, shape, tools);
     sheet.hidden = false;
     sheet.dataset.kind = 'star';
     sheet.setAttribute('aria-label', `${film.t}, ${film.y}`);
     scroll.scrollTop = 0;
     requestAnimationFrame(() => sheet.classList.add('on'));
-    place(); marks(); journey(); arrival(); deepField(); timeline();
+    place(); marks(); journey(); arrival(); wormhole(); deepField(); timeline(); temper(); hazeNote();
+  }
+
+  // ── A wormhole: a film far across the sky that is yet one of the nearest in what happens, how it feels, or what it is about.
+  const ordinal = n => {
+    const tens = n % 100;
+    const suffix = tens > 10 && tens < 14 ? 'th' : ({ 1: 'st', 2: 'nd', 3: 'rd' })[n % 10] || 'th';
+    return `${n.toLocaleString('en')}${suffix}`;
+  };
+  function wormhole() {
+    if (!parts || parts.star !== state.focus) return;
+    const holes = state.holes || [];
+    const box = parts.holes;
+    box.hidden = !holes.length;
+    if (!holes.length) { replace(box); return; }
+    const colour = app.colours.wormhole;
+    const rows = holes.map((hole, n) => {
+      const light = lightById(hole.light);
+      const galaxy = universe.galaxies.white[universe.galaxyOf.white[hole.star]];
+      return filmRow(hole.star, {
+        colour, go: 'wormhole', title: `Go through to ${films[hole.star].t}`,
+        kicker: h('span.worm-kick', h('span.kick-dot', { style: { '--c': light.color } }), `Near in ${light.short}`),
+        body: [
+          h('span.frow-shared', `Both: ${hole.shared.map(traitName).join(' \u00b7 ')}`),
+          h('span.worm-far', `Under white light only the ${ordinal(hole.rank + 1)} most alike${galaxy ? `, out in ${galaxy.name}` : ''}`),
+        ],
+        onGo: () => app.throughWormhole(n),
+      });
+    });
+    replace(box,
+      h('h3.dsec-title', h('span', holes.length > 1 ? 'Two wormholes' : 'A wormhole', source('chart'))),
+      h('p.dsec-note', 'Far across the sky from here, in another galaxy and far down the list of films most like it, yet one of its nearest in one deep thing. The short way through.'),
+      rows);
+  }
+
+  /** A film outside tonight's seeing says why, and offers the way to change it. */
+  function hazeNote() {
+    if (!parts) return;
+    const why = app.outsideSeeing(parts.star);
+    parts.haze.hidden = !why.length;
+    replace(parts.haze, why.length ? [icon('moon', 13), h('span', `Outside tonight's seeing: ${why.join(', ')}. `),
+      h('button.quiet', { type: 'button', onclick: () => app.panels.open('seeing') }, 'Change it')] : []);
+  }
+
+  // ── Its temper: how the film treats you, in five readings, and the films it bends into.
+  function temper() {
+    if (!parts) return;
+    const star = parts.star;
+    const film = films[star];
+    const own = temperOf(film);
+    const box = parts.temper;
+    if (!own) { box.hidden = true; replace(box); return; }
+    box.hidden = false;
+    const deep = universe.isDeep(star);
+    const rows = TEMPERS.map((entry, n) => (own[n] >= 0
+      ? h('div.temper-row', { role: 'listitem', title: `${entry.name}: 0 is ${entry.low}, 100 is ${entry.high}`, 'aria-label': `${entry.name}: ${temperWord(entry.id, own[n])}, ${own[n]} of 100` },
+        h('span.temper-name', entry.name),
+        h('span.temper-track', { 'aria-hidden': 'true' }, h('span.temper-fill', { style: { width: `${Math.max(3, own[n])}%` } })),
+        h('span.temper-word', { 'aria-hidden': 'true' }, temperWord(entry.id, own[n])))
+      : null)).filter(Boolean);
+    const offered = bendsOf(universe, star, { exclude: app.notFor });
+    replace(box,
+      h('h3.dsec-title', h('span', 'Its temper', source(deep ? 'memory' : 'atlas'))),
+      h('div.temper', { role: 'list', 'aria-label': `How ${film.t} treats you` }, rows),
+      offered.length ? h('div.bend',
+        h('p.bend-lead', `Like ${film.t}, but…`),
+        h('div.trait-chips', offered.map(entry => {
+          const lit = state.current?.kind === 'bend' && state.current.id === `${star}:${entry.id}:${entry.direction}`;
+          return h('button.chip.bend-chip', {
+            type: 'button', style: { '--c': TEMPER_COLOUR }, class: lit ? 'on' : '', 'aria-pressed': String(lit),
+            title: `The films most like ${film.t}, ${entry.label}`,
+            onclick: () => (lit ? app.panels.open('set') : app.bendTo(star, entry.id, entry.direction)),
+          }, entry.label);
+        }))) : null,
+      deep ? null : reasons(star));
+  }
+
+  /** Why the atlas reads a film's temper as it does: its own notes, fetched when first asked for. */
+  function reasons(star) {
+    const placeholder = TEMPERS.map(entry => h('p.temper-reason', h('strong', `${entry.name}. `), 'What the atlas saw in it.'));
+    const body = h('div.veil-text.temper-why', placeholder);
+    const label = h('span', 'Develop');
+    const lift = h('button.veil-lift', {
+      type: 'button', 'aria-label': 'Show why the atlas reads its temper so',
+      onclick: async () => {
+        lift.disabled = true;
+        label.textContent = 'Developing';
+        try {
+          const notes = await app.deepen();
+          if (!parts || parts.star !== star) return;
+          const own = temperOf(films[star]);
+          const why = (notes[star] && notes[star].ax) || [];
+          const said = TEMPERS.map((entry, n) => (why[n] && own[n] >= 0 ? h('p.temper-reason', h('strong', `${entry.name}, ${own[n]}. `), why[n]) : null)).filter(Boolean);
+          replace(body, said.length ? said : h('p.temper-reason', 'The atlas left no notes on this film.'));
+          wrap.classList.add('lifted');
+        } catch {
+          lift.disabled = false;
+          label.textContent = 'Could not fetch the notes. Try again';
+        }
+      },
+    }, icon('eye', 15), label);
+    const wrap = h('div.veil', body, lift);
+    return h('div.temper-reasons', h('p.temper-why-title', 'Why it reads so'), wrap, h('p.dsec-note', 'The atlas\'s own notes. They may give the story away.'));
   }
 
   // ── Lookback: the line of sight through a film, back toward the horizon and forward toward the present.
@@ -484,10 +592,12 @@ export function createDossier(app) {
   }
 
   app.on(what => {
-    if (what === 'arrival') arrival();
+    if (what === 'arrival') { arrival(); wormhole(); }
     else if (what === 'deep') deepField();
-    else if (what === 'marks') marks();
+    else if (what === 'marks' || what === 'current') { if (what === 'marks') { marks(); wormhole(); } temper(); }
+    else if (what === 'seeing') { hazeNote(); arrival(); wormhole(); }
     else if (what === 'sky') { place(); timeline(); }
+    else if (what === 'holes') wormhole();
     else if (what === 'navigator') { arrival(); deepField(); }
     else if (what === 'facts') facts();
     else if (what === 'journey') { journey(); arrival(); }

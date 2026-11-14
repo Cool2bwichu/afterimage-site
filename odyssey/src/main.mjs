@@ -98,14 +98,16 @@ async function boot() {
   const overviewDistance = cosmos.reachOf('white') * (small ? OVERVIEW.reachSmall : OVERVIEW.reach);
   cosmos.camera.jumpTo({ target: [0, -30, 0], distance: overviewDistance * 1.25, yaw: 0.5, pitch: OVERVIEW.pitch, bias: OVERVIEW.bias });
 
-  // The deeper notes on each film are read only by a Navigator inside this page (a companion keeps
-  // its own copy), so they are fetched the first time one comes aboard, and never for anyone else.
+  // The deeper notes on each film are read by a Navigator inside this page (a companion keeps its
+  // own copy) and by anyone who asks why a film's temper reads as it does, so they are fetched the
+  // first time either happens, and never for anyone else.
   const depth = [];
-  let deepening = false;
+  let deepening = null;
   const deepen = () => {
-    if (deepening) return;
-    deepening = true;
-    fetchJson(dataUrl('depth')).then(file => { for (const film of file.films || []) depth.push(film); }).catch(() => { deepening = false; });
+    deepening ||= fetchJson(dataUrl('depth'))
+      .then(file => { if (!depth.length) for (const film of file.films || []) depth.push(film); return depth; })
+      .catch(error => { deepening = null; throw error; });
+    return deepening;
   };
 
   // What the Navigator wrote of each star before anyone arrived (scripts/pre-read.mjs), fetched a shard at a time.
@@ -115,7 +117,7 @@ async function boot() {
   const pilot = createPilot({
     universe, depth, search, store, readings, edition: config.edition || 'site',
     onStatus: status => {
-      if (status?.mode === 'inpage') deepen();
+      if (status?.mode === 'inpage') deepen().catch(() => {});
       app?.refresh('navigator');
     },
     // A catalogue has answered for stars already in the sky: their plates take the posters, and their dossiers the rest.
@@ -128,11 +130,11 @@ async function boot() {
     onArm: (g, arm) => app?.openGalaxy(g, arm),
     onKind: g => app?.showKind(g),
   });
-  app = createApp({ root, universe, depth, cosmos, labels, pilot, store, search, small, reducedMotion, edition: config.edition || 'site' });
+  app = createApp({ root, universe, depth, deepen, cosmos, labels, pilot, store, search, small, reducedMotion, edition: config.edition || 'site' });
   window.__odyssey = { app, universe, cosmos, pilot, store };
 
   // Set out: straight to the star, galaxy or voyage the address names, or by way of the threshold.
-  const named = /^#(star|galaxy|voyage)-/.test(window.location.hash);
+  const named = /^#(star|galaxy|voyage|sky)[-~]/.test(window.location.hash);
   if (named) {
     app.entrance.skip();
     if (!app.followAddress({ instant: true })) app.entrance.show();

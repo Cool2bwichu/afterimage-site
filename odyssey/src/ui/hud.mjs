@@ -3,6 +3,7 @@
 import { holdsArm } from '../engine/journey.mjs';
 import { ALL_LIGHTS, lightById } from '../engine/lights.mjs';
 import { UNLIT } from '../engine/universe.mjs';
+import { describeSeeing } from '../engine/seeing.mjs';
 import { h, icon, replace, plural } from './dom.mjs';
 import { poster } from './posters.mjs';
 
@@ -39,7 +40,12 @@ export function createHud(app) {
     onclick: () => app.setSky(light.id),
   }, h('span.dial-swatch'), h('span.dial-name', light.name)));
   const dialLine = h('p.dial-line');
-  const dial = h('div.dial', { role: 'group', 'aria-label': 'The light the universe is seen by' }, h('div.dial-lights', dialButtons), dialLine);
+  // Tonight's seeing sits beside the lights: the light you see by, and how clear tonight is.
+  const seeingButton = h('button.dial-seeing', {
+    type: 'button', title: 'Tonight\'s seeing: what tonight can hold', 'aria-label': 'Tonight\'s seeing', 'aria-haspopup': 'dialog',
+    onclick: () => app.panels.toggle('seeing'),
+  }, icon('moon', 16));
+  const dial = h('div.dial', { role: 'group', 'aria-label': 'The light the universe is seen by' }, h('div.dial-lights', seeingButton, dialButtons), dialLine);
 
   // ── Things said in passing.
   const captionText = h('p.caption-text');
@@ -169,6 +175,14 @@ export function createHud(app) {
     backButton.hidden = !app.canGoBack();
   }
 
+  function seeingState() {
+    const said = describeSeeing(app.seeing);
+    seeingButton.classList.toggle('on', Boolean(said));
+    seeingButton.classList.toggle('open', state.tool?.name === 'seeing');
+    seeingButton.setAttribute('aria-label', said ? `Tonight's seeing: ${said}` : 'Tonight\'s seeing: a clear sky');
+    seeingButton.title = said ? `Tonight: ${said}` : 'Tonight\'s seeing: what tonight can hold';
+  }
+
   function navigator() {
     const status = pilot.status;
     navChip.dataset.mode = status.mode;
@@ -265,6 +279,7 @@ export function createHud(app) {
       if (!what || what === 'voyage' || what === 'focus' || what === 'journey' || what === 'tool') journey();
       if (!what || what === 'journey') counts();
       if (!what || what === 'history') history();
+      if (!what || what === 'seeing' || what === 'tool') seeingState();
     },
   };
   app.on(api.update);
