@@ -102,3 +102,27 @@ export function throttle(fn, wait) {
 }
 
 export const plural = (n, one, many = `${one}s`) => `${n.toLocaleString('en')} ${n === 1 ? one : many}`;
+
+// Writes made every frame (where a name or a moon is drawn) touch the page only when something changed,
+// so a sky at rest, or one moving only a little, costs the page almost nothing to keep up with.
+const written = new WeakMap();
+const seenOf = element => {
+  let seen = written.get(element);
+  if (!seen) { seen = Object.create(null); written.set(element, seen); }
+  return seen;
+};
+/** Sets one style property of an element, unless it already holds that value. */
+export function setStyle(element, property, value) {
+  const seen = seenOf(element);
+  if (seen[property] === value) return;
+  seen[property] = value;
+  element.style[property] = value;
+}
+/** Sets an attribute of an element, unless it already holds that value. */
+export function setAttr(element, name, value) {
+  const seen = seenOf(element);
+  const key = `@${name}`;
+  if (seen[key] === value) return;
+  seen[key] = value;
+  element.setAttribute(name, value);
+}

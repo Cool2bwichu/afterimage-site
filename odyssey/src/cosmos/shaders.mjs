@@ -157,6 +157,8 @@ void main() {
   // From inside a galaxy its glow is only a faint haze: the stars are the view.
   float inside = smoothstep(0.7, 3.2, length(uEye - aCentre) / max(reach, 1.0));
   vColour = vec4(aColour.rgb, aColour.a * mix(uFade.x, uFade.y, aKind.y) * mix(0.12, 1.0, inside));
+  // A glow faded to nothing (a light's galaxies as another light takes over) costs nothing to draw.
+  if (vColour.a < 0.002) gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
 }
 `;
 

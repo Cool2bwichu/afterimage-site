@@ -7,6 +7,7 @@ import { lightById } from '../engine/lights.mjs';
 import { heightAt, INNER, TIME } from '../engine/time.mjs';
 import { mulberry32, hashString, gaussian } from '../engine/rng.mjs';
 import { createCamera, FOV } from './camera.mjs';
+import { createSharpness } from './sharpness.mjs';
 import { clamp, lerp, easeInOut, angleDelta, hexToRgb, multiply } from './math.mjs';
 import * as S from './shaders.mjs';
 
@@ -560,9 +561,41 @@ export function createCosmos({ canvas, universe, reducedMotion = false, small = 
   const rotProj = new Float32Array(16);
   const rotation = new Float32Array(16);
 
-  function resize() {
+  // ── How finely the sky is drawn (see sharpness.mjs): a step coarser while it moves, where the graphics
+  // cannot keep up, and always at its finest once it is still, since nothing then needs to be quick.
+  let fine = false;   // the sky is still, and drawn at its finest whatever the step
+  let resized = 0;    // when the canvas was last resized
+  const sharp = createSharpness({ onChange: () => resize() });
+  function judge(gap, now) {
+    if (now - resized < 1200 || document.visibilityState !== 'visible') sharp.forget();
+    else sharp.frame(gap);
+  }
+
+  // Whether the view is still: nothing flying, no hand on it, nothing gliding, and the eye hardly moving
+  // (the slow turn of an idle sky does not count).
+  const seen = { x: 0, y: 0, z: 0, distance: 1, yaw: 0, pitch: 0 };
+  let stillSince = 0;
+  function watchStill(now, dt) {
+    const s = camera.state;
+    const pace = dt > 0 ? 1 / dt : 0;
+    const across = Math.hypot(s.x - seen.x, s.y - seen.y, s.z - seen.z) / Math.max(1, s.distance);
+    const turned = Math.abs(s.yaw - seen.yaw) + Math.abs(s.pitch - seen.pitch);
+    const nearer = Math.abs(Math.log(s.distance / Math.max(1e-6, seen.distance)));
+    const moving = (across + turned + nearer) * pace > 0.06;
+    seen.x = s.x; seen.y = s.y; seen.z = s.z; seen.distance = s.distance; seen.yaw = s.yaw; seen.pitch = s.pitch;
+    if (moving || camera.flying || camera.held || camera.gliding || transition) stillSince = now;
+    const still = now - stillSince > 600;
+    if (still === fine) return;
+    fine = still;
+    sharp.forget();
+    if (sharp.step > 0) resize(true);
+  }
+
+  function resize(settling = false) {
     const rect = canvas.getBoundingClientRect();
-    dpr = Math.min(window.devicePixelRatio || 1, small ? 1.75 : 2);
+    const finest = Math.min(window.devicePixelRatio || 1, small ? 1.75 : 2);
+    dpr = Math.max(Math.min(finest, small ? 0.9 : 1), finest * (fine ? 1 : sharp.scale));
+    if (settling !== true) resized = performance.now(); // a ResizeObserver passes its entries here
     width = Math.max(1, Math.round(rect.width));
     height = Math.max(1, Math.round(rect.height));
     const w = Math.round(width * dpr);
@@ -573,7 +606,8 @@ export function createCosmos({ canvas, universe, reducedMotion = false, small = 
 
   // At rest, with nothing flying, no light changing and no hand on the sky, everything
   // in it moves slowly enough to be drawn half as often: no one sees the difference,
-  // and a laptop or a phone keeps its battery while someone reads.
+  // and a laptop or a phone keeps its battery while someone reads. A still sky that is
+  // drawn finer than it can be drawn moving is drawn half as often too, at once.
   let stirred = 0;
   let drawn = 0;
   const stir = () => { stirred = performance.now(); };
@@ -581,8 +615,10 @@ export function createCosmos({ canvas, universe, reducedMotion = false, small = 
 
   function draw(now) {
     if (!running) return;
-    const resting = !camera.flying && !transition && !glowEasing && now - stirred > 4000;
+    const busy = camera.flying || camera.held || camera.gliding || transition || glowEasing;
+    const resting = !busy && (now - stirred > 4000 || (fine && sharp.step > 0));
     if (resting && now - drawn < 30) { requestAnimationFrame(draw); return; }
+    if (!resting && !transition && !fine && drawn) judge(now - drawn, now);
     drawn = now;
     const seconds = now / 1000;
     const dt = Math.min(0.1, last ? seconds - last : 0.016);
@@ -592,6 +628,7 @@ export function createCosmos({ canvas, universe, reducedMotion = false, small = 
     camera.update(dt);
     stepTransition(dt);
     if (transition && camera.following) camera.update(0);
+    watchStill(now, dt);
 
     const ease = 1 - Math.exp(-dt * 2.4);
     for (let k = 0; k < 3; k += 1) {
@@ -825,6 +862,8 @@ export function createCosmos({ canvas, universe, reducedMotion = false, small = 
     get view() { return view; },
     get size() { return { width, height }; },
     get transitioning() { return Boolean(transition); },
+    /** How finely the sky is drawn now: canvas pixels to a CSS pixel. */
+    get sharpness() { return dpr; },
     get clock() { return clock; },
     setSky, project, projectPoint, pick, positionOf, restingPlace, setLines, reachOf, sizeAt, resize,
     /** Lets groups of lines step back (amount 0 to 1), so that something else drawn in the sky is the thing seen. */

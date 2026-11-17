@@ -911,6 +911,10 @@ button.figure:hover, .figure.on { border-color: var(--starlight); background: rg
   .galaxy-head { padding-top: 8px; }
   .galaxy-head .dossier-title { font-size: 32px; }
   .hud:has(~ .sheet:not([hidden])) .hud-bottom { opacity: 0; pointer-events: none; }
+  /* Over a sky that changes every frame, a blurred glass costs a phone a great deal for little: the
+     instruments that stay on screen are a deeper glass instead, with nothing blurred behind them. */
+  :root { --glass: rgba(8, 12, 19, 0.86); }
+  .nav-chip, .current, .return, .working, .toast, .voyage, .dial-lights, .hud-back, .jbar { -webkit-backdrop-filter: none; backdrop-filter: none; }
   /* A panel opened at a star lies over the star's page; the page waits out of sight until the panel closes. */
   .dossier:has(~ .tools:not([hidden])) { visibility: hidden; opacity: 0; }
   /* The list of a lit set says what the chip says: on a phone the chip leaves the sky to the set. */

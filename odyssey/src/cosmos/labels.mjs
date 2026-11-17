@@ -2,7 +2,7 @@
 // Nearer, the arms of a galaxy are named. Close in, the stars show their
 // posters: each film backlit by its own star.
 import { UNLIT } from '../engine/universe.mjs';
-import { h } from '../ui/dom.mjs';
+import { h, setStyle } from '../ui/dom.mjs';
 import { poster } from '../ui/posters.mjs';
 import { clamp } from './math.mjs';
 import { GALAXY_HUES } from './renderer.mjs';
@@ -72,7 +72,7 @@ export function createLabels({ root, cosmos, universe, small = false, onStar, on
 
   const crosses = (boxes, l, t, r, b) => { for (const box of boxes) if (l < box[2] && r > box[0] && t < box[3] && b > box[1]) return true; return false; };
 
-  const place = (element, x, y, scale = 1) => { element.style.transform = `translate3d(${x.toFixed(1)}px, ${y.toFixed(1)}px, 0) translate(-50%, -50%) scale(${scale.toFixed(3)})`; };
+  const place = (element, x, y, scale = 1) => setStyle(element, 'transform', `translate3d(${x.toFixed(1)}px, ${y.toFixed(1)}px, 0) translate(-50%, -50%) scale(${scale.toFixed(3)})`);
   // A card grows and shrinks with its distance; the words under it stay one size.
   const steady = (entry, scale) => {
     const inverse = Math.round(1000 / scale) / 1000;
@@ -81,8 +81,7 @@ export function createLabels({ root, cosmos, universe, small = false, onStar, on
 
   function show(entry, on, opacity = 1) {
     if (on !== entry.visible) { entry.visible = on; entry.element.classList.toggle('on', on); }
-    if (on) entry.element.style.opacity = opacity.toFixed(3);
-    else entry.element.style.opacity = '';
+    setStyle(entry.element, 'opacity', on ? opacity.toFixed(2) : '');
   }
 
   function updateGalaxies(view) {
@@ -285,7 +284,7 @@ export function createLabels({ root, cosmos, universe, small = false, onStar, on
     for (const [star, wanted] of next) {
       let entry = shown.get(star);
       if (!entry) { entry = { element: makeLabel(star, wanted.kind), kind: wanted.kind }; shown.set(star, entry); }
-      entry.element.style.zIndex = String(600 - wanted.rank);
+      setStyle(entry.element, 'zIndex', String(600 - wanted.rank));
       entry.element.classList.toggle('focus', star === context.focus);
       entry.element.classList.toggle('loved', context.loved.has(star));
       const ray = context.rays.get(star);
@@ -304,16 +303,16 @@ export function createLabels({ root, cosmos, universe, small = false, onStar, on
     const distance = view.distance;
     for (const [star, entry] of shown) {
       const p = cosmos.project(star, scratch);
-      if (!p) { entry.element.style.opacity = '0'; continue; }
+      if (!p) { setStyle(entry.element, 'opacity', '0'); continue; }
       if (entry.kind === 'card') {
         const scale = cardScale(star, p.depth, distance);
         place(entry.element, p.x, p.y, scale);
         steady(entry, scale);
-        entry.element.style.opacity = '';
+        setStyle(entry.element, 'opacity', '');
       } else {
         const size = cosmos.sizeAt(star, p.depth);
         place(entry.element, p.x, p.y + clamp(size * 0.16, 7, 26) + 9);
-        entry.element.style.opacity = '';
+        setStyle(entry.element, 'opacity', '');
       }
     }
   }

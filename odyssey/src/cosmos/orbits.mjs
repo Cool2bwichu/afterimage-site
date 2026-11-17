@@ -11,7 +11,7 @@
 // Beyond the last ring, if the star has one, drifts a wormhole: a round window
 // onto a film far across the sky that is yet one of its nearest in one deep thing.
 import { lightById } from '../engine/lights.mjs';
-import { h } from '../ui/dom.mjs';
+import { h, setAttr, setStyle } from '../ui/dom.mjs';
 import { poster } from '../ui/posters.mjs';
 import { clamp } from './math.mjs';
 
@@ -241,8 +241,8 @@ export function createOrbits({ root, cosmos, universe, small = false, reducedMot
       const x1 = (sys.x + rx).toFixed(1);
       const y = sys.y.toFixed(1);
       const radii = `${rx.toFixed(1)} ${ry.toFixed(1)}`;
-      ring.path.setAttribute('d', `M${x0} ${y}A${radii} 0 1 1 ${x1} ${y}A${radii} 0 1 1 ${x0} ${y}`);
-      ring.path.style.opacity = (shown * (back ? 0.4 : 1)).toFixed(3);
+      setAttr(ring.path, 'd', `M${x0} ${y}A${radii} 0 1 1 ${x1} ${y}A${radii} 0 1 1 ${x0} ${y}`);
+      setStyle(ring.path, 'opacity', (shown * (back ? 0.4 : 1)).toFixed(3));
 
       // The name sits in whichever gap is nearest the top of the ring. As the ring
       // turns and another gap comes nearer, the name fades out and back in there.
@@ -262,16 +262,16 @@ export function createOrbits({ root, cosmos, universe, small = false, reducedMot
       const voiced = (small && !on ? 0 : 1) * ring.fade * upright;
       if (!ring.width && voiced > 0) ring.width = ring.name.getComputedTextLength() || 0;
       const at = along(rx, ry, angle);
-      ring.route.setAttribute('startOffset', at.toFixed(1));
-      ring.name.style.opacity = (shown * voiced * (on ? 1 : back ? 0.45 : 0.82)).toFixed(3);
+      setAttr(ring.route, 'startOffset', at.toFixed(1));
+      setStyle(ring.name, 'opacity', (shown * voiced * (on ? 1 : back ? 0.45 : 0.82)).toFixed(3));
       const room = ring.width ? (ring.width + (small ? 8 : 12)) * voiced : 0;
       if (room > 1) {
         const length = perimeter(rx, ry);
-        ring.path.style.strokeDasharray = `${(length - room).toFixed(1)} ${room.toFixed(1)}`;
-        ring.path.style.strokeDashoffset = ((((length - at - room / 2) % length) + length) % length).toFixed(1);
+        setStyle(ring.path, 'strokeDasharray', `${(length - room).toFixed(1)} ${room.toFixed(1)}`);
+        setStyle(ring.path, 'strokeDashoffset', ((((length - at - room / 2) % length) + length) % length).toFixed(1));
       } else {
-        ring.path.style.strokeDasharray = '';
-        ring.path.style.strokeDashoffset = '';
+        setStyle(ring.path, 'strokeDasharray', '');
+        setStyle(ring.path, 'strokeDashoffset', '');
       }
 
       for (const sat of ring.sats) {
@@ -280,9 +280,9 @@ export function createOrbits({ root, cosmos, universe, small = false, reducedMot
         const yy = sys.y + Math.sin(a) * ry;
         const front = (Math.sin(a) + 1) / 2; // 0 behind the star, 1 in front of it
         const size = (0.8 + 0.2 * front) * scale * (on ? 1.08 : 1);
-        sat.element.style.transform = `translate3d(${x.toFixed(1)}px, ${yy.toFixed(1)}px, 0) translate(-50%, -50%) scale(${size.toFixed(3)})`;
-        sat.element.style.opacity = (shown * (0.62 + 0.38 * front) * (back ? 0.55 : 1)).toFixed(3);
-        sat.element.style.zIndex = String(sat.star === hovered ? 260 : 100 + Math.round(front * 100));
+        setStyle(sat.element, 'transform', `translate3d(${x.toFixed(1)}px, ${yy.toFixed(1)}px, 0) translate(-50%, -50%) scale(${size.toFixed(3)})`);
+        setStyle(sat.element, 'opacity', (shown * (0.62 + 0.38 * front) * (back ? 0.55 : 1)).toFixed(3));
+        setStyle(sat.element, 'zIndex', String(sat.star === hovered ? 260 : 100 + Math.round(front * 100)));
       }
     });
 
@@ -296,9 +296,9 @@ export function createOrbits({ root, cosmos, universe, small = false, reducedMot
       const yy = sys.y + Math.sin(a) * reach * TILT;
       const front = (Math.sin(a) + 1) / 2;
       const size = (0.86 + 0.14 * front) * scale * (0.6 + 0.4 * grown);
-      hole.element.style.transform = `translate3d(${x.toFixed(1)}px, ${yy.toFixed(1)}px, 0) translate(-50%, -50%) scale(${size.toFixed(3)})`;
-      hole.element.style.opacity = (sys.alpha * grown * (0.72 + 0.28 * front)).toFixed(3);
-      hole.element.style.zIndex = String(hole.star === hovered ? 260 : 100 + Math.round(front * 100));
+      setStyle(hole.element, 'transform', `translate3d(${x.toFixed(1)}px, ${yy.toFixed(1)}px, 0) translate(-50%, -50%) scale(${size.toFixed(3)})`);
+      setStyle(hole.element, 'opacity', (sys.alpha * grown * (0.72 + 0.28 * front)).toFixed(3));
+      setStyle(hole.element, 'zIndex', String(hole.star === hovered ? 260 : 100 + Math.round(front * 100)));
     });
   }
 
