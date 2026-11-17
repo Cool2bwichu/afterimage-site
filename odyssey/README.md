@@ -49,12 +49,28 @@ existing AFTERIMAGE site, its hosting, or its deployments.
   nearest it under that light, with the reason said plainly. Arriving at a film
   draws its system: six orbits, one per light, with its nearest films circling
   it. Move away across the sky and the system folds; a button takes you back.
-- **Moving about.** The sky moves like a map. One finger (or the mouse) takes
-  hold of it and moves it across, and a flick glides on; two fingers pinch
-  about the point between them, twist to turn it, and slide up or down together
-  to tilt it; a double tap comes closer there. With a mouse, the right button
-  (or Alt) turns and tilts; the arrows move across, and Shift with them turns.
-  Whatever a finger takes hold of stays under it (`src/cosmos/camera.mjs`).
+- **Moving about.** Seen whole, from far out, the universe is a thing in the
+  hand: one finger (or a drag) turns it and tilts it, and a flick sets it
+  spinning. Nearer, among the galaxies, the sky moves like a map: one finger
+  takes hold of it and moves it across, and a flick glides on. Anywhere, two
+  fingers pinch about the point between them, twist to turn, and slide up or
+  down together to tilt; a double tap comes closer there. With a mouse,
+  Shift-drag always moves across, and the right button (or Alt) always turns
+  and tilts; the arrows move across, and Shift with them turns. Whatever a
+  finger takes hold of stays under it, and the edges of the sky give like
+  elastic and spring back instead of stopping dead (`src/cosmos/camera.mjs`).
+- **A constellation, framed.** Choosing a constellation flies it into the open
+  sky that is left: above the list on a phone (which lies lower for it), beside
+  the panels on a computer. It is drawn as bright threads while the other lines
+  step back, and it stays in the open sky as the list is pulled taller, until a
+  hand moves the view.
+- **Drawn to be smooth.** The galaxies wind into arms of light around bright
+  hearts, and far galaxies too distant to chart lie in the deep background. On
+  a device that cannot keep up while the sky moves, the moving sky is drawn a
+  step coarser (its lights are soft, so it hardly shows) and sharp again the
+  moment it is still; a device that holds its frames back anyway, as a phone
+  saving its battery does, is noticed and left sharp (`src/cosmos/sharpness.mjs`).
+  On a phone the instruments are a deeper glass with nothing blurred behind them.
 - **Setting out.** A voyage from any film, one door at a time. Three doors open
   from each stop, each under its own light, each saying what the two films share
   and how much of home it keeps. Land when one feels like tonight's film: the
