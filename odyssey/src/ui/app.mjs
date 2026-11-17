@@ -39,7 +39,7 @@ const DRIFT_EVERY = 12500;
 const HUD_TOP = 76; // the instruments along the top of the screen, and where you are beneath them
 const KEYS = [['/', 'find a film'], ['0–6', 'change the light'], ['7', 'look back through time'], ['← → ↑ ↓', 'move across the sky'], ['Shift + arrows', 'turn and tilt it'], ['+ −', 'nearer, further'], ['Backspace', 'go back'], ['Esc', 'leave or close'], ['L', 'love'], ['W', 'watchlist'], ['D', 'drift'], ['C', 'tonight\'s comet'], ['J', 'through a wormhole'], ['B', 'take a bearing'], ['T', 'watching together'], ['H', 'the whole universe'], ['?', 'these keys']];
 // And what the mouse does.
-const HANDS = [['Drag', 'turn the whole sky from far out, move across it nearer'], ['Shift-drag', 'move across'], ['Right-drag', 'turn and tilt'], ['Wheel', 'nearer, further'], ['Double-click', 'closer, there']];
+const HANDS = [['Drag', 'turn the whole sky from far out, move across it nearer'], ['Shift-drag', 'move across'], ['Right-drag', 'turn and tilt'], ['Wheel', 'nearer, further'], ['Swipe sideways', 'move across, two fingers on a trackpad'], ['Double-click', 'closer, there']];
 
 export function createApp({ root, universe, depth, deepen = () => Promise.reject(new Error('no deeper notes here')), cosmos, labels, pilot, store, search, small, reducedMotion, edition = 'site' }) {
   const state = {
@@ -1594,7 +1594,7 @@ export function createApp({ root, universe, depth, deepen = () => Promise.reject
     app.hud?.toast('Moving around the sky', {
       detail: touch
         ? 'From far out, one finger turns the whole universe and tilts it. Nearer, among the galaxies, it moves you across. Pinch to come nearer, twist two fingers to turn, slide two fingers up or down together to tilt, and double-tap to come closer.'
-        : 'From far out, a drag turns the whole universe and tilts it; nearer, it moves you across (Shift-drag always does). Right-drag turns and tilts anywhere, the wheel brings you nearer, and a double-click comes closer there. Press ? for every key.',
+        : 'From far out, a drag turns the whole universe and tilts it; nearer, it moves you across (Shift-drag always does, and so do two fingers swiped sideways on a trackpad). Right-drag turns and tilts anywhere, the wheel brings you nearer, and a double-click comes closer there. Press ? for every key.',
       tone: 'pale',
       hold: 15000,
     });
