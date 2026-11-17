@@ -49,7 +49,7 @@ function read(saved) {
     arrivals: saved.arrivals && typeof saved.arrivals === 'object' ? saved.arrivals : {},
     sky: typeof saved.sky === 'string' ? saved.sky : 'white',
     entered: Boolean(saved.entered),
-    hands: Boolean(saved.hands), // told once how the hands move the sky
+    hands: Number(saved.hands) || 0, // which way of moving the sky has been explained (true, from before, counts as the first)
     companion: saved.companion && typeof saved.companion === 'object' ? saved.companion : null,
     readArrivals: saved.readArrivals !== false, // whether the Navigator reads each star on arrival
     // Tonight's seeing, kept for the night it was set: { night, length, language, tempers }.

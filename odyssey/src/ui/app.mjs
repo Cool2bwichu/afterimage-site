@@ -11,7 +11,7 @@ import { CLEAR_SKY, cleanSeeing, describeSeeing, hazeOf, isClear, outside } from
 import { bearingResult, bearingStrength, createBearing, reasonOf } from '../engine/bearing.mjs';
 import { bondOf, decodeSky, encodeSky, skiesMeet, together } from '../engine/together.mjs';
 import { wormholes } from '../engine/wormhole.mjs';
-import { attachControls } from '../cosmos/camera.mjs';
+import { attachControls, FOV } from '../cosmos/camera.mjs';
 import { createOrbits } from '../cosmos/orbits.mjs';
 import { createFigures } from '../cosmos/figures.mjs';
 import { createComet } from '../cosmos/comet.mjs';
@@ -39,7 +39,7 @@ const DRIFT_EVERY = 12500;
 const HUD_TOP = 76; // the instruments along the top of the screen, and where you are beneath them
 const KEYS = [['/', 'find a film'], ['0–6', 'change the light'], ['7', 'look back through time'], ['← → ↑ ↓', 'move across the sky'], ['Shift + arrows', 'turn and tilt it'], ['+ −', 'nearer, further'], ['Backspace', 'go back'], ['Esc', 'leave or close'], ['L', 'love'], ['W', 'watchlist'], ['D', 'drift'], ['C', 'tonight\'s comet'], ['J', 'through a wormhole'], ['B', 'take a bearing'], ['T', 'watching together'], ['H', 'the whole universe'], ['?', 'these keys']];
 // And what the mouse does.
-const HANDS = [['Drag', 'move across'], ['Right-drag', 'turn and tilt'], ['Wheel', 'nearer, further'], ['Double-click', 'closer, there']];
+const HANDS = [['Drag', 'turn the whole sky from far out, move across it nearer'], ['Shift-drag', 'move across'], ['Right-drag', 'turn and tilt'], ['Wheel', 'nearer, further'], ['Double-click', 'closer, there']];
 
 export function createApp({ root, universe, depth, deepen = () => Promise.reject(new Error('no deeper notes here')), cosmos, labels, pilot, store, search, small, reducedMotion, edition = 'site' }) {
   const state = {
@@ -102,11 +102,17 @@ export function createApp({ root, universe, depth, deepen = () => Promise.reject
   // "the 1960s", "before 1930": a decade of Lookback, said inside a sentence.
   const when = galaxy => (/^The /.test(galaxy.name) ? `in ${galaxy.name.replace(/^The /, 'the ')}` : galaxy.name.replace(/^Before/, 'before'));
   app.when = when;
-  // The edges of each sky: the hands may take you a little past its furthest galaxy, and no further.
-  const edges = new Map();
-  const edgeOf = sky => {
-    if (!edges.has(sky)) edges.set(sky, cosmos.reachOf(sky) * 1.3);
-    return edges.get(sky);
+  // How far out each sky's furthest galaxy lies. The hands may take you a little past it (further when far
+  // out), and from far enough out to see it whole, one finger turns the sky instead of moving across it.
+  const reaches = new Map();
+  const reachFor = sky => {
+    if (!reaches.has(sky)) reaches.set(sky, cosmos.reachOf(sky));
+    return reaches.get(sky);
+  };
+  const seenWhole = () => {
+    const { width, height } = cosmos.size;
+    const focal = height / (2 * Math.tan(FOV / 2));
+    return (reachFor(state.sky) * focal) / cosmos.camera.goal.distance < 0.8 * Math.max(width, height);
   };
 
   // ── Where the cosmos sits behind the panels.
@@ -586,7 +592,7 @@ export function createApp({ root, universe, depth, deepen = () => Promise.reject
     if (sky === state.sky || !lightById(sky)) return;
     state.sky = sky;
     store.set('sky', sky);
-    cosmos.camera.setBounds(edgeOf(sky));
+    cosmos.camera.setBounds(reachFor(sky));
     root.style.setProperty('--light', lightById(sky).color);
     const camera = cosmos.camera;
     if (state.focus >= 0) {
@@ -1435,9 +1441,10 @@ export function createApp({ root, universe, depth, deepen = () => Promise.reject
     }
   }
 
-  // ── Hands on the sky. One finger (or the mouse) takes hold of it and moves it across; two pinch,
-  // twist and tilt it; a double tap comes closer there.
+  // ── Hands on the sky. From far out one finger (or the mouse) turns the whole sky and tilts it; nearer,
+  // it takes hold of the sky and moves it across. Two pinch, twist and tilt it; a double tap comes closer there.
   attachControls(cosmos.canvas, cosmos.camera, {
+    whole: seenWhole,
     onTap(x, y) {
       const star = cosmos.pick(x, y, small ? 1.5 : 1);
       if (star < 0) return;
@@ -1505,17 +1512,18 @@ export function createApp({ root, universe, depth, deepen = () => Promise.reject
     app.hud?.setReturn(name);
   });
 
-  // The first time the sky is reached since the hands changed, a word on how to move about it.
+  // The first time the sky is reached since the hands last changed, a word on how to move about it.
+  const HANDS_TOLD = 2;
   cosmos.camera.on(what => {
-    if (what !== 'arrived' || store.state.hands || !state.entered) return;
-    store.set('hands', true);
+    if (what !== 'arrived' || store.state.hands >= HANDS_TOLD || !state.entered) return;
+    store.set('hands', HANDS_TOLD);
     const touch = small || window.matchMedia?.('(pointer: coarse)').matches;
     app.hud?.toast('Moving around the sky', {
       detail: touch
-        ? 'One finger moves you across it. Pinch to come nearer, twist two fingers to turn it, and slide two fingers up or down together to tilt it. Double-tap to come closer.'
-        : 'Drag to move across it. Right-drag (or Alt-drag) turns and tilts it, the wheel brings you nearer, and a double-click comes closer there. Press ? for every key.',
+        ? 'From far out, one finger turns the whole universe and tilts it. Nearer, among the galaxies, it moves you across. Pinch to come nearer, twist two fingers to turn, slide two fingers up or down together to tilt, and double-tap to come closer.'
+        : 'From far out, a drag turns the whole universe and tilts it; nearer, it moves you across (Shift-drag always does). Right-drag turns and tilts anywhere, the wheel brings you nearer, and a double-click comes closer there. Press ? for every key.',
       tone: 'pale',
-      hold: 14000,
+      hold: 15000,
     });
   });
 
@@ -1579,7 +1587,7 @@ export function createApp({ root, universe, depth, deepen = () => Promise.reject
   app.entrance = createEntrance(app);
 
   // ── Begin: put back what was found before, then go where the address says.
-  cosmos.camera.setBounds(edgeOf(state.sky));
+  cosmos.camera.setBounds(reachFor(state.sky));
   state.restoring = true;
   pilot.restore();
   cosmos.setHaze(haze);

@@ -4,7 +4,10 @@
 //
 // Hands move it the way a map is moved: whatever a finger takes hold of stays
 // under that finger, two fingers bring it nearer or turn it about the point
-// between them, and a flick glides on and slows to a stop.
+// between them, and a flick glides on and slows to a stop. Seen whole, from
+// far out, the sky is a thing in the hand instead: one finger turns it and
+// tilts it, and a flick sets it spinning. Its edges give, like the end of a
+// page pulled too far, and settle back when let go.
 import { perspective, lookAt, multiply, clamp, lerp, easeInOut, angleDelta } from './math.mjs';
 
 export const FOV = (46 * Math.PI) / 180;
@@ -15,6 +18,14 @@ const MAX_PITCH = 1.5;
 const MIN_DIP = 0.2;   // a ray toward the horizon is taken as falling at least this steeply, so it still meets the sky
 const GLIDE = 3.4;     // how quickly a glide slows: it carries on for 1/GLIDE of a second's worth of its speed
 const GLIDE_MOST = 2600; // pixels a second: the fastest a flick can send the sky
+const SPIN = 2.6;      // how quickly a flick that turns the sky slows
+const SPIN_MOST = 1500; // pixels a second: the fastest a flick can turn it
+const TAN = Math.tan(FOV / 2);
+// Where the sky ends for the hands: a little past its furthest galaxy, and further the further out you
+// are (by a share of the height in view), so that from far out it can be moved well aside and never lost.
+const EDGE_REACH = 1.12;
+const EDGE_VIEW = 0.62;
+const EDGE_GIVE = 0.36; // how far past the edge a hand can pull, as a share of the half-height in view, before it gives no more
 
 /**
  * How far along its path a flight has moved its target, for each step of its
@@ -54,8 +65,10 @@ export function createCamera({ reducedMotion = false } = {}) {
   let drift = 0.012; // radians per second of slow turning while nothing else moves
   let idle = 0;
   let held = false;  // a hand is on the sky: the view goes exactly where it is moved, with nothing easing behind
-  let glide = null;  // { vx, vy, x, y }: a flick carrying on, in pixels a second, from the point it was let go
-  let bounds = Infinity; // how far from the middle of the universe the hands may take the target
+  let glide = null;  // { vx, vy, x, y, turn }: a flick carrying on, in pixels a second, from the point it was let go
+  let bounds = Infinity; // how far out the sky's furthest galaxy lies: its edges are worked out from it
+  let raw = null;    // while a hand holds the sky: where it has taken the target, before the edge resists
+  let rawFloor = 0;  // and how far out the target already was when it took hold (the edge is never nearer than that)
   const listeners = new Set();
 
   const view = new Float32Array(16);
@@ -92,14 +105,14 @@ export function createCamera({ reducedMotion = false } = {}) {
    * caught up with every move asked of it. Toward the horizon the ray is taken as still
    * falling a little, so a point there is far off but never nowhere.
    */
-  function groundAt(x, y, out = [0, 0, 0], s = goal) {
+  function groundAt(x, y, out = [0, 0, 0], s = goal, centre = state) {
     eyeOf(s, groundEye, groundAim);
     lookAt(groundView, groundEye, groundAim, UP);
     const v = groundView;
     const t = Math.tan(FOV / 2);
     // The target is drawn at (cx, cy), in clip units: a pixel is read from there.
-    const sx = ((x / width) * 2 - 1 - state.cx) * t * (width / height);
-    const sy = (1 - (y / height) * 2 - state.cy) * t;
+    const sx = ((x / width) * 2 - 1 - centre.cx) * t * (width / height);
+    const sy = (1 - (y / height) * 2 - centre.cy) * t;
     let dx = v[0] * sx + v[1] * sy - v[2];
     let dy = v[4] * sx + v[5] * sy - v[6];
     let dz = v[8] * sx + v[9] * sy - v[10];
@@ -155,6 +168,7 @@ export function createCamera({ reducedMotion = false } = {}) {
     follow = to.follow || null;
     glide = null;
     idle = 0;
+    for (const listener of listeners) listener('flight');
     return duration;
   }
 
@@ -209,13 +223,16 @@ export function createCamera({ reducedMotion = false } = {}) {
     } else {
       if (locked) { goal.x = locked[0]; goal.y = locked[1]; goal.z = locked[2]; }
       if (glide && !held && dt > 0) {
-        // A flick carries on from where it was let go, slowing as it goes.
-        const fade = Math.exp(-dt * GLIDE);
-        const share = (1 - fade) / GLIDE;
-        across(glide.x, glide.y, glide.x + glide.vx * share, glide.y + glide.vy * share);
-        glide.vx *= fade;
-        glide.vy *= fade;
-        if (Math.hypot(glide.vx, glide.vy) < 14) glide = null;
+        // A flick carries on from where it was let go, slowing as it goes: across the sky, or turning it.
+        const flick = glide;
+        const rate = flick.turn ? SPIN : GLIDE;
+        const fade = Math.exp(-dt * rate);
+        const share = (1 - fade) / rate;
+        if (flick.turn) spin(flick.vx * share, flick.vy * share);
+        else across(flick.x, flick.y, flick.x + flick.vx * share, flick.y + flick.vy * share); // stops it at the edge
+        flick.vx *= fade;
+        flick.vy *= fade;
+        if (glide === flick && Math.hypot(flick.vx, flick.vy) < 14) glide = null;
         idle = 0;
       }
       if (!reducedMotion && drift && idle > 2.5) goal.yaw += drift * dt * clamp((idle - 2.5) / 3, 0, 1);
@@ -251,24 +268,51 @@ export function createCamera({ reducedMotion = false } = {}) {
   }
 
   // ── What a hand does to it.
-  /** Turns the sky about its target, and tilts it. */
-  function orbit(dx, dy) {
-    cancelFlight();
+  function spin(dx, dy) {
     goal.yaw -= dx * 0.0052;
     goal.pitch += dy * 0.0042;
     settle();
   }
+  /** Turns the sky about its target, and tilts it, by a drag of (dx, dy) pixels. */
+  function orbit(dx, dy) {
+    cancelFlight();
+    spin(dx, dy);
+    for (const listener of listeners) listener('turned');
+  }
+
+  /** How far from the middle of the universe the target may be taken, seen from a distance. */
+  const edgeAt = distance => (bounds === Infinity ? Infinity : bounds * EDGE_REACH + distance * TAN * EDGE_VIEW);
 
   const before = [0, 0, 0];
   const after = [0, 0, 0];
-  /** Moves the target across the sky, but no further from the middle than the edges allow. */
+  /**
+   * Moves the target across the sky. A hand may pull it past the edge, against a resistance that grows
+   * until it gives no more, and it settles back when let go; anything else stops at the edge.
+   */
   function shift(dx, dz) {
+    if (held) {
+      if (!raw) { raw = [goal.x, goal.z]; rawFloor = Math.hypot(goal.x, goal.z); }
+      raw[0] += dx;
+      raw[1] += dz;
+      const limit = Math.max(edgeAt(goal.distance), rawFloor);
+      const r = Math.hypot(raw[0], raw[1]);
+      if (r <= limit) { goal.x = raw[0]; goal.z = raw[1]; return; }
+      const give = Math.max(1, goal.distance * TAN * EDGE_GIVE);
+      const shown = limit + give * (1 - Math.exp(-(r - limit) / give));
+      goal.x = (raw[0] * shown) / r;
+      goal.z = (raw[1] * shown) / r;
+      return;
+    }
     const was = Math.hypot(goal.x, goal.z);
     goal.x += dx;
     goal.z += dz;
     const now = Math.hypot(goal.x, goal.z);
-    const limit = Math.max(bounds, was); // already beyond the edge: it may come back in, not go further out
-    if (now > limit) { goal.x *= limit / now; goal.z *= limit / now; }
+    const limit = Math.max(edgeAt(goal.distance), was); // already beyond the edge: it may come back in, not go further out
+    if (now > limit) {
+      goal.x *= limit / now;
+      goal.z *= limit / now;
+      if (glide && !glide.turn) glide = null; // a glide comes to rest against the edge
+    }
   }
   function across(x0, y0, x1, y1) {
     groundAt(x0, y0, before);
@@ -317,25 +361,98 @@ export function createCamera({ reducedMotion = false } = {}) {
   function turn(angle, atX = null, atY = null) {
     cancelFlight();
     about(atX, atY, () => { goal.yaw += angle; });
+    for (const listener of listeners) listener('turned');
   }
 
   /** A hand has begun to move the sky: whatever was easing stops where it is, and from now on the view keeps exactly to the hand. */
   function hold() {
     glide = null;
+    raw = null;
     if (flight) cancelFlight();
     else Object.assign(goal, { x: state.x, y: state.y, z: state.z, distance: state.distance, yaw: state.yaw, pitch: state.pitch });
     held = true;
     idle = 0;
   }
 
-  /** The hands are lifted: moving at (vx, vy) pixels a second from (x, y), the sky glides on. */
-  function letGo(vx = 0, vy = 0, x = null, y = null) {
+  /**
+   * The hands are lifted: moving at (vx, vy) pixels a second from (x, y), the sky glides on, or, if the hand
+   * was turning it, spins on. Pulled past its edge, it settles back inside instead.
+   */
+  function letGo(vx = 0, vy = 0, x = null, y = null, turning = false) {
     held = false;
+    if (raw) {
+      const limit = Math.max(edgeAt(goal.distance), rawFloor);
+      const r = Math.hypot(goal.x, goal.z);
+      raw = null;
+      if (r > limit + 1e-6) { goal.x *= limit / r; goal.z *= limit / r; return; }
+    }
     const speed = Math.hypot(vx, vy);
-    if (reducedMotion || follow || speed < 90) return;
-    const most = Math.min(1, GLIDE_MOST / speed);
+    if (reducedMotion || speed < 90 || (follow && !turning)) return;
+    const most = Math.min(1, (turning ? SPIN_MOST : GLIDE_MOST) / speed);
     const [tx, ty] = targetOnScreen();
-    glide = { vx: vx * most, vy: vy * most, x: x ?? tx, y: y ?? ty };
+    glide = { vx: vx * most, vy: vy * most, x: x ?? tx, y: y ?? ty, turn: turning };
+  }
+
+  // ── Framing a set of points.
+  const fitView = new Float32Array(16);
+  const fitProj = new Float32Array(16);
+  const fitMatrix = new Float32Array(16);
+  const fitEye = [0, 0, 0];
+  const fitAim = [0, 0, 0];
+  const fitA = [0, 0, 0];
+  const fitB = [0, 0, 0];
+  /** Where each point of a list falls on screen seen from a pose: their bounds in pixels, or null if one is behind the eye. */
+  function boundsFrom(pose, points) {
+    eyeOf(pose, fitEye, fitAim);
+    perspective(fitProj, FOV, width / height, Math.max(0.5, pose.distance * 0.02), Math.max(pose.distance * 6, 24000), pose.cx, pose.cy);
+    lookAt(fitView, fitEye, fitAim, UP);
+    multiply(fitMatrix, fitProj, fitView);
+    const m = fitMatrix;
+    let left = Infinity; let right = -Infinity; let top = Infinity; let bottom = -Infinity;
+    for (const [x, y, z] of points) {
+      const w = m[3] * x + m[7] * y + m[11] * z + m[15];
+      if (w <= pose.distance * 0.05) return null;
+      const px = ((m[0] * x + m[4] * y + m[8] * z + m[12]) / w * 0.5 + 0.5) * width;
+      const py = (0.5 - (m[1] * x + m[5] * y + m[9] * z + m[13]) / w * 0.5) * height;
+      left = Math.min(left, px); right = Math.max(right, px);
+      top = Math.min(top, py); bottom = Math.max(bottom, py);
+    }
+    return { left, right, top, bottom };
+  }
+
+  /**
+   * Where to stand to see a set of points whole inside a part of the screen ({ left, top, right, bottom } in
+   * pixels), from a yaw and a pitch: the target and the distance. Worked out for the view as it will be once
+   * everything asked of it has eased in: the target drawn where it is asked to be, the camera stood back as
+   * far as it is asked to stand.
+   */
+  function fit(points, region, { yaw = goal.yaw, pitch = goal.pitch, margin = 0.08, least = MIN_DISTANCE } = {}) {
+    if (!points.length) return null;
+    const pose = { x: 0, y: 0, z: 0, distance: 1, yaw, pitch: clamp(pitch, MIN_PITCH, MAX_PITCH), bias: goal.bias, cx: goal.cx, cy: goal.cy };
+    let spread = 0;
+    for (const p of points) { pose.x += p[0]; pose.y += p[1]; pose.z += p[2]; }
+    pose.x /= points.length; pose.y /= points.length; pose.z /= points.length;
+    for (const p of points) spread = Math.max(spread, Math.hypot(p[0] - pose.x, p[1] - pose.y, p[2] - pose.z));
+    pose.distance = clamp(spread * 3 + 60, least, MAX_DISTANCE);
+    const roomW = Math.max(40, (region.right - region.left) * (1 - 2 * margin));
+    const roomH = Math.max(40, (region.bottom - region.top) * (1 - 2 * margin));
+    const wantX = (region.left + region.right) / 2;
+    const wantY = (region.top + region.bottom) / 2;
+    for (let pass = 0; pass < 8; pass += 1) {
+      const box = boundsFrom(pose, points);
+      if (!box) { pose.distance = Math.min(MAX_DISTANCE, pose.distance * 1.6); continue; }
+      // Nearer or further until the points fill the room (their size on screen goes as one over the distance)…
+      const scale = Math.max((box.right - box.left) / roomW, (box.bottom - box.top) / roomH, 1e-3);
+      pose.distance = clamp(pose.distance * (pass < 6 ? scale : Math.sqrt(scale)), least, MAX_DISTANCE);
+      // …and across, until they sit in the middle of it.
+      const again = boundsFrom(pose, points);
+      if (!again) continue;
+      groundAt((again.left + again.right) / 2, (again.top + again.bottom) / 2, fitA, pose, pose);
+      groundAt(wantX, wantY, fitB, pose, pose);
+      pose.x += fitA[0] - fitB[0];
+      pose.z += fitA[2] - fitB[2];
+    }
+    return { target: [pose.x, pose.y, pose.z], distance: pose.distance };
   }
 
   function cancelFlight() {
@@ -347,21 +464,25 @@ export function createCamera({ reducedMotion = false } = {}) {
 
   return {
     state, goal, flyTo, jumpTo, setCentre, setBias, setFollow, update, resize, frame,
-    orbit, pan, drag, zoom, turn, hold, letGo, groundAt, cancelFlight,
+    orbit, pan, drag, zoom, turn, hold, letGo, groundAt, cancelFlight, fit,
     get flying() { return Boolean(flight); },
     get following() { return Boolean(follow); },
     get gliding() { return Boolean(glide); },
     get held() { return held; },
-    /** A finger laid on a gliding sky: it stops there, under the finger. */
+    /** A finger laid on a gliding or spinning sky: it stops there, under the finger. */
     stopGlide() {
       if (!glide) return;
+      const { turn: turning } = glide;
       glide = null;
+      if (turning) { goal.yaw = state.yaw; goal.pitch = state.pitch; return; }
       goal.x = state.x;
       goal.y = state.y;
       goal.z = state.z;
     },
-    /** How far from the middle of the universe the hands may take the target. */
-    setBounds(radius) { bounds = radius > 0 ? radius : Infinity; },
+    /** How far out the sky's furthest galaxy lies: the hands may take the target a little past it, and further when far out. */
+    setBounds(reach) { bounds = reach > 0 ? reach : Infinity; },
+    /** How far from the middle of the universe the target may be taken, seen from a distance (the present one if left out). */
+    edgeAt(distance = goal.distance) { return edgeAt(distance); },
     /**
      * How far a point on screen (in pixels) lies from where the target is drawn, as a share of the
      * uncovered sky's half-width or half-height, whichever it is further along: 1 is at its edge.
@@ -395,14 +516,15 @@ const measure = (a, b) => ({
  * Wires pointer, wheel and touch to a camera, the way a map is moved. Returns a function that removes the wiring.
  *
  * One finger, or the mouse, takes hold of the sky and moves it across; let go mid-flick and it glides on.
- * Two fingers spread or pinch to come nearer or go further, twist to turn the sky, and, moved up or down
- * together, tilt it. The right button (or Alt, or Ctrl) turns and tilts with one hand; the wheel comes
- * nearer about the pointer; two quick taps are a double tap.
+ * While `whole()` says the sky is seen whole, from far out, one finger turns it and tilts it instead (Shift
+ * with a mouse still moves across), and a flick sets it spinning. Two fingers spread or pinch to come nearer
+ * or go further, twist to turn the sky, and, moved up or down together, tilt it. The right button (or Alt,
+ * or Ctrl) turns and tilts with one hand; the wheel comes nearer about the pointer; two quick taps are a double tap.
  *
  * `surfaces` are layers drawn over the element (names, poster cards): a drag or a wheel that begins on one
  * moves the sky exactly as it would from open space, and a press that does not move is still theirs to answer.
  */
-export function attachControls(element, camera, { onTap, onDoubleTap, onHover, onGesture, surfaces = [], now = () => performance.now() } = {}) {
+export function attachControls(element, camera, { onTap, onDoubleTap, onHover, onGesture, whole = null, surfaces = [], now = () => performance.now() } = {}) {
   const pointers = new Map(); // id -> { id, x, y, x0, y0, button, type, downAt, samples }
   const outside = new Set();  // pointers that went down on a surface, not on the element
   let one = null;   // a single hand: { pointer, mode: 'across' | 'turn', began }
@@ -428,7 +550,7 @@ export function attachControls(element, camera, { onTap, onDoubleTap, onHover, o
     };
     pointers.set(event.pointerId, pointer);
     if (pointers.size === 1) {
-      const turn = pointer.button === 1 || pointer.button === 2 || event.altKey || event.ctrlKey;
+      const turn = pointer.button === 1 || pointer.button === 2 || event.altKey || event.ctrlKey || (!event.shiftKey && Boolean(whole?.()));
       one = { pointer, mode: turn ? 'turn' : 'across', began: false };
       pair = null;
       spoiled = false;
@@ -552,8 +674,8 @@ export function attachControls(element, camera, { onTap, onDoubleTap, onHover, o
     const { began, mode } = one;
     one = null;
     if (began) {
-      const [vx, vy] = mode === 'across' && !cancelled ? velocity(pointer) : [0, 0];
-      camera.letGo(vx, vy, pointer.x, pointer.y);
+      const [vx, vy] = cancelled ? [0, 0] : velocity(pointer);
+      camera.letGo(vx, vy, pointer.x, pointer.y, mode === 'turn');
       if (pointer.type === 'mouse') { setCursor(''); onHover?.(pointer.x, pointer.y); }
       return;
     }

@@ -22,7 +22,7 @@ const near = (actual, expected, within, what) => {
   assert.ok(off <= within, `${what}: drawn at ${actual.map(v => v.toFixed(1))}, not ${expected.map(v => v.toFixed(1))} (${off.toFixed(2)} px off)`);
 };
 
-function rig({ reducedMotion = false, distance = 300, pitch = 0.9, yaw = 0.5 } = {}) {
+function rig({ reducedMotion = false, distance = 300, pitch = 0.9, yaw = 0.5, whole = null } = {}) {
   const camera = createCamera({ reducedMotion });
   camera.resize(W, H);
   camera.setDrift(0);
@@ -38,6 +38,7 @@ function rig({ reducedMotion = false, distance = 300, pitch = 0.9, yaw = 0.5 } =
   const detach = attachControls(element, camera, {
     onTap: (x, y) => taps.push([x, y]),
     onDoubleTap: (x, y) => doubles.push([x, y]),
+    whole,
     now: () => clock,
   });
   const fire = (type, id, x, y, extra = {}) => {
@@ -320,12 +321,81 @@ test('at a star, a pinch keeps to the star; a finger moving across lets it go', 
   assert.ok(Math.hypot(camera.goal.x, camera.goal.z) > 1);
 });
 
-test('the sky has edges: moving across stops at them, and a wheel cannot carry past them either', () => {
+test('the sky has soft edges: a hand pulls a little past them against a resistance, and it settles back when let go', () => {
+  const { camera, drag, fire, wait } = rig({ distance: 900 });
+  camera.setBounds(500);
+  const edge = camera.edgeAt();
+  assert.ok(edge > 560 && edge < 900, `a little past the furthest galaxy, more when far out: ${edge.toFixed(1)}`);
+  const out = () => Math.hypot(camera.goal.x, camera.goal.z);
+  // One long pull, far past the edge, still held.
+  drag([200, 800], [200, -6000], { steps: 60, ms: 30, lift: false });
+  const give = 900 * Math.tan((46 * Math.PI) / 360) * 0.36;
+  assert.ok(out() > edge + give * 0.5, `pulled past the edge: ${out().toFixed(1)} against ${edge.toFixed(1)}`);
+  assert.ok(out() < edge + give + 1e-6, `but only so far: ${out().toFixed(1)}, at most ${(edge + give).toFixed(1)}`);
+  fire('pointerup', 1, 200, -6000);
+  assert.ok(!camera.gliding, 'nothing glides on past the edge');
+  wait(1500);
+  assert.ok(Math.abs(out() - edge) < 1e-6, `settled back to the edge: ${out().toFixed(2)}`);
+  assert.ok(Math.abs(Math.hypot(camera.state.x, camera.state.z) - edge) < 1, 'and the view eased back with it');
+});
+
+test('a glide comes to rest against the edge, and the arrows stop there too', () => {
   const { camera, drag, wait } = rig({ distance: 900 });
   camera.setBounds(500);
-  for (let n = 0; n < 12; n += 1) { drag([200, 700], [200, 100], { steps: 4 }); wait(2000); }
-  assert.ok(Math.hypot(camera.goal.x, camera.goal.z) <= 500 + 1e-6, `inside: ${Math.hypot(camera.goal.x, camera.goal.z).toFixed(1)}`);
-  assert.ok(Math.hypot(camera.goal.x, camera.goal.z) > 450, 'right up to the edge');
+  const edge = camera.edgeAt();
+  for (let n = 0; n < 8; n += 1) { drag([200, 700], [200, 200], { steps: 4, ms: 10 }); wait(3000); }
+  assert.ok(Math.hypot(camera.goal.x, camera.goal.z) <= edge + 1e-6, `inside: ${Math.hypot(camera.goal.x, camera.goal.z).toFixed(1)}`);
+  assert.ok(Math.hypot(camera.goal.x, camera.goal.z) > edge - 60, 'right up to the edge');
+  assert.ok(!camera.gliding);
+  for (let n = 0; n < 40; n += 1) camera.pan(0, 80);
+  assert.ok(Math.hypot(camera.goal.x, camera.goal.z) <= edge + 1e-6, 'the arrows stop at the edge');
+});
+
+test('the further out, the further the edge: the whole sky can be moved well aside', () => {
+  const { camera } = rig();
+  camera.setBounds(960);
+  assert.ok(camera.edgeAt(3300) > camera.edgeAt(300) + 700, `${camera.edgeAt(3300).toFixed(0)} far out, ${camera.edgeAt(300).toFixed(0)} near`);
+  assert.ok(camera.edgeAt(300) < 960 * 1.25, 'near, a little past the furthest galaxy');
+});
+
+test('seen whole from far out, one finger turns the sky and tilts it, and a flick sets it spinning', () => {
+  const { camera, drag, wait, fire, target, taps } = rig({ distance: 3200, pitch: 0.9, whole: () => true });
+  const yaw = camera.goal.yaw;
+  // Each drag comes to rest before it is lifted, so nothing spins on.
+  const rested = (from, to) => { drag(from, to, { steps: 10, ms: 40, lift: false }); wait(120); fire('pointerup', 1, to[0], to[1]); };
+  rested([100, 400], [300, 400]);
+  assert.deepEqual(target(), [0, 0], 'the target stays where it was');
+  assert.ok(Math.abs(camera.goal.yaw - (yaw - 200 * 0.0052)) < 1e-6, `dragged right, it turns: ${camera.goal.yaw.toFixed(3)}`);
+  assert.ok(!camera.gliding, 'a drag that came to rest does not spin');
+  const pitch = camera.goal.pitch;
+  rested([200, 300], [200, 400]);
+  assert.ok(Math.abs(camera.goal.pitch - (pitch + 100 * 0.0042)) < 1e-6, 'dragged down, it tilts to face you');
+  rested([200, 400], [200, 300]);
+  assert.ok(Math.abs(camera.goal.pitch - pitch) < 1e-6, 'and back up');
+  // A flick carries on turning, slowing, and a finger laid on it stops it where it is.
+  drag([100, 600], [300, 600], { steps: 4, ms: 10 });
+  assert.ok(camera.gliding, 'spinning on');
+  const lifted = camera.goal.yaw;
+  wait(160);
+  const spun = camera.goal.yaw;
+  assert.ok(spun < lifted - 0.05, `it carries on turning: ${lifted.toFixed(3)} then ${spun.toFixed(3)}`);
+  fire('pointerdown', 4, 200, 200);
+  assert.ok(!camera.gliding, 'a finger stops it');
+  assert.equal(camera.goal.yaw, camera.state.yaw, 'right where it is');
+  fire('pointerup', 4, 200, 200);
+  assert.deepEqual(target(), [0, 0], 'none of it moved the target');
+  assert.equal(taps.length, 1, 'the finger that stopped it was a tap');
+});
+
+test('seen whole, Shift with a mouse still moves across, and two fingers still pinch and move', () => {
+  const { camera, drag, two, target } = rig({ distance: 3200, whole: () => true });
+  const yaw = camera.goal.yaw;
+  drag([195, 300], [195, 500], { pointerType: 'mouse', shiftKey: true, steps: 10, ms: 40 });
+  assert.equal(camera.goal.yaw, yaw, 'not turned');
+  assert.ok(Math.hypot(...target()) > 100, 'moved across');
+  const before = camera.goal.distance;
+  two(line([150, 400], [100, 400]), line([240, 400], [290, 400]));
+  assert.ok(camera.goal.distance < before * 0.7, 'a spread comes nearer');
 });
 
 test('the arrows move across the sky by a step, about where the target is drawn', () => {
