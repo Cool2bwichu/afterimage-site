@@ -6,6 +6,9 @@
     "watchPatterns": [
       "companion/**",
       "app/lib/**",
+      "odyssey/brain/**",
+      "odyssey/src/engine/**",
+      "odyssey/public/data/**",
       "railway.json",
       ".dockerignore"
     ]

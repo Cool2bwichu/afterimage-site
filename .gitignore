@@ -1,6 +1,7 @@
 # dependencies
 /node_modules
 /companion/node_modules
+/odyssey/node_modules
 /.pnp
 .pnp.*
 .yarn/*
@@ -38,6 +39,9 @@ next-env.d.ts
 /dist/
 /dist-pages/
 /dist-artifact/
+/odyssey/dist/
+/odyssey/dist-artifact/
+/odyssey/.cache/
 /.wrangler/
 /outputs/
 /work/

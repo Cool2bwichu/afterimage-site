@@ -1,5 +1,5 @@
 # Docker builds from the repository root (companion/Dockerfile) need only
-# companion/ and app/lib/.
+# companion/, app/lib/ and the Odyssey's chart, engine and Navigator.
 **/node_modules
 .git
 .next
@@ -7,6 +7,9 @@
 .wrangler
 dist
 dist-pages
+odyssey/dist
+odyssey/dist-artifact
+odyssey/.cache
 companion/data
 companion/test
 .env*

@@ -1,4 +1,5 @@
-# Build from the repository root (the companion reuses the site's film code in app/lib):
+# Build from the repository root (the companion reuses the site's film code in app/lib,
+# and the Odyssey's chart and Navigator in odyssey/):
 #   docker build -f companion/Dockerfile .
 # railway.json at the repository root points Railway here.
 FROM node:22-bookworm-slim
@@ -18,7 +19,11 @@ RUN npm ci --omit=dev && npm cache clean --force
 COPY companion/server.mjs ./
 COPY companion/lib ./lib
 COPY app/lib /srv/app/lib
-RUN mkdir -p /data/afterimage-generation-jobs /srv/runtime
+# The Odyssey: the chart, the engine that reads it, and the Navigator that writes every prompt.
+COPY odyssey/brain /srv/odyssey/brain
+COPY odyssey/src/engine /srv/odyssey/src/engine
+COPY odyssey/public/data /srv/odyssey/public/data
+RUN mkdir -p /data/afterimage-generation-jobs /data/afterimage-odyssey /srv/runtime
 
 # Railway volumes mount as root, so the service runs as root like the GPT bridge.
 # The allowed origin is this repository's GitHub Pages site; a service variable
@@ -27,6 +32,7 @@ ENV NODE_ENV=production \
     PORT=8788 \
     AFTERIMAGE_ALLOWED_ORIGINS=https://cool2bwichu.github.io \
     AFTERIMAGE_JOB_DIR=/data/afterimage-generation-jobs \
+    AFTERIMAGE_ODYSSEY_DIR=/data/afterimage-odyssey \
     AFTERIMAGE_CLAUDE_WORKDIR=/srv/runtime \
     SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
 
