@@ -10,7 +10,7 @@ import { decodeSky } from '../engine/together.mjs';
 import { h, icon, replace, plural } from './dom.mjs';
 import { poster } from './posters.mjs';
 import { source } from './dossier.mjs';
-import { createGrip } from './grip.mjs';
+import { createGrip, restingHeight } from './grip.mjs';
 
 const MOODS = [
   'Something quiet for a rainy Sunday',
@@ -1037,6 +1037,8 @@ export function createPanels(app) {
     state.tool = { name };
     sheet.hidden = false;
     sheet.dataset.tool = name;
+    // A constellation framed in the sky above keeps most of a phone's screen: its list rests lower.
+    sheet.classList.toggle('low', name === 'set' && app.small && Boolean(app.framing?.()));
     RENDER[name](data);
     if (name === 'set' && !same && memo.list.scroll) { body.scrollTop = memo.list.scroll; memo.list.scroll = 0; }
     else if (!same || data !== undefined) body.scrollTop = 0;
@@ -1047,7 +1049,7 @@ export function createPanels(app) {
 
   function close() {
     state.tool = null;
-    sheet.classList.remove('on', 'tall');
+    sheet.classList.remove('on', 'tall', 'low');
     sheet.hidden = true;
     app.frameCosmos();
     app.refresh('tool');
@@ -1084,6 +1086,6 @@ export function createPanels(app) {
     open, close,
     toggle(name) { if (state.tool?.name === name) close(); else open(name); },
     width: () => (sheet.hidden || app.small ? 0 : sheet.getBoundingClientRect().width),
-    height: () => (sheet.hidden || !app.small ? 0 : sheet.getBoundingClientRect().height),
+    height: () => (sheet.hidden || !app.small ? 0 : restingHeight(sheet)),
   };
 }

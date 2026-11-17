@@ -873,6 +873,7 @@ button.figure:hover, .figure.on { border-color: var(--starlight); background: rg
   .caption-text { font-size: 16px; }
 
   .sheet, .sheet-left { left: 0; right: 0; top: auto; bottom: 0; width: 100%; height: 56%; max-height: calc(100% - 110px); padding-top: 0; border: 0; background: linear-gradient(180deg, rgba(10, 15, 23, 0.93), rgba(7, 10, 16, 0.97)); border-top: 1px solid var(--line-strong); border-radius: 20px 20px 0 0; transform: translateY(30px); box-shadow: 0 -20px 60px rgba(0, 0, 0, 0.55); transition: opacity 0.5s var(--ease), transform 0.6s var(--ease), height 0.5s var(--ease); }
+  .sheet.low { height: 40%; }
   .sheet.tall { height: calc(100% - 110px); }
   .sheet.on { transform: none; }
   .sheet-grip { display: block; flex: none; width: 100%; height: 28px; margin-bottom: -6px; position: relative; z-index: 2; }
@@ -910,6 +911,10 @@ button.figure:hover, .figure.on { border-color: var(--starlight); background: rg
   .galaxy-head { padding-top: 8px; }
   .galaxy-head .dossier-title { font-size: 32px; }
   .hud:has(~ .sheet:not([hidden])) .hud-bottom { opacity: 0; pointer-events: none; }
+  /* A panel opened at a star lies over the star's page; the page waits out of sight until the panel closes. */
+  .dossier:has(~ .tools:not([hidden])) { visibility: hidden; opacity: 0; }
+  /* The list of a lit set says what the chip says: on a phone the chip leaves the sky to the set. */
+  .hud:has(~ .sheet[data-tool="set"]:not([hidden])) .current { display: none; }
   .hud-back { width: 30px; height: 30px; }
   .hud-brandline { gap: 8px; }
   .current { padding: 6px 6px 6px 14px; gap: 8px; }

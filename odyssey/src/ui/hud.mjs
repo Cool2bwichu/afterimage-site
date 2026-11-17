@@ -285,7 +285,7 @@ export function createHud(app) {
       if (!what || what === 'focus' || what === 'marks' || what === 'deep') logbook();
       if (!what || what === 'marks' || what === 'drift' || what === 'tool' || what === 'focus') counts();
       if (!what || what === 'navigator') navigator();
-      if (!what || what === 'current') lit();
+      if (!what || what === 'current' || what === 'tool') lit();
       else if (what === 'focus' || what === 'tool') keepClear();
       if (!what || what === 'voyage' || what === 'focus' || what === 'journey' || what === 'tool') journey();
       if (!what || what === 'journey') counts();

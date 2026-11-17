@@ -9,7 +9,7 @@ import { TIME, TIME_RINGS } from '../engine/time.mjs';
 import { TEMPERS, TEMPER_COLOUR, bendsOf, temperOf, temperWord } from '../engine/temper.mjs';
 import { h, icon, replace, plural } from './dom.mjs';
 import { poster } from './posters.mjs';
-import { createGrip } from './grip.mjs';
+import { createGrip, restingHeight } from './grip.mjs';
 
 const SOURCES = {
   chart: ['charted', 'Computed from the chart: what the two films are recorded as sharing.'],
@@ -608,7 +608,8 @@ export function createDossier(app) {
     /** Whether someone is reading the sheet now. */
     reading: () => !sheet.hidden && (over || performance.now() - touched < 8000),
     width: () => (sheet.hidden || app.small ? 0 : sheet.getBoundingClientRect().width),
-    height: () => (sheet.hidden || !app.small ? 0 : sheet.getBoundingClientRect().height),
+    // On a phone an open panel lies over the dossier and it steps out of sight until the panel is closed.
+    height: () => (sheet.hidden || !app.small || state.tool ? 0 : restingHeight(sheet)),
     get star() { return shownStar; },
   };
 }

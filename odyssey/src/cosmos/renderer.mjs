@@ -383,6 +383,7 @@ export function createCosmos({ canvas, universe, reducedMotion = false, small = 
   const lineBuffer = gl.createBuffer();
   const lineData = new Float32Array(MAX_LINES * LINE_FLOATS);
   const lineGroups = new Map();
+  const hush = new Map(); // group → { now, goal }: how far a group of lines has stepped back for something else
   let lineCount = 0;
   {
     gl.bindBuffer(gl.ARRAY_BUFFER, lineBuffer);
@@ -405,7 +406,9 @@ export function createCosmos({ canvas, universe, reducedMotion = false, small = 
 
   function syncLines(now) {
     let n = 0;
-    for (const lines of lineGroups.values()) {
+    for (const [group, lines] of lineGroups) {
+      const keep = 1 - (hush.get(group)?.now || 0);
+      if (keep <= 0.001) continue;
       for (const line of lines) {
         if (n >= MAX_LINES) break;
         if (typeof line.a === 'number' && line.a >= count) continue;
@@ -414,7 +417,7 @@ export function createCosmos({ canvas, universe, reducedMotion = false, small = 
         point(line.a, lineData, at);
         point(line.b, lineData, at + 3);
         lineData[at + 6] = line.colour[0]; lineData[at + 7] = line.colour[1]; lineData[at + 8] = line.colour[2];
-        lineData[at + 9] = line.colour[3] ?? 1;
+        lineData[at + 9] = (line.colour[3] ?? 1) * keep;
         lineData[at + 10] = line.width ?? 2.2;
         lineData[at + 11] = line.style ?? 0;
         lineData[at + 12] = line.phase ?? 0;
@@ -599,6 +602,7 @@ export function createCosmos({ canvas, universe, reducedMotion = false, small = 
     }
     tint.mix = lerp(tint.mix, tintGoal.mix, ease);
     dim = lerp(dim, dimGoal, 1 - Math.exp(-dt * 5));
+    for (const entry of hush.values()) entry.now = Math.abs(entry.goal - entry.now) < 0.002 ? entry.goal : lerp(entry.now, entry.goal, 1 - Math.exp(-dt * 4));
 
     if (glowEasing) {
       const k = 1 - Math.exp(-dt * 7);
@@ -823,6 +827,14 @@ export function createCosmos({ canvas, universe, reducedMotion = false, small = 
     get transitioning() { return Boolean(transition); },
     get clock() { return clock; },
     setSky, project, projectPoint, pick, positionOf, restingPlace, setLines, reachOf, sizeAt, resize,
+    /** Lets groups of lines step back (amount 0 to 1), so that something else drawn in the sky is the thing seen. */
+    hushLines(groups, amount) {
+      for (const group of groups) {
+        const entry = hush.get(group) || { now: 0, goal: 0 };
+        entry.goal = clamp(amount, 0, 1);
+        hush.set(group, entry);
+      }
+    },
     setFocus(i) { focus = i; refreshGlowGoals(); },
     get hover() { return hover; },
     setHover(i) { if (hover !== i) { hover = i; refreshGlowGoals(); } },

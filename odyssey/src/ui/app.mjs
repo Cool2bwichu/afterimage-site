@@ -133,8 +133,51 @@ export function createApp({ root, universe, depth, deepen = () => Promise.reject
     // below the instruments along the top.
     if (small) cosmos.camera.setCentre(0, Math.min(0.55, (below - (state.focus >= 0 ? HUD_TOP : 0)) / Math.max(height, 1)));
     else cosmos.camera.setCentre((left - right) / Math.max(width, 1), 0);
+    fitFraming();
   }
   app.frameCosmos = frameCosmos;
+
+  // ── A set of stars framed in the open sky: a constellation, a passage, a voyage. Until the hands or a
+  // flight take the view elsewhere it stays framed in whatever the panels leave uncovered, so a sheet
+  // pulled taller or shorter, or a panel opening beside it, never leaves it hidden under one.
+  let framing = null; // { stars, pitch, region }
+  let fitting = false;
+  app.framing = () => framing !== null;
+  /** The part of the screen nothing covers, in CSS pixels: below the instruments and the lit set's chip, beside the panels, above the dial or a sheet. */
+  function openSky() {
+    const { width, height } = cosmos.size;
+    const chip = document.querySelector('.hud .current');
+    const box = chip && !chip.hidden ? chip.getBoundingClientRect() : null;
+    const top = Math.max(covered.top, box && box.height ? box.bottom : 0) + 6;
+    // The names of the stars hang just below them.
+    return { left: covered.left + 10, right: width - covered.right - 10, top, bottom: height - covered.bottom - (small ? 26 : 34) };
+  }
+  function fitFraming() {
+    if (!framing) return;
+    const region = openSky();
+    // A list pulled up over nearly all the sky leaves nowhere to frame anything: the view waits as it is.
+    if (region.bottom - region.top < 150 || region.right - region.left < 150) return;
+    const key = [region.left, region.top, region.right, region.bottom].map(Math.round).join(',');
+    if (key === framing.region) return;
+    framing.region = key;
+    const points = framing.stars.map(star => cosmos.restingPlace(star, [0, 0, 0]));
+    const fit = cosmos.camera.fit(points, region, { pitch: framing.pitch, margin: 0.09, least: small ? 120 : 150 });
+    if (!fit) return;
+    fitting = true;
+    cosmos.camera.flyTo({ target: fit.target, distance: fit.distance, pitch: framing.pitch });
+    fitting = false;
+  }
+  /** Frames a set of stars in the open sky, seen nearly from above, so that its shape reads. */
+  function frameStars(stars, { pitch = 1.08 } = {}) {
+    const list = stars.filter(star => star >= 0 && star < universe.count);
+    if (!list.length) return;
+    framing = { stars: list, pitch, region: '' };
+    fitFraming();
+  }
+  // The hands, or a flight somewhere else, take the view from the set: from then on it is left where it is.
+  cosmos.camera.on(what => {
+    if (!fitting && (what === 'panned' || what === 'zoomed' || what === 'turned' || what === 'flight')) framing = null;
+  });
 
   // ── Lines in the sky.
   const journeyAt = () => (state.journey ? state.journey.path[state.journey.path.length - 1].star : -1);
@@ -147,7 +190,7 @@ export function createApp({ root, universe, depth, deepen = () => Promise.reject
   }
 
   function drawRays() {
-    if (state.focus < 0) { cosmos.setLines('rays', []); cosmos.setLines('wormhole', []); cosmos.setRayEnds([]); return; }
+    if (state.focus < 0) { cosmos.setLines('rays', []); cosmos.setLines('wormhole', []); rayEnds = []; cosmos.setRayEnds([]); return; }
     const list = leading();
     // Inside a star system the rings say it; the lines wait until you draw back.
     cosmos.setLines('rays', state.system ? [] : list.map((ray, n) => ({
@@ -157,8 +200,12 @@ export function createApp({ root, universe, depth, deepen = () => Promise.reject
     cosmos.setLines('wormhole', state.system ? [] : state.holes.map((hole, n) => ({
       a: state.focus, b: hole.star, colour: [...WORM, 0.85], width: 2.4, style: 5, phase: n * 0.37, wait: 0.7 + n * 0.3, grow: 1.8,
     })));
-    cosmos.setRayEnds([...list.map(ray => ray.star), ...state.holes.map(hole => hole.star)]);
+    rayEnds = [...list.map(ray => ray.star), ...state.holes.map(hole => hole.star)];
+    liftRayEnds();
   }
+  let rayEnds = [];
+  // The films the rays lead to are lit, unless a constellation shown is the thing to see.
+  const liftRayEnds = () => cosmos.setRayEnds(state.current?.kind === 'constellation' ? [] : rayEnds);
 
   function drawLinks() {
     if (state.focus < 0 || state.system) { cosmos.setLines('links', []); return; }
@@ -249,14 +296,16 @@ export function createApp({ root, universe, depth, deepen = () => Promise.reject
   app.lineOf = lineOf;
 
   function labelContext() {
-    const rays = new Map(leading().map(ray => [ray.star, lightById(ray.light).color]));
-    if (state.sky === TIME && state.focus >= 0) {
+    // A constellation shown is the thing seen: the rays of the star you are at step back, names and all.
+    const figure = state.current?.kind === 'constellation';
+    const rays = new Map(figure ? [] : leading().map(ray => [ray.star, lightById(ray.light).color]));
+    if (state.sky === TIME && state.focus >= 0 && !figure) {
       const line = lineOf(state.focus);
       for (const step of line.back) if (!rays.has(step.star)) rays.set(step.star, TIME_RINGS.before.color);
       for (const step of line.forth) if (!rays.has(step.star)) rays.set(step.star, TIME_RINGS.after.color);
     }
-    for (const item of (state.focus >= 0 && state.deep.get(state.focus)) || []) rays.set(item.star, '#cfe0ff');
-    for (const hole of state.holes) if (!rays.has(hole.star)) rays.set(hole.star, WORMHOLE);
+    for (const item of (state.focus >= 0 && !figure && state.deep.get(state.focus)) || []) rays.set(item.star, '#cfe0ff');
+    for (const hole of figure ? [] : state.holes) if (!rays.has(hole.star)) rays.set(hole.star, WORMHOLE);
     if (state.voyage) for (const stop of state.voyage.stops) if (!rays.has(stop.star)) rays.set(stop.star, '#dec6a0');
     if (state.journey) for (const stop of state.journey.path) if (!rays.has(stop.star)) rays.set(stop.star, '#f0c987');
     // In Lookback the kinds of film are named only in the decade you are in.
@@ -848,8 +897,12 @@ export function createApp({ root, universe, depth, deepen = () => Promise.reject
   // ── Lit sets: a current (everything carrying a trait), a nebula, a constellation, a galaxy or one of its systems.
   function setCurrent(current) {
     state.current = current;
+    framing = null; // a set framed before belongs to the set before
     cosmos.setHighlight(current ? current.lit || current.stars : null); // lit: more than is listed (the films each loves, for two skies)
     cosmos.setLines('figure', current && current.figure ? current.figure : []);
+    const figure = current?.kind === 'constellation';
+    cosmos.hushLines(['rays', 'wormhole', 'links', 'deep', 'sight'], figure ? 0.82 : 0);
+    liftRayEnds();
     figures.setLit(current && current.kind === 'constellation' ? current.id : -1);
     labelContext();
     quietSky();
@@ -893,7 +946,7 @@ export function createApp({ root, universe, depth, deepen = () => Promise.reject
       return {
         kind, id, known, label: known ? constellation.name : 'An unnamed figure',
         note: known ? traits.join(' and ') : `Something to do with ${hint.name}; ${films[hint.star].t} is one of its stars. Visit three of them to learn its name.`,
-        stars, colour: '#dec6a0', light: 'white', figure: figureOf(stars),
+        stars, colour: '#dec6a0', light: 'white', figure: figureOf(stars, known),
       };
     }
     if (kind === 'bend') {
@@ -1019,7 +1072,7 @@ export function createApp({ root, universe, depth, deepen = () => Promise.reject
     if (!set) return null;
     setCurrent(set);
     if (frame) {
-      if (set.kind === 'constellation') widen([...set.stars]);
+      if (set.kind === 'constellation') frameStars([...set.stars]);
       else if (set.kind === 'trait') { if (state.focus < 0 || set.stars.size > 60) widen(); }
       else if (set.kind === 'register') widen();
     }
@@ -1039,14 +1092,14 @@ export function createApp({ root, universe, depth, deepen = () => Promise.reject
     return set;
   }
 
-  function figureOf(stars) {
+  function figureOf(stars, known = false) {
     // The shortest set of lines that joins the stars: a figure to draw in the sky.
     const list = [...stars];
     if (list.length < 2) return [];
     const P = universe.positions[state.sky];
     const distance = (a, b) => Math.hypot(P[a * 3] - P[b * 3], P[a * 3 + 1] - P[b * 3 + 1], P[a * 3 + 2] - P[b * 3 + 2]);
     const joined = new Set([list[0]]);
-    const lines = [];
+    const pairs = [];
     while (joined.size < list.length) {
       let best = null;
       for (const a of joined) for (const b of list) {
@@ -1055,24 +1108,21 @@ export function createApp({ root, universe, depth, deepen = () => Promise.reject
         if (!best || d < best.d) best = { a, b, d };
       }
       joined.add(best.b);
-      lines.push({ a: best.a, b: best.b, colour: [...STARLIGHT, 0.8], width: 1.7, style: 0, grow: 1.4, wait: lines.length * 0.16 });
+      pairs.push([best.a, best.b]);
     }
+    // Drawn one line after another: a soft glow laid down first, then the line itself, bright and fine.
+    const lines = [];
+    const colour = known ? GOLD : STARLIGHT;
+    pairs.forEach(([a, b], n) => {
+      lines.push({ a, b, colour: [...colour, 0.2], width: 9, style: 0, grow: 1.4, wait: n * 0.16 });
+      lines.push({ a, b, colour: [...colour, 1], width: 2.1, style: 0, grow: 1.4, wait: n * 0.16 });
+    });
     return lines;
   }
 
-  /** Pulls back until a set of stars (or the whole sky) is in view. */
+  /** Brings a set of stars into the open sky (or, with none, pulls back until the whole sky is in view). */
   function widen(stars = null) {
-    if (stars && stars.length) {
-      const P = universe.positions[state.sky];
-      let x = 0; let y = 0; let z = 0;
-      for (const star of stars) { x += P[star * 3]; y += P[star * 3 + 1]; z += P[star * 3 + 2]; }
-      x /= stars.length; y /= stars.length; z /= stars.length;
-      let reach = 0;
-      for (const star of stars) reach = Math.max(reach, Math.hypot(P[star * 3] - x, P[star * 3 + 2] - z));
-      cosmos.camera.flyTo({ target: [x, y, z], distance: Math.max(420, reach * (small ? 3.6 : 2.4)), pitch: 0.9 });
-      cosmos.camera.setFollow(null);
-      return;
-    }
+    if (stars && stars.length) { frameStars(stars); return; }
     if (cosmos.camera.goal.distance < 900) { cosmos.camera.setFollow(null); overview(); }
   }
 

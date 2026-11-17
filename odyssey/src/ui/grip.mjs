@@ -2,10 +2,25 @@
 // a drag moves its top edge with the finger. Let go high and it stays tall,
 // low and it settles back to its usual height, lower still (or flung down)
 // and it closes. Extra handles, such as a panel's header, drag the same way
-// but leave their own buttons alone.
+// but leave their own buttons alone. A sheet that lists what is drawn in the
+// sky above it (a constellation) rests lower, so the sky keeps most of the
+// screen.
 const TALL_GAP = 110; // .sheet.tall is the whole screen less this (styles.css)
 const SHORT = 0.56; // .sheet is this much of the screen on a phone (styles.css)
+export const LOW = 0.4; // .sheet.low, the same (styles.css)
 const CONTROLS = 'button, a, input, select, textarea';
+
+/**
+ * How tall a phone sheet is once it has settled: while a transition is still carrying it from one
+ * height to another, where it is going, not where it is.
+ */
+export function restingHeight(sheet) {
+  if (sheet.classList.contains('dragging')) return sheet.getBoundingClientRect().height;
+  const room = sheet.parentElement?.getBoundingClientRect().height || window.innerHeight;
+  const most = room - TALL_GAP;
+  if (sheet.classList.contains('tall')) return most;
+  return Math.min(most, room * (sheet.classList.contains('low') ? LOW : SHORT));
+}
 
 export function createGrip({ sheet, grip, handles = [], onResize, onClose }) {
   let drag = null;
@@ -65,7 +80,7 @@ export function createGrip({ sheet, grip, handles = [], onResize, onClose }) {
     const [t1, y1] = trail[trail.length - 1];
     const speed = t1 > t0 ? (y1 - y0) / (t1 - t0) : 0; // pixels a millisecond, downward
     const landing = height - speed * 220;
-    const short = room * SHORT;
+    const short = room * (sheet.classList.contains('low') ? LOW : SHORT);
     if (event.type === 'pointerup' && landing < short * 0.62) {
       // Gone: it slides the rest of the way down before it closes.
       sheet.classList.remove('dragging');
