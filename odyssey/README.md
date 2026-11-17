@@ -55,10 +55,17 @@ existing AFTERIMAGE site, its hosting, or its deployments.
   takes hold of it and moves it across, and a flick glides on. Anywhere, two
   fingers pinch about the point between them, twist to turn, and slide up or
   down together to tilt; a double tap comes closer there. With a mouse,
-  Shift-drag always moves across, and the right button (or Alt) always turns
-  and tilts; the arrows move across, and Shift with them turns. Whatever a
-  finger takes hold of stays under it, and the edges of the sky give like
-  elastic and spring back instead of stopping dead (`src/cosmos/camera.mjs`).
+  Shift-drag always moves across (Shift may be pressed or let go mid-drag),
+  and the right button (or Alt) always turns and tilts; the wheel and a
+  trackpad pinch come nearer what is under the pointer, and the arrows move
+  across (Shift with them turns); two fingers swiped sideways on a trackpad
+  move the sky across with them. The universe is deep, not flat, so a hand
+  takes hold of the stars it actually touches, as deep as they lie (at a star,
+  the star and its system, for as long as it is in view), and slides the view
+  across the screen with them: up is up, nothing grows or shrinks while it
+  moves, and what was taken hold of stays under the hand. The edges of the
+  sky, above and below as well as around, give like elastic and spring back
+  instead of stopping dead (`src/cosmos/camera.mjs`).
 - **A constellation, framed.** Choosing a constellation flies it into the open
   sky that is left: above the list on a phone (which lies lower for it), beside
   the panels on a computer. It is drawn as bright threads while the other lines

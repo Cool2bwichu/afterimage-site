@@ -168,6 +168,7 @@ export function createLabels({ root, cosmos, universe, small = false, onStar, on
       element = h('button.lbl-star', { type: 'button', tabindex: '-1' }, h('span.lbl-star-title', film.t), h('span.lbl-star-year', String(film.y)));
     }
     if (deep) element.classList.add('deep');
+    element.dataset.star = String(star); // a hand that takes hold of the sky here takes hold of this star
     element.addEventListener('click', event => { event.stopPropagation(); onStar?.(star); });
     element.addEventListener('pointerenter', () => onHoverLabel(star));
     element.addEventListener('pointerleave', () => onHoverLabel(-1));

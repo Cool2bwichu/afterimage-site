@@ -4,7 +4,10 @@
 //
 // Hands move it the way a map is moved: whatever a finger takes hold of stays
 // under that finger, two fingers bring it nearer or turn it about the point
-// between them, and a flick glides on and slows to a stop. Seen whole, from
+// between them, and a flick glides on and slows to a stop. The universe is
+// deep, not flat: what a hand takes hold of is the stars it actually touches,
+// at their own depth, and the view slides across the screen with them, so
+// that up is up and nothing grows or shrinks while it moves. Seen whole, from
 // far out, the sky is a thing in the hand instead: one finger turns it and
 // tilts it, and a flick sets it spinning. Its edges give, like the end of a
 // page pulled too far, and settle back when let go.
@@ -26,6 +29,8 @@ const TAN = Math.tan(FOV / 2);
 const EDGE_REACH = 1.12;
 const EDGE_VIEW = 0.62;
 const EDGE_GIVE = 0.36; // how far past the edge a hand can pull, as a share of the half-height in view, before it gives no more
+// Above the highest stars and below the lowest, the target may go this share of the half-height in view.
+const EDGE_HIGH = 1;
 
 /**
  * How far along its path a flight has moved its target, for each step of its
@@ -65,10 +70,14 @@ export function createCamera({ reducedMotion = false } = {}) {
   let drift = 0.012; // radians per second of slow turning while nothing else moves
   let idle = 0;
   let held = false;  // a hand is on the sky: the view goes exactly where it is moved, with nothing easing behind
-  let glide = null;  // { vx, vy, x, y, turn }: a flick carrying on, in pixels a second, from the point it was let go
+  let glide = null;  // { vx, vy, depth, turn }: a flick carrying on, in pixels a second, holding what lay that deep
   let bounds = Infinity; // how far out the sky's furthest galaxy lies: its edges are worked out from it
-  let raw = null;    // while a hand holds the sky: where it has taken the target, before the edge resists
+  let low = -Infinity; // and how low and how high its stars lie
+  let high = Infinity;
+  let raw = null;    // while a hand holds the sky: where it has taken the target, before the edges resist
   let rawFloor = 0;  // and how far out the target already was when it took hold (the edge is never nearer than that)
+  let rawLow = 0;    // and how low and how high it already was
+  let rawHigh = 0;
   const listeners = new Set();
 
   const view = new Float32Array(16);
@@ -127,6 +136,50 @@ export function createCamera({ reducedMotion = false } = {}) {
     out[0] = groundEye[0] + dx * along;
     out[1] = s.y;
     out[2] = groundEye[2] + dz * along;
+    return out;
+  }
+
+  // ── Points at a depth. The universe is deep: what a hand takes hold of lies as deep as the stars it touches.
+  const axes = { right: [1, 0, 0], up: [0, 1, 0], forward: [0, 0, -1] };
+  /** The view's own directions: across the screen, up it, and into it. */
+  function axesOf(s) {
+    const cp = Math.cos(s.pitch);
+    const sp = Math.sin(s.pitch);
+    const cy = Math.cos(s.yaw);
+    const sy = Math.sin(s.yaw);
+    axes.right[0] = cy; axes.right[1] = 0; axes.right[2] = -sy;
+    axes.up[0] = -sp * sy; axes.up[1] = cp; axes.up[2] = -sp * cy;
+    axes.forward[0] = -cp * sy; axes.forward[1] = -sp; axes.forward[2] = -cp * cy;
+    return axes;
+  }
+  const pointEye = [0, 0, 0];
+  const pointAim = [0, 0, 0];
+  /**
+   * The point of the universe under a pixel (x, y) that lies `depth` deep (measured straight into the view),
+   * seen as the camera will be once it has caught up with every move asked of it.
+   */
+  function pointAt(x, y, depth, out = [0, 0, 0], s = goal, centre = state) {
+    eyeOf(s, pointEye, pointAim);
+    const { right, up, forward } = axesOf(s);
+    const a = ((x / width) * 2 - 1 - centre.cx) * TAN * (width / height);
+    const b = (1 - (y / height) * 2 - centre.cy) * TAN;
+    for (let k = 0; k < 3; k += 1) out[k] = pointEye[k] + depth * (forward[k] + a * right[k] + b * up[k]);
+    return out;
+  }
+  /** Where a point of the universe is drawn, in pixels, and how deep it lies: { x, y, depth }, or null behind the eye. */
+  function screenOf(p, out = {}, s = goal, centre = state) {
+    eyeOf(s, pointEye, pointAim);
+    const { right, up, forward } = axesOf(s);
+    const dx = p[0] - pointEye[0];
+    const dy = p[1] - pointEye[1];
+    const dz = p[2] - pointEye[2];
+    const depth = dx * forward[0] + dy * forward[1] + dz * forward[2];
+    if (depth <= 1e-6) return null;
+    const ndcX = (dx * right[0] + dz * right[2]) / (depth * TAN * (width / height)) + centre.cx;
+    const ndcY = (dx * up[0] + dy * up[1] + dz * up[2]) / (depth * TAN) + centre.cy;
+    out.x = ((ndcX + 1) / 2) * width;
+    out.y = ((1 - ndcY) / 2) * height;
+    out.depth = depth;
     return out;
   }
   /** Where the target is drawn, in pixels. */
@@ -229,7 +282,7 @@ export function createCamera({ reducedMotion = false } = {}) {
         const fade = Math.exp(-dt * rate);
         const share = (1 - fade) / rate;
         if (flick.turn) spin(flick.vx * share, flick.vy * share);
-        else across(flick.x, flick.y, flick.x + flick.vx * share, flick.y + flick.vy * share); // stops it at the edge
+        else slide(flick.vx * share, flick.vy * share, flick.depth); // stops it at the edge
         flick.vx *= fade;
         flick.vy *= fade;
         if (glide === flick && Math.hypot(flick.vx, flick.vy) < 14) glide = null;
@@ -282,86 +335,120 @@ export function createCamera({ reducedMotion = false } = {}) {
 
   /** How far from the middle of the universe the target may be taken, seen from a distance. */
   const edgeAt = distance => (bounds === Infinity ? Infinity : bounds * EDGE_REACH + distance * TAN * EDGE_VIEW);
+  /** How low and how high the target may be taken, seen from a distance: a little past the lowest and highest stars. */
+  const heightsAt = distance => (low === -Infinity ? [-Infinity, Infinity] : [low - distance * TAN * EDGE_HIGH, high + distance * TAN * EDGE_HIGH]);
+  /** Past an edge, a hand pulls on against a resistance that grows until it gives no more. */
+  const yielding = (over, give) => give * (1 - Math.exp(-over / give));
 
-  const before = [0, 0, 0];
-  const after = [0, 0, 0];
   /**
-   * Moves the target across the sky. A hand may pull it past the edge, against a resistance that grows
-   * until it gives no more, and it settles back when let go; anything else stops at the edge.
+   * Moves the target. A hand may pull it past the edges (out from the middle, or above the highest stars or
+   * below the lowest), against a resistance that grows until it gives no more, and it settles back when let go;
+   * anything else stops at the edge.
    */
-  function shift(dx, dz) {
+  function shift(dx, dy, dz) {
     if (held) {
-      if (!raw) { raw = [goal.x, goal.z]; rawFloor = Math.hypot(goal.x, goal.z); }
+      if (!raw) { raw = [goal.x, goal.y, goal.z]; rawFloor = Math.hypot(goal.x, goal.z); rawLow = goal.y; rawHigh = goal.y; }
       raw[0] += dx;
-      raw[1] += dz;
-      const limit = Math.max(edgeAt(goal.distance), rawFloor);
-      const r = Math.hypot(raw[0], raw[1]);
-      if (r <= limit) { goal.x = raw[0]; goal.z = raw[1]; return; }
+      raw[1] += dy;
+      raw[2] += dz;
       const give = Math.max(1, goal.distance * TAN * EDGE_GIVE);
-      const shown = limit + give * (1 - Math.exp(-(r - limit) / give));
-      goal.x = (raw[0] * shown) / r;
-      goal.z = (raw[1] * shown) / r;
+      const limit = Math.max(edgeAt(goal.distance), rawFloor);
+      const r = Math.hypot(raw[0], raw[2]);
+      const shown = r <= limit ? r : limit + yielding(r - limit, give);
+      goal.x = r > 0 ? (raw[0] * shown) / r : raw[0];
+      goal.z = r > 0 ? (raw[2] * shown) / r : raw[2];
+      const [lowest, highest] = heightsAt(goal.distance);
+      const bottom = Math.min(lowest, rawLow);
+      const top = Math.max(highest, rawHigh);
+      goal.y = raw[1] > top ? top + yielding(raw[1] - top, give) : raw[1] < bottom ? bottom - yielding(bottom - raw[1], give) : raw[1];
       return;
     }
+    // Anything else stops at an edge; a target already beyond one may come back in, not go further out.
+    let stopped = false;
     const was = Math.hypot(goal.x, goal.z);
     goal.x += dx;
     goal.z += dz;
     const now = Math.hypot(goal.x, goal.z);
-    const limit = Math.max(edgeAt(goal.distance), was); // already beyond the edge: it may come back in, not go further out
-    if (now > limit) {
-      goal.x *= limit / now;
-      goal.z *= limit / now;
-      if (glide && !glide.turn) glide = null; // a glide comes to rest against the edge
-    }
-  }
-  function across(x0, y0, x1, y1) {
-    groundAt(x0, y0, before);
-    groundAt(x1, y1, after);
-    shift(before[0] - after[0], before[2] - after[2]);
-  }
-
-  /** Moves across the sky so that the point under one pixel comes to lie under another. */
-  function drag(x0, y0, x1, y1) {
-    cancelFlight();
-    follow = null;
-    across(x0, y0, x1, y1);
-    for (const listener of listeners) listener('panned');
-  }
-
-  /** Moves across the sky by a step, in pixels, about where the target is drawn. */
-  function pan(dx, dy) {
-    const [x, y] = targetOnScreen();
-    drag(x, y, x + dx, y + dy);
+    const limit = Math.max(edgeAt(goal.distance), was);
+    if (now > limit) { goal.x *= limit / now; goal.z *= limit / now; stopped = true; }
+    const [lowest, highest] = heightsAt(goal.distance);
+    const bottom = Math.min(lowest, goal.y);
+    const top = Math.max(highest, goal.y);
+    goal.y += dy;
+    if (goal.y > top) { goal.y = top; stopped = true; } else if (goal.y < bottom) { goal.y = bottom; stopped = true; }
+    if (stopped && glide && !glide.turn) glide = null; // a glide comes to rest against the edge
   }
 
   /**
-   * Does something to the view while keeping the point of the sky under a pixel where it is
-   * drawn. At a star the camera keeps to the star instead, so it stays the centre of it all.
+   * Slides the view across the screen by (dx, dy) pixels, carrying with it, exactly, whatever lies `depth`
+   * deep: up the screen is up, across is across, and nothing comes nearer or goes further while it moves.
    */
-  function about(atX, atY, change) {
-    const anchored = atX !== null && atY !== null && !follow;
-    if (anchored) groundAt(atX, atY, before);
-    change();
-    if (anchored) {
-      const x = before[0];
-      const z = before[2];
-      groundAt(atX, atY, after);
-      shift(x - after[0], z - after[2]);
-    }
+  function slide(dx, dy, depth = null) {
+    const { right, up } = axesOf(goal);
+    const step = (2 * (depth > 0 ? depth : goal.distance) * TAN) / height; // what a pixel spans, that deep
+    shift((dy * up[0] - dx * right[0]) * step, dy * up[1] * step, (dy * up[2] - dx * right[2]) * step);
   }
 
-  /** Nearer (a factor below 1) or further, about a point on screen in pixels, or about the target. */
-  function zoom(factor, atX = null, atY = null) {
+  /** The hand has moved from one pixel to another, holding the sky `depth` deep (the target's depth if not told). */
+  function drag(x0, y0, x1, y1, depth = null) {
     cancelFlight();
-    about(atX, atY, () => { goal.distance = clamp(goal.distance * factor, MIN_DISTANCE, MAX_DISTANCE); });
+    follow = null;
+    slide(x1 - x0, y1 - y0, depth);
+    for (const listener of listeners) listener('panned');
+  }
+
+  /** Moves across the sky by a step, in pixels, carrying what lies `depth` deep (the target, if not told). */
+  function pan(dx, dy, depth = null) {
+    drag(0, 0, dx, dy, depth);
+  }
+
+  const heldPoint = [0, 0, 0];
+  /**
+   * Nearer (a factor below 1) or further, about a point of the universe, which stays where it is drawn: the
+   * whole view grows or shrinks about it. About the target if there is none, and always at a star the camera
+   * keeps to, so that it stays the centre of it all.
+   */
+  function zoomAbout(factor, point = null) {
+    cancelFlight();
+    const was = goal.distance;
+    const next = clamp(was * factor, MIN_DISTANCE, MAX_DISTANCE);
+    if (point && !follow) {
+      // The camera looks at its aim (a little behind the target when far out): the aim is moved toward the
+      // point, or away, by as much as the distance changes, so the point is seen along the same line as before.
+      eyeOf(goal, pointEye, pointAim);
+      const k = next / was;
+      const ax = point[0] + k * (pointAim[0] - point[0]);
+      const ay = point[1] + k * (pointAim[1] - point[1]);
+      const az = point[2] + k * (pointAim[2] - point[2]);
+      goal.distance = next;
+      eyeOf(goal, pointEye, pointAim);
+      shift(ax - pointAim[0], ay - pointAim[1], az - pointAim[2]);
+    } else goal.distance = next;
     for (const listener of listeners) listener('zoomed');
   }
+  /** Nearer or further about the point under a pixel that lies `depth` deep (the target's depth if not told), or about the target. */
+  function zoom(factor, atX = null, atY = null, depth = null) {
+    const anchored = atX !== null && atY !== null;
+    zoomAbout(factor, anchored ? pointAt(atX, atY, depth > 0 ? depth : goal.distance, heldPoint) : null);
+  }
 
-  /** Turns the sky by an angle (clockwise on screen), about a point on screen in pixels, or about the target. */
-  function turn(angle, atX = null, atY = null) {
+  /** Turns the sky by an angle (clockwise on screen) about the upright line through a point of it, which stays where it is drawn; or about the target. */
+  function turnAbout(angle, point = null) {
     cancelFlight();
-    about(atX, atY, () => { goal.yaw += angle; });
+    if (point && !follow) {
+      const c = Math.cos(angle);
+      const s = Math.sin(angle);
+      const x = goal.x - point[0];
+      const z = goal.z - point[2];
+      goal.yaw += angle;
+      shift(point[0] + x * c + z * s - goal.x, 0, point[2] - x * s + z * c - goal.z);
+    } else goal.yaw += angle;
     for (const listener of listeners) listener('turned');
+  }
+  /** Turns the sky about the point under a pixel that lies `depth` deep, or about the target. */
+  function turn(angle, atX = null, atY = null, depth = null) {
+    const anchored = atX !== null && atY !== null;
+    turnAbout(angle, anchored ? pointAt(atX, atY, depth > 0 ? depth : goal.distance, heldPoint) : null);
   }
 
   /** A hand has begun to move the sky: whatever was easing stops where it is, and from now on the view keeps exactly to the hand. */
@@ -375,22 +462,27 @@ export function createCamera({ reducedMotion = false } = {}) {
   }
 
   /**
-   * The hands are lifted: moving at (vx, vy) pixels a second from (x, y), the sky glides on, or, if the hand
-   * was turning it, spins on. Pulled past its edge, it settles back inside instead.
+   * The hands are lifted, moving at (vx, vy) pixels a second: the sky glides on, still holding what lay `depth`
+   * deep, or, if the hand was turning it, spins on. Pulled past an edge, it settles back inside instead.
    */
-  function letGo(vx = 0, vy = 0, x = null, y = null, turning = false) {
+  function letGo(vx = 0, vy = 0, { turning = false, depth = null } = {}) {
     held = false;
     if (raw) {
+      raw = null;
+      let back = false;
       const limit = Math.max(edgeAt(goal.distance), rawFloor);
       const r = Math.hypot(goal.x, goal.z);
-      raw = null;
-      if (r > limit + 1e-6) { goal.x *= limit / r; goal.z *= limit / r; return; }
+      if (r > limit + 1e-6) { goal.x *= limit / r; goal.z *= limit / r; back = true; }
+      const [lowest, highest] = heightsAt(goal.distance);
+      const bottom = Math.min(lowest, rawLow);
+      const top = Math.max(highest, rawHigh);
+      if (goal.y > top + 1e-6) { goal.y = top; back = true; } else if (goal.y < bottom - 1e-6) { goal.y = bottom; back = true; }
+      if (back) return;
     }
     const speed = Math.hypot(vx, vy);
     if (reducedMotion || speed < 90 || (follow && !turning)) return;
     const most = Math.min(1, (turning ? SPIN_MOST : GLIDE_MOST) / speed);
-    const [tx, ty] = targetOnScreen();
-    glide = { vx: vx * most, vy: vy * most, x: x ?? tx, y: y ?? ty, turn: turning };
+    glide = { vx: vx * most, vy: vy * most, depth: depth > 0 ? depth : goal.distance, turn: turning };
   }
 
   // ── Framing a set of points.
@@ -464,7 +556,7 @@ export function createCamera({ reducedMotion = false } = {}) {
 
   return {
     state, goal, flyTo, jumpTo, setCentre, setBias, setFollow, update, resize, frame,
-    orbit, pan, drag, zoom, turn, hold, letGo, groundAt, cancelFlight, fit,
+    orbit, pan, drag, zoom, zoomAbout, turn, turnAbout, hold, letGo, groundAt, pointAt, screenOf, cancelFlight, fit,
     get flying() { return Boolean(flight); },
     get following() { return Boolean(follow); },
     get gliding() { return Boolean(glide); },
@@ -479,10 +571,18 @@ export function createCamera({ reducedMotion = false } = {}) {
       goal.y = state.y;
       goal.z = state.z;
     },
-    /** How far out the sky's furthest galaxy lies: the hands may take the target a little past it, and further when far out. */
-    setBounds(reach) { bounds = reach > 0 ? reach : Infinity; },
+    /**
+     * How far out the sky's furthest galaxy lies, and how low and how high its stars ([low, high]): the hands may
+     * take the target a little past them, and further when far out.
+     */
+    setBounds(reach, heights = null) {
+      bounds = reach > 0 ? reach : Infinity;
+      [low, high] = heights && heights[0] <= heights[1] ? heights : [-Infinity, Infinity];
+    },
     /** How far from the middle of the universe the target may be taken, seen from a distance (the present one if left out). */
     edgeAt(distance = goal.distance) { return edgeAt(distance); },
+    /** How low and how high the target may be taken, seen from a distance (the present one if left out). */
+    heightsAt(distance = goal.distance) { return heightsAt(distance); },
     /**
      * How far a point on screen (in pixels) lies from where the target is drawn, as a share of the
      * uncovered sky's half-width or half-height, whichever it is further along: 1 is at its edge.
@@ -503,6 +603,13 @@ const SLOP = { mouse: 4, pen: 7, touch: 9 }; // pixels a press may wander and st
 const TWIST = 0.17;   // radians two fingers may turn before the sky turns with them
 const DOUBLE_MS = 300; // a second tap begun this soon after the first was lifted, and this near it, is a double tap
 const DOUBLE_PX = 34;
+const WHEEL_RUN_MS = 300; // wheel steps this close together, with the pointer still, come nearer to one same point
+const WHEEL_SETTLE = 4;   // pixels a run of wheel steps travels before it is settled whether it comes nearer or moves across
+const REACH = 4; // a hand takes hold of nothing more than this many times as deep as what you look at, nor less than its share:
+                 // a far star caught by chance would fling the view away, a near one make it crawl
+
+/** How deep a hand may take hold of the sky, told how deep it lies there: as deep as that, within REACH of the target's distance. */
+export const holdable = (depth, distance) => (Number.isFinite(depth) && depth > 0 ? clamp(depth, distance / REACH, distance * REACH) : distance);
 
 const wrapAngle = angle => Math.atan2(Math.sin(angle), Math.cos(angle));
 const measure = (a, b) => ({
@@ -511,33 +618,51 @@ const measure = (a, b) => ({
   midX: (a.x + b.x) / 2,
   midY: (a.y + b.y) / 2,
 });
+// Which of Shift, Alt and Ctrl are down.
+const keysOf = event => (event.shiftKey ? 1 : 0) | (event.altKey ? 2 : 0) | (event.ctrlKey ? 4 : 0);
 
 /**
  * Wires pointer, wheel and touch to a camera, the way a map is moved. Returns a function that removes the wiring.
  *
  * One finger, or the mouse, takes hold of the sky and moves it across; let go mid-flick and it glides on.
+ * What it takes hold of is what lies under it, as deep as `depthAt(x, y, target)` says (the target's depth
+ * where it cannot say, and never more than a few times nearer or further than the target), and it stays under
+ * the hand whichever way the hand goes.
  * While `whole()` says the sky is seen whole, from far out, one finger turns it and tilts it instead (Shift
- * with a mouse still moves across), and a flick sets it spinning. Two fingers spread or pinch to come nearer
- * or go further, twist to turn the sky, and, moved up or down together, tilt it. The right button (or Alt,
- * or Ctrl) turns and tilts with one hand; the wheel comes nearer about the pointer; two quick taps are a double tap.
+ * with a mouse still moves across, pressed before the drag or during it), and a flick sets it spinning. Two
+ * fingers spread or pinch to come nearer or go further, twist to turn the sky, and, moved up or down together,
+ * tilt it: all about what lies between them. The right button (or Alt, or Ctrl) turns and tilts with one hand;
+ * the wheel, and a pinch on a trackpad, come nearer about what lies under the pointer, while two fingers swiped
+ * sideways on a trackpad (or the wheel with Shift) move the sky across with them; two quick taps are a double tap.
  *
  * `surfaces` are layers drawn over the element (names, poster cards): a drag or a wheel that begins on one
  * moves the sky exactly as it would from open space, and a press that does not move is still theirs to answer.
  */
-export function attachControls(element, camera, { onTap, onDoubleTap, onHover, onGesture, whole = null, surfaces = [], now = () => performance.now() } = {}) {
-  const pointers = new Map(); // id -> { id, x, y, x0, y0, button, type, downAt, samples }
+export function attachControls(element, camera, { onTap, onDoubleTap, onHover, onGesture, whole = null, depthAt = null, surfaces = [], now = () => performance.now() } = {}) {
+  const pointers = new Map(); // id -> { id, x, y, x0, y0, button, type, downAt, samples, target }
   const outside = new Set();  // pointers that went down on a surface, not on the element
-  let one = null;   // a single hand: { pointer, mode: 'across' | 'turn', began }
-  let pair = null;  // two hands: { a, b, distance, angle, midX, midY, start, mode: null | 'tilt' | 'free', twist, turning, travel }
+  let one = null;   // a single hand: { pointer, mode: 'across' | 'turn', began, depth, keys }
+  let pair = null;  // two hands: { a, b, distance, angle, midX, midY, start, mode: null | 'tilt' | 'free', twist, turning, travel, point }
   let spoiled = false; // the press became more than one hand: whatever happens, it is no tap
   let dragged = false; // the last press on a surface became a drag: its click is not a choice
   let lastTap = null;
+  let wheeled = null;  // a run of wheel steps: { x, y, at, target, way: null | 'near' | 'across', dx, dy, point, depth }
+  let pinched = null;  // a trackpad pinch the browser reports as a gesture of its own (Safari): { scale, rotation, twist, turning, point }
+  const seen = {};
 
   const local = event => {
     const rect = element.getBoundingClientRect();
     return { x: event.clientX - rect.left, y: event.clientY - rect.top };
   };
   const setCursor = value => { if (element.style) element.style.cursor = value; };
+  /** How deep the sky lies under a pixel: as the page sees it (the stars drawn there), or the target's depth. */
+  const deepAt = (x, y, target = null) => holdable(depthAt?.(x, y, target), camera.goal.distance);
+  /** The point of the sky a hand takes hold of at a pixel. */
+  const holdAt = (x, y, target = null) => camera.pointAt(x, y, deepAt(x, y, target));
+  /** What one hand does: turn and tilt with the right or middle button, Alt or Ctrl, or from far out unless Shift is down; else move across. */
+  const modeOf = (pointer, event) => (
+    pointer.button === 1 || pointer.button === 2 || event.altKey || event.ctrlKey || (!event.shiftKey && Boolean(whole?.())) ? 'turn' : 'across'
+  );
 
   function begin(event) {
     if (event.button > 2 || pointers.has(event.pointerId)) return false;
@@ -546,19 +671,18 @@ export function attachControls(element, camera, { onTap, onDoubleTap, onHover, o
     const t = now();
     const pointer = {
       id: event.pointerId, x: at.x, y: at.y, x0: at.x, y0: at.y, button: event.button || 0,
-      type: event.pointerType || 'mouse', downAt: t, samples: [[t, at.x, at.y]],
+      type: event.pointerType || 'mouse', downAt: t, samples: [[t, at.x, at.y]], target: event.target || null,
     };
     pointers.set(event.pointerId, pointer);
     if (pointers.size === 1) {
-      const turn = pointer.button === 1 || pointer.button === 2 || event.altKey || event.ctrlKey || (!event.shiftKey && Boolean(whole?.()));
-      one = { pointer, mode: turn ? 'turn' : 'across', began: false };
+      one = { pointer, mode: modeOf(pointer, event), began: false, depth: 0, keys: keysOf(event) };
       pair = null;
       spoiled = false;
     } else if (pointers.size === 2) {
       // A second finger: the two together now, and no tap whatever follows.
       const [a, b] = [...pointers.values()];
       const start = measure(a, b);
-      pair = { a, b, ...start, start, startA: [a.x, a.y], startB: [b.x, b.y], mode: null, twist: 0, turning: false, travel: 0 };
+      pair = { a, b, ...start, start, startA: [a.x, a.y], startB: [b.x, b.y], mode: null, twist: 0, turning: false, travel: 0, point: null };
       one = null;
       spoiled = true;
     }
@@ -583,20 +707,35 @@ export function attachControls(element, camera, { onTap, onDoubleTap, onHover, o
 
     if (pair && (pair.a === pointer || pair.b === pointer)) { movePair(); return; }
     if (!one || one.pointer !== pointer) return;
+    // Shift (or Alt, or Ctrl) pressed or let go during a drag changes what it does, from where the pointer is.
+    const keys = keysOf(event);
+    if (keys !== one.keys) {
+      one.keys = keys;
+      const mode = modeOf(pointer, event);
+      if (mode !== one.mode) {
+        one.mode = mode;
+        if (one.began) {
+          if (mode === 'across') one.depth = deepAt(px, py);
+          if (pointer.type === 'mouse') setCursor(mode === 'across' ? 'grabbing' : '');
+        }
+      }
+    }
     if (!one.began) {
       if (Math.hypot(at.x - pointer.x0, at.y - pointer.y0) < (SLOP[pointer.type] ?? SLOP.mouse)) return;
       one.began = true;
+      // What the hand took hold of: the sky under where it went down, as deep as it lies there.
+      if (one.mode === 'across') one.depth = deepAt(pointer.x0, pointer.y0, pointer.target);
       camera.hold();
       if (one.mode === 'across' && pointer.type === 'mouse') setCursor('grabbing');
       // From where it went down, so that what the finger took hold of is under it from the first.
-      step(one.mode, pointer.x0, pointer.y0, at.x, at.y);
+      step(one, pointer.x0, pointer.y0, at.x, at.y);
       return;
     }
-    step(one.mode, px, py, at.x, at.y);
+    step(one, px, py, at.x, at.y);
   }
 
-  function step(mode, x0, y0, x1, y1) {
-    if (mode === 'across') camera.drag(x0, y0, x1, y1);
+  function step(hand, x0, y0, x1, y1) {
+    if (hand.mode === 'across') camera.drag(x0, y0, x1, y1, hand.depth);
     else camera.orbit(x1 - x0, y1 - y0);
   }
 
@@ -620,23 +759,27 @@ export function attachControls(element, camera, { onTap, onDoubleTap, onHover, o
     if (pair.mode === 'tilt') {
       camera.orbit(0, at.midY - from.midY);
     } else {
-      // Across, with the point between the fingers. At a star a pinch keeps to the star until the fingers
-      // have plainly moved together across the sky (each finger's move nudges the point between them: only
+      // What lies between the fingers is taken hold of, at its own depth: it comes nearer or goes further, turns,
+      // and moves across with them, staying between them throughout. At a star a pinch keeps to the star until the
+      // fingers have plainly moved together across the sky (each finger's move nudges the point between them: only
       // how far it has gone in all counts).
       pair.travel = Math.max(pair.travel, Math.hypot(at.midX - pair.start.midX, at.midY - pair.start.midY));
-      if (!camera.following || pair.travel > 16) camera.drag(from.midX, from.midY, at.midX, at.midY);
-      // Nearer or further, about that point.
-      if (from.distance > 0 && at.distance > 0) camera.zoom(from.distance / at.distance, at.midX, at.midY);
+      if (!pair.point && (!camera.following || pair.travel > 16)) pair.point = holdAt(from.midX, from.midY, a.target);
+      const point = pair.point;
+      if (from.distance > 0 && at.distance > 0) camera.zoomAbout(from.distance / at.distance, point);
       // Turned with the fingers, once the twist is plainly meant.
       const d = wrapAngle(at.angle - from.angle);
-      if (pair.turning) camera.turn(d, at.midX, at.midY);
+      if (pair.turning) camera.turnAbout(d, point);
       else {
         pair.twist += d;
         if (Math.abs(pair.twist) > TWIST) {
           pair.turning = true;
-          camera.turn(pair.twist - Math.sign(pair.twist) * TWIST, at.midX, at.midY);
+          camera.turnAbout(pair.twist - Math.sign(pair.twist) * TWIST, point);
         }
       }
+      // Across: whatever the rest did, what was taken hold of is brought back between the fingers.
+      const p = point ? camera.screenOf(point, seen) : null;
+      if (p) camera.drag(p.x, p.y, at.midX, at.midY, p.depth);
     }
     Object.assign(pair, at);
   }
@@ -666,16 +809,16 @@ export function attachControls(element, camera, { onTap, onDoubleTap, onHover, o
         rest.x0 = rest.x;
         rest.y0 = rest.y;
         rest.samples = [[now(), rest.x, rest.y]];
-        one = { pointer: rest, mode: 'across', began: true };
+        one = { pointer: rest, mode: 'across', began: true, depth: deepAt(rest.x, rest.y), keys: 0 };
       } else camera.letGo();
       return;
     }
     if (!one || one.pointer !== pointer) { if (!pointers.size) camera.letGo(); return; }
-    const { began, mode } = one;
+    const { began, mode, depth } = one;
     one = null;
     if (began) {
       const [vx, vy] = cancelled ? [0, 0] : velocity(pointer);
-      camera.letGo(vx, vy, pointer.x, pointer.y, mode === 'turn');
+      camera.letGo(vx, vy, { turning: mode === 'turn', depth });
       if (pointer.type === 'mouse') { setCursor(''); onHover?.(pointer.x, pointer.y); }
       return;
     }
@@ -700,12 +843,72 @@ export function attachControls(element, camera, { onTap, onDoubleTap, onHover, o
 
   function wheel(event) {
     event.preventDefault();
+    if (pinched && event.ctrlKey) return; // the same pinch, reported twice
     camera.stopGlide();
     const at = local(event);
-    const step = event.deltaMode === 1 ? event.deltaY * 28 : event.deltaMode === 2 ? event.deltaY * 400 : event.deltaY;
-    const factor = Math.exp(clamp(step, -240, 240) * (event.ctrlKey ? 0.01 : 0.0016));
-    camera.zoom(factor, at.x, at.y);
+    const t = now();
+    const unit = event.deltaMode === 1 ? 28 : event.deltaMode === 2 ? 400 : 1;
+    const dx = (event.deltaX || 0) * unit;
+    const dy = (event.deltaY || 0) * unit;
+    // A run of steps (a trackpad sends dozens a second) keeps to what it began on, and to what it began doing.
+    if (!wheeled || t - wheeled.at > WHEEL_RUN_MS || Math.hypot(at.x - wheeled.x, at.y - wheeled.y) > 6) {
+      wheeled = { x: at.x, y: at.y, at: t, target: event.target, way: null, dx: 0, dy: 0, point: null, depth: null };
+    }
+    wheeled.at = t;
+    let [stepX, stepY] = [dx, dy];
+    if (!wheeled.way) {
+      // How it begins says what it is: a pinch (Ctrl) comes nearer; Shift, or two fingers swiped more sideways than
+      // up or down on a trackpad, move the sky across with them; up or down alone comes nearer, as a mouse wheel does.
+      wheeled.dx += dx;
+      wheeled.dy += dy;
+      if (event.ctrlKey) wheeled.way = 'near';
+      else if (event.shiftKey) wheeled.way = 'across';
+      else if (Math.max(Math.abs(wheeled.dx), Math.abs(wheeled.dy)) >= WHEEL_SETTLE) wheeled.way = Math.abs(wheeled.dx) > Math.abs(wheeled.dy) ? 'across' : 'near';
+      else return; // a few pixels yet: too soon to tell
+      [stepX, stepY] = [wheeled.dx, wheeled.dy];
+      if (wheeled.way === 'near') wheeled.point = holdAt(wheeled.x, wheeled.y, wheeled.target);
+      else wheeled.depth = deepAt(wheeled.x, wheeled.y, wheeled.target);
+    }
+    if (wheeled.way === 'across') {
+      // The sky goes the way the fingers go, as a page scrolled on a trackpad does.
+      camera.pan(-stepX, -stepY, wheeled.depth);
+    } else {
+      const factor = Math.exp(clamp(stepY, -240, 240) * (event.ctrlKey ? 0.01 : 0.0016));
+      camera.zoomAbout(factor, wheeled.point);
+    }
     onGesture?.();
+  }
+
+  // ── A pinch on a trackpad, as Safari reports it: nearer or further, and turned, about what lies under the pointer.
+  // (Other browsers report it as a wheel with Ctrl; on a touch screen the fingers' own events do the work.)
+  function pinchStart(event) {
+    event.preventDefault();
+    if (pointers.size) return;
+    const at = local(event);
+    camera.stopGlide();
+    pinched = { scale: 1, rotation: 0, twist: 0, turning: false, point: holdAt(at.x, at.y, event.target) };
+    onGesture?.();
+  }
+  function pinchChange(event) {
+    event.preventDefault();
+    if (!pinched || pointers.size) return;
+    const scale = event.scale > 0 ? event.scale : 1;
+    camera.zoomAbout(pinched.scale / scale, pinched.point);
+    pinched.scale = scale;
+    const d = (((event.rotation || 0) - pinched.rotation) * Math.PI) / 180;
+    pinched.rotation = event.rotation || 0;
+    if (pinched.turning) camera.turnAbout(d, pinched.point);
+    else {
+      pinched.twist += d;
+      if (Math.abs(pinched.twist) > TWIST) {
+        pinched.turning = true;
+        camera.turnAbout(pinched.twist - Math.sign(pinched.twist) * TWIST, pinched.point);
+      }
+    }
+  }
+  function pinchEnd(event) {
+    event.preventDefault();
+    pinched = null;
   }
 
   // ── The same hands, begun on something drawn over the sky.
@@ -732,46 +935,36 @@ export function attachControls(element, camera, { onTap, onDoubleTap, onHover, o
 
   const leave = () => { if (!pointers.size) onHover?.(-1, -1); };
   const menu = event => event.preventDefault();
-  for (const surface of surfaces) {
-    surface.addEventListener('pointerdown', surfaceDown);
-    surface.addEventListener('click', surfaceClick, true);
-    surface.addEventListener('mousedown', still);
-    surface.addEventListener('dragstart', still);
-    surface.addEventListener('wheel', wheel, { passive: false });
-    surface.addEventListener('contextmenu', menu);
-  }
-  if (surfaces.length) {
-    window.addEventListener('pointermove', outsideMove);
-    window.addEventListener('pointerup', outsideUp);
-    window.addEventListener('pointercancel', outsideUp);
-  }
-  element.addEventListener('pointerdown', down);
-  element.addEventListener('pointermove', onElementMove);
-  element.addEventListener('pointerup', onElementUp);
-  element.addEventListener('pointercancel', onElementCancel);
-  element.addEventListener('pointerleave', leave);
-  element.addEventListener('wheel', wheel, { passive: false });
-  element.addEventListener('contextmenu', menu);
+  const wiring = [
+    ...surfaces.flatMap(surface => [
+      [surface, 'pointerdown', surfaceDown],
+      [surface, 'click', surfaceClick, true],
+      [surface, 'mousedown', still],
+      [surface, 'dragstart', still],
+      [surface, 'wheel', wheel, { passive: false }],
+      [surface, 'contextmenu', menu],
+      [surface, 'gesturestart', pinchStart],
+      [surface, 'gesturechange', pinchChange],
+      [surface, 'gestureend', pinchEnd],
+    ]),
+    ...(surfaces.length && typeof window !== 'undefined' ? [
+      [window, 'pointermove', outsideMove],
+      [window, 'pointerup', outsideUp],
+      [window, 'pointercancel', outsideUp],
+    ] : []),
+    [element, 'pointerdown', down],
+    [element, 'pointermove', onElementMove],
+    [element, 'pointerup', onElementUp],
+    [element, 'pointercancel', onElementCancel],
+    [element, 'pointerleave', leave],
+    [element, 'wheel', wheel, { passive: false }],
+    [element, 'contextmenu', menu],
+    [element, 'gesturestart', pinchStart],
+    [element, 'gesturechange', pinchChange],
+    [element, 'gestureend', pinchEnd],
+  ];
+  for (const [target, type, listener, options] of wiring) target.addEventListener(type, listener, options);
   return () => {
-    for (const surface of surfaces) {
-      surface.removeEventListener('pointerdown', surfaceDown);
-      surface.removeEventListener('click', surfaceClick, true);
-      surface.removeEventListener('mousedown', still);
-      surface.removeEventListener('dragstart', still);
-      surface.removeEventListener('wheel', wheel);
-      surface.removeEventListener('contextmenu', menu);
-    }
-    if (surfaces.length) {
-      window.removeEventListener('pointermove', outsideMove);
-      window.removeEventListener('pointerup', outsideUp);
-      window.removeEventListener('pointercancel', outsideUp);
-    }
-    element.removeEventListener('pointerdown', down);
-    element.removeEventListener('pointermove', onElementMove);
-    element.removeEventListener('pointerup', onElementUp);
-    element.removeEventListener('pointercancel', onElementCancel);
-    element.removeEventListener('pointerleave', leave);
-    element.removeEventListener('wheel', wheel);
-    element.removeEventListener('contextmenu', menu);
+    for (const [target, type, listener, options] of wiring) target.removeEventListener(type, listener, options === true);
   };
 }

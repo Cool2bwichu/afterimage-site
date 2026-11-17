@@ -876,6 +876,51 @@ export function createCosmos({ canvas, universe, reducedMotion = false, small = 
     return best;
   }
 
+  /**
+   * How deep the sky lies under a point on screen, straight into the view: the depth of the stars drawn around it
+   * (the nearer to the point and the brighter, the more they count), or of the star drawn right there if it lies
+   * among them (a lone star far nearer or further than its neighbours does not speak for the sky), or null where
+   * no star is drawn at all. A hand that takes hold of the sky there takes hold of them.
+   */
+  let deepList = new Float64Array(0);
+  let deepOrder = new Uint32Array(0);
+  function depthAt(x, y) {
+    if (!view) return null;
+    if (deepList.length < count * 2) { deepList = new Float64Array(count * 2); deepOrder = new Uint32Array(count); }
+    const m = view.viewProj;
+    let on = -1; let onScore = Infinity; let onDepth = 0;
+    let n = 0; let total = 0;
+    for (let i = 0; i < count; i += 1) {
+      const px = cur[i * 3]; const py = cur[i * 3 + 1]; const pz = cur[i * 3 + 2];
+      const w = m[3] * px + m[7] * py + m[11] * pz + m[15];
+      if (w <= 0.01) continue;
+      const sx = ((m[0] * px + m[4] * py + m[8] * pz + m[12]) / w * 0.5 + 0.5) * width;
+      const sy = (0.5 - (m[1] * px + m[5] * py + m[9] * pz + m[13]) / w * 0.5) * height;
+      if (sx < -80 || sy < -80 || sx > width + 80 || sy > height + 80) continue;
+      const r = Math.hypot(sx - x, sy - y);
+      const faded = dim > 0.2 && glowGoal[i] < 0.5;
+      const radius = clamp(sizeAt(i, w) * 0.2, 9, 34);
+      if (r < radius && !faded && r / radius < onScore) { on = i; onScore = r / radius; onDepth = w; }
+      const near = 1 + (r / 70) ** 2;
+      const weight = (0.35 + 0.65 * (colour[i * 4 + 3] / 255)) * (faded ? 0.2 : 1) / (near * near);
+      deepList[n * 2] = w;
+      deepList[n * 2 + 1] = weight;
+      deepOrder[n] = n;
+      n += 1;
+      total += weight;
+    }
+    if (!n || total <= 0) return null;
+    // The depth that half of what counts lies nearer than, and half further.
+    const order = deepOrder.subarray(0, n).sort((a, b) => deepList[a * 2] - deepList[b * 2]);
+    let sum = 0;
+    let middle = deepList[order[n - 1] * 2];
+    for (const k of order) {
+      sum += deepList[k * 2 + 1];
+      if (sum >= total / 2) { middle = deepList[k * 2]; break; }
+    }
+    return on >= 0 && onDepth < middle * 1.6 && onDepth > middle / 1.6 ? onDepth : middle;
+  }
+
   const positionOf = (i, out = [0, 0, 0]) => { out[0] = cur[i * 3]; out[1] = cur[i * 3 + 1]; out[2] = cur[i * 3 + 2]; return out; };
   /** Where a star will rest under the present light, wherever it is in flight now. */
   const restingPlace = (i, out = [0, 0, 0]) => {
@@ -900,6 +945,19 @@ export function createCosmos({ canvas, universe, reducedMotion = false, small = 
     }
     return reach || 1500;
   }
+  /** How low and how high a sky's stars lie: [lowest, highest]. */
+  function heightsOf(skyId = sky) {
+    const P = universe.positions[skyId];
+    const G = universe.galaxyOf[skyId];
+    let lowest = Infinity;
+    let highest = -Infinity;
+    for (let i = 0; i < universe.base; i += 1) {
+      if (G[i] === UNLIT) continue;
+      lowest = Math.min(lowest, P[i * 3 + 1]);
+      highest = Math.max(highest, P[i * 3 + 1]);
+    }
+    return lowest <= highest ? [lowest, highest] : null;
+  }
 
   // ── Begin.
   allocate(universe.count);
@@ -923,7 +981,7 @@ export function createCosmos({ canvas, universe, reducedMotion = false, small = 
     /** How finely the sky is drawn now: canvas pixels to a CSS pixel. */
     get sharpness() { return dpr; },
     get clock() { return clock; },
-    setSky, project, projectPoint, pick, positionOf, restingPlace, setLines, reachOf, sizeAt, resize,
+    setSky, project, projectPoint, pick, depthAt, positionOf, restingPlace, setLines, reachOf, heightsOf, sizeAt, resize,
     /** Lets groups of lines step back (amount 0 to 1), so that something else drawn in the sky is the thing seen. */
     hushLines(groups, amount) {
       for (const group of groups) {

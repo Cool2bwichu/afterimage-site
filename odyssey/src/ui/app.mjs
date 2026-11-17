@@ -11,11 +11,11 @@ import { CLEAR_SKY, cleanSeeing, describeSeeing, hazeOf, isClear, outside } from
 import { bearingResult, bearingStrength, createBearing, reasonOf } from '../engine/bearing.mjs';
 import { bondOf, decodeSky, encodeSky, skiesMeet, together } from '../engine/together.mjs';
 import { wormholes } from '../engine/wormhole.mjs';
-import { attachControls, FOV } from '../cosmos/camera.mjs';
+import { attachControls, FOV, holdable } from '../cosmos/camera.mjs';
 import { createOrbits } from '../cosmos/orbits.mjs';
 import { createFigures } from '../cosmos/figures.mjs';
 import { createComet } from '../cosmos/comet.mjs';
-import { hexToRgb } from '../cosmos/math.mjs';
+import { clamp, hexToRgb } from '../cosmos/math.mjs';
 import { GALAXY_HUES } from '../cosmos/renderer.mjs';
 import { createHud } from './hud.mjs';
 import { createDossier } from './dossier.mjs';
@@ -108,6 +108,12 @@ export function createApp({ root, universe, depth, deepen = () => Promise.reject
   const reachFor = sky => {
     if (!reaches.has(sky)) reaches.set(sky, cosmos.reachOf(sky));
     return reaches.get(sky);
+  };
+  // The universe is deep as well as wide: the hands may take you a little above its highest stars and below its lowest.
+  const heights = new Map();
+  const boundSky = sky => {
+    if (!heights.has(sky)) heights.set(sky, cosmos.heightsOf(sky));
+    cosmos.camera.setBounds(reachFor(sky), heights.get(sky));
   };
   const seenWhole = () => {
     const { width, height } = cosmos.size;
@@ -641,7 +647,7 @@ export function createApp({ root, universe, depth, deepen = () => Promise.reject
     if (sky === state.sky || !lightById(sky)) return;
     state.sky = sky;
     store.set('sky', sky);
-    cosmos.camera.setBounds(reachFor(sky));
+    boundSky(sky);
     root.style.setProperty('--light', lightById(sky).color);
     const camera = cosmos.camera;
     if (state.focus >= 0) {
@@ -1493,8 +1499,25 @@ export function createApp({ root, universe, depth, deepen = () => Promise.reject
 
   // ── Hands on the sky. From far out one finger (or the mouse) turns the whole sky and tilts it; nearer,
   // it takes hold of the sky and moves it across. Two pinch, twist and tilt it; a double tap comes closer there.
+  // What a hand takes hold of is what it touches, as deep as it lies: a name is at its star, and anywhere else the
+  // stars drawn there. At a star, the hands hold the star and its system wherever they press, for as long as it is
+  // in the open sky: it is what you are looking at, so it goes where the hand goes (and comes back with it) while the
+  // far sky drifts behind. Taken further away, the hands go over by degrees to what lies under them, so the sky
+  // never jumps from one pace to another between one stroke and the next.
+  const touched = {};
+  function depthAt(x, y, target = null) {
+    const named = target?.closest?.('[data-star]');
+    const p = named ? cosmos.project(Number(named.dataset.star), touched) : null;
+    const under = p ? p.depth : cosmos.depthAt(x, y);
+    const at = state.focus >= 0 ? cosmos.project(state.focus, touched) : null;
+    if (!at || !(at.depth > 0)) return under;
+    if (cosmos.camera.following || !(under > 0)) return at.depth;
+    const away = clamp((cosmos.camera.offCentre(at.x, at.y, covered) - 1) / 2, 0, 1);
+    return Math.exp(Math.log(at.depth) * (1 - away) + Math.log(under) * away);
+  }
   attachControls(cosmos.canvas, cosmos.camera, {
     whole: seenWhole,
+    depthAt,
     onTap(x, y) {
       const star = cosmos.pick(x, y, small ? 1.5 : 1);
       if (star < 0) return;
@@ -1517,7 +1540,7 @@ export function createApp({ root, universe, depth, deepen = () => Promise.reject
         const { width, height } = cosmos.size;
         if (!p || Math.hypot(p.x - x, p.y - y) > Math.min(width, height) * 0.22) camera.setFollow(null);
       }
-      camera.zoom(0.5, x, y);
+      camera.zoom(0.5, x, y, depthAt(x, y));
     },
     onHover(x, y) {
       const star = x < 0 ? -1 : cosmos.pick(x, y);
@@ -1637,7 +1660,7 @@ export function createApp({ root, universe, depth, deepen = () => Promise.reject
   app.entrance = createEntrance(app);
 
   // ── Begin: put back what was found before, then go where the address says.
-  cosmos.camera.setBounds(reachFor(state.sky));
+  boundSky(state.sky);
   state.restoring = true;
   pilot.restore();
   cosmos.setHaze(haze);
@@ -1709,11 +1732,14 @@ export function createApp({ root, universe, depth, deepen = () => Promise.reject
         else if (key === 'ArrowUp') camera.orbit(0, -50);
         else if (key === 'ArrowDown') camera.orbit(0, 50);
       } else {
+        // A step across, carrying the stars in the middle of the view by as much.
         const step = Math.min(cosmos.size.width, cosmos.size.height) * 0.12;
-        if (key === 'ArrowLeft') camera.pan(step, 0);
-        else if (key === 'ArrowRight') camera.pan(-step, 0);
-        else if (key === 'ArrowUp') camera.pan(0, step);
-        else if (key === 'ArrowDown') camera.pan(0, -step);
+        const middle = camera.screenOf([camera.goal.x, camera.goal.y, camera.goal.z], {});
+        const depth = middle ? holdable(depthAt(middle.x, middle.y), camera.goal.distance) : null;
+        if (key === 'ArrowLeft') camera.pan(step, 0, depth);
+        else if (key === 'ArrowRight') camera.pan(-step, 0, depth);
+        else if (key === 'ArrowUp') camera.pan(0, step, depth);
+        else if (key === 'ArrowDown') camera.pan(0, -step, depth);
       }
     }
   });
