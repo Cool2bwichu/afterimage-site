@@ -106,11 +106,15 @@ export function createCosmos({ canvas, universe, reducedMotion = false, small = 
   const programs = {
     sky: program(gl, S.SKY_VS, S.SKY_FS),
     far: program(gl, S.FAR_VS, S.FAR_FS),
+    deep: program(gl, S.DEEP_VS, S.DEEP_FS),
     glow: program(gl, S.GLOW_VS, S.GLOW_FS),
+    glowDisc: program(gl, S.GLOW_VS, S.GLOW_DISC_FS),
+    glowHeart: program(gl, S.GLOW_VS, S.GLOW_HEART_FS),
     dust: program(gl, S.DUST_VS, S.DUST_FS),
     star: program(gl, S.STAR_VS, S.STAR_FS),
     line: program(gl, S.LINE_VS, S.LINE_FS),
   };
+  const glowPrograms = [programs.glow, programs.glowDisc, programs.glowHeart]; // in the order of glowRuns
   const maxPoint = gl.getParameter(gl.ALIASED_POINT_SIZE_RANGE)[1];
 
   // ── Shared quads.
@@ -197,6 +201,36 @@ export function createCosmos({ canvas, universe, reducedMotion = false, small = 
     gl.bindVertexArray(farVao);
     attribute(0, buffer, 4, gl.FLOAT, false, 28, 0);
     attribute(1, buffer, 3, gl.FLOAT, false, 28, 16);
+  }
+
+  // ── Far galaxies, fewest where the band of the sky hides them, as a galaxy's own dust hides what lies behind it.
+  const DEEP_COUNT = small ? 150 : 260;
+  const deepVao = gl.createVertexArray();
+  {
+    const random = mulberry32(5150);
+    const data = new Float32Array(DEEP_COUNT * 8);
+    const band = [0.22, 0.93, 0.3];
+    const bandLength = Math.hypot(...band);
+    const tints = [[1, 0.84, 0.64], [0.74, 0.84, 1], [0.96, 0.9, 1], [1, 0.74, 0.8], [0.82, 0.92, 1]];
+    for (let i = 0; i < DEEP_COUNT; i += 1) {
+      let x; let y; let z; let keep;
+      do {
+        const u = random() * 2 - 1;
+        const phi = random() * Math.PI * 2;
+        const s = Math.sqrt(1 - u * u);
+        x = s * Math.cos(phi); y = u; z = s * Math.sin(phi);
+        const off = (x * band[0] + y * band[1] + z * band[2]) / bandLength;
+        keep = 1 - 0.9 * Math.exp(-((off / 0.3) ** 2));
+      } while (random() > keep);
+      const tint = tints[Math.floor(random() * tints.length)];
+      data.set([x, y, z, random() ** 2.4, tint[0], tint[1], tint[2], random()], i * 8);
+    }
+    const buffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+    gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
+    gl.bindVertexArray(deepVao);
+    attribute(0, buffer, 4, gl.FLOAT, false, 32, 0);
+    attribute(1, buffer, 4, gl.FLOAT, false, 32, 16);
   }
 
   // ── Stars and their dust. Arrays are sized with headroom and rebuilt when outgrown.
@@ -310,20 +344,24 @@ export function createCosmos({ canvas, universe, reducedMotion = false, small = 
   }
 
   // ── The glow of the galaxies.
+  // Kept in three runs, by how each is drawn: plain glows, galaxies' discs, galaxies' hearts.
   const glowVao = gl.createVertexArray();
   const glowBuffer = gl.createBuffer();
   let glowCount = 0;
+  const glowRuns = [{ shapes: [0, 1], first: 0, count: 0 }, { shapes: [2], first: 0, count: 0 }, { shapes: [3], first: 0, count: 0 }];
   let glowFade = [0, 1];
-  {
-    gl.bindVertexArray(glowVao);
-    attribute(0, quad, 2, gl.FLOAT, false, 0, 0);
+  function pointGlows(first) {
     const stride = GLOW_FLOATS * 4;
-    attribute(1, glowBuffer, 3, gl.FLOAT, false, stride, 0, 1);
-    attribute(2, glowBuffer, 3, gl.FLOAT, false, stride, 12, 1);
-    attribute(3, glowBuffer, 3, gl.FLOAT, false, stride, 24, 1);
-    attribute(4, glowBuffer, 4, gl.FLOAT, false, stride, 36, 1);
-    attribute(5, glowBuffer, 2, gl.FLOAT, false, stride, 52, 1);
+    const at = first * stride;
+    attribute(1, glowBuffer, 3, gl.FLOAT, false, stride, at, 1);
+    attribute(2, glowBuffer, 3, gl.FLOAT, false, stride, at + 12, 1);
+    attribute(3, glowBuffer, 3, gl.FLOAT, false, stride, at + 24, 1);
+    attribute(4, glowBuffer, 4, gl.FLOAT, false, stride, at + 36, 1);
+    attribute(5, glowBuffer, 2, gl.FLOAT, false, stride, at + 52, 1);
   }
+  gl.bindVertexArray(glowVao);
+  attribute(0, quad, 2, gl.FLOAT, false, 0, 0);
+  pointGlows(0);
 
   // In Lookback a decade is a ring: each kind of film glows as an arc of it, in the
   // colour its galaxy has under white light, and the present burns at the centre.
@@ -360,9 +398,9 @@ export function createCosmos({ canvas, universe, reducedMotion = false, small = 
       const vy = n[2] * ux - n[0] * uz;
       const vz = n[0] * uy - n[1] * ux;
       const disc = galaxy.radius * 1.55;
-      out.push(...galaxy.centre, ux * disc, uy * disc, uz * disc, vx * disc, vy * disc, vz * disc, ...rgb, 0.19, 0, set);
+      out.push(...galaxy.centre, ux * disc, uy * disc, uz * disc, vx * disc, vy * disc, vz * disc, ...rgb, 0.19, 2, set);
       const core = galaxy.radius * 0.5;
-      out.push(...galaxy.centre, core, 0, 0, 0, core, 0, ...rgb.map(c => lerp(c, 1, 0.35)), 0.3, 1, set);
+      out.push(...galaxy.centre, core, 0, 0, 0, core, 0, ...rgb.map(c => lerp(c, 1, 0.35)), 0.3, 3, set);
       for (const arm of galaxy.arms || []) {
         const reach = galaxy.radius * 0.42;
         out.push(...arm.at, reach, 0, 0, 0, reach, 0, ...rgb, 0.085, 1, set);
@@ -371,10 +409,19 @@ export function createCosmos({ canvas, universe, reducedMotion = false, small = 
   }
 
   function rebuildGlows(leaving) {
-    const list = [];
+    let list = [];
     if (leaving) glowsOf(leaving, 0, list);
     glowsOf(sky, 1, list);
     glowCount = list.length / GLOW_FLOATS;
+    const sorted = [];
+    for (const run of glowRuns) {
+      run.first = sorted.length / GLOW_FLOATS;
+      for (let i = 0; i < glowCount; i += 1) {
+        if (run.shapes.includes(list[i * GLOW_FLOATS + 13])) sorted.push(...list.slice(i * GLOW_FLOATS, (i + 1) * GLOW_FLOATS));
+      }
+      run.count = sorted.length / GLOW_FLOATS - run.first;
+    }
+    list = sorted;
     gl.bindBuffer(gl.ARRAY_BUFFER, glowBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(list), gl.DYNAMIC_DRAW);
   }
@@ -707,18 +754,29 @@ export function createCosmos({ canvas, universe, reducedMotion = false, small = 
     gl.uniform1f(u.uTime, clock);
     gl.bindVertexArray(farVao);
     gl.drawArrays(gl.POINTS, 0, FAR_COUNT);
+    gl.useProgram(programs.deep.handle);
+    u = programs.deep.uniforms;
+    gl.uniformMatrix4fv(u.uRotProj, false, rotProj);
+    gl.uniform1f(u.uDpr, dpr);
+    gl.bindVertexArray(deepVao);
+    gl.drawArrays(gl.POINTS, 0, DEEP_COUNT);
 
-    // Galaxy glow.
+    // Galaxy glow: plain glows, then galaxies' discs, then their hearts.
     if (glowCount) {
-      gl.useProgram(programs.glow.handle);
-      u = programs.glow.uniforms;
-      gl.uniformMatrix4fv(u.uViewProj, false, viewProj);
-      gl.uniform3fv(u.uRight, basis.right);
-      gl.uniform3fv(u.uUp, basis.up);
-      gl.uniform2f(u.uFade, glowFade[0] * (1 - dim * 0.6), glowFade[1] * (1 - dim * 0.6));
-      gl.uniform3fv(u.uEye, view.eye);
       gl.bindVertexArray(glowVao);
-      gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, glowCount);
+      glowPrograms.forEach((glowProgram, k) => {
+        const run = glowRuns[k];
+        if (!run.count) return;
+        gl.useProgram(glowProgram.handle);
+        u = glowProgram.uniforms;
+        gl.uniformMatrix4fv(u.uViewProj, false, viewProj);
+        gl.uniform3fv(u.uRight, basis.right);
+        gl.uniform3fv(u.uUp, basis.up);
+        gl.uniform2f(u.uFade, glowFade[0] * (1 - dim * 0.6), glowFade[1] * (1 - dim * 0.6));
+        gl.uniform3fv(u.uEye, view.eye);
+        pointGlows(run.first);
+        gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, run.count);
+      });
     }
 
     // Dust.

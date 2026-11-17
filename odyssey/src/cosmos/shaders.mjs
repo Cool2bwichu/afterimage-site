@@ -131,15 +131,48 @@ void main() {
 }
 `;
 
+// ── Far galaxies: whole galaxies too distant to be charted, each a small
+// smudge of light with a bright heart, turned and flattened its own way.
+export const DEEP_VS = `${HEAD}
+layout(location = 0) in vec4 aGalaxy;   // direction, size 0..1
+layout(location = 1) in vec4 aLook;     // tint, a seed for its shape
+uniform mat4 uRotProj;
+uniform float uDpr;
+out vec3 vColour;
+flat out vec3 vShape;   // which way it lies (cos, sin), how flat it is
+void main() {
+  vec4 clip = uRotProj * vec4(aGalaxy.xyz, 1.0);
+  gl_Position = vec4(clip.xy, clip.w * 0.9999, clip.w);
+  gl_PointSize = (9.0 + aGalaxy.w * 24.0) * uDpr;
+  float angle = aLook.w * 6.2832;
+  vShape = vec3(cos(angle), sin(angle), 0.2 + 0.8 * fract(aLook.w * 13.7));
+  vColour = aLook.rgb * (0.2 + 0.26 * aGalaxy.w);
+}
+`;
+
+export const DEEP_FS = `${HEAD}
+in vec3 vColour;
+flat in vec3 vShape;
+out vec4 frag;
+void main() {
+  vec2 p = gl_PointCoord * 2.0 - 1.0;
+  vec2 q = vec2(p.x * vShape.x + p.y * vShape.y, (p.y * vShape.x - p.x * vShape.y) / vShape.z);
+  float r = length(q);
+  float light = (exp(-r * 3.6) * 0.55 + exp(-r * r * 38.0) * 0.8) * (1.0 - smoothstep(0.7, 1.0, length(p)));
+  frag = vec4(vColour * light, 1.0);
+}
+`;
+
 // ── The glow of a galaxy: a disc lying in the galaxy's own plane, or a
-// soft ball facing the eye.
+// soft ball facing the eye. A galaxy's own disc winds into two arms of light
+// around a bright heart; other discs and balls are plain soft light.
 export const GLOW_VS = `${HEAD}
 layout(location = 0) in vec2 aCorner;
 layout(location = 1) in vec3 aCentre;
 layout(location = 2) in vec3 aU;
 layout(location = 3) in vec3 aV;
 layout(location = 4) in vec4 aColour;   // rgb, strength
-layout(location = 5) in vec2 aKind;     // 1 = faces the eye; which sky's set (0 leaving, 1 arriving)
+layout(location = 5) in vec2 aKind;     // shape (0 disc, 1 ball, 2 a galaxy's disc, 3 its heart); which sky's set (0 leaving, 1 arriving)
 uniform mat4 uViewProj;
 uniform vec3 uRight;
 uniform vec3 uUp;
@@ -147,29 +180,81 @@ uniform vec2 uFade;       // strength of the leaving and the arriving sets
 uniform vec3 uEye;
 out vec2 vP;
 out vec4 vColour;
+flat out float vShape;
+flat out float vSeed;
+flat out float vArms;     // how clearly a galaxy's arms show: not at all from inside it
 void main() {
   float reach = length(aU);
-  vec3 u = aKind.x > 0.5 ? uRight * reach : aU;
-  vec3 v = aKind.x > 0.5 ? uUp * reach : aV;
+  bool faces = mod(aKind.x, 2.0) > 0.5;
+  vec3 u = faces ? uRight * reach : aU;
+  vec3 v = faces ? uUp * reach : aV;
+  vShape = aKind.x;
+  vSeed = fract(sin(dot(aCentre, vec3(12.9898, 78.233, 37.719))) * 43758.5453);
   vec3 world = aCentre + u * aCorner.x + v * aCorner.y;
   gl_Position = uViewProj * vec4(world, 1.0);
   vP = aCorner;
   // From inside a galaxy its glow is only a faint haze: the stars are the view.
   float inside = smoothstep(0.7, 3.2, length(uEye - aCentre) / max(reach, 1.0));
   vColour = vec4(aColour.rgb, aColour.a * mix(uFade.x, uFade.y, aKind.y) * mix(0.12, 1.0, inside));
+  vArms = smoothstep(0.35, 0.65, inside);
   // A glow faded to nothing (a light's galaxies as another light takes over) costs nothing to draw.
   if (vColour.a < 0.002) gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
 }
 `;
 
-export const GLOW_FS = `${HEAD}
+// Three ways of drawing a glow, each its own program so that each costs only what it draws.
+const GLOW_HEAD = `${HEAD}
 in vec2 vP;
 in vec4 vColour;
+flat in float vShape;
+flat in float vSeed;
+flat in float vArms;
 out vec4 frag;
+float plainGlow(float r2) {
+  return max(0.0, exp(-r2 * 3.4) - 0.0334) + 0.5 * max(0.0, exp(-r2 * 14.0) - 0.000001);
+}
+`;
+
+export const GLOW_FS = `${GLOW_HEAD}
+void main() {
+  frag = vec4(vColour.rgb * plainGlow(dot(vP, vP)) * vColour.a, 1.0);
+}
+`;
+
+// A galaxy's heart: a small fierce light with long soft wings, whiter at its centre.
+export const GLOW_HEART_FS = `${GLOW_HEAD}
 void main() {
   float r2 = dot(vP, vP);
-  float glow = max(0.0, exp(-r2 * 3.4) - 0.0334) + 0.5 * max(0.0, exp(-r2 * 14.0) - 0.000001);
-  frag = vec4(vColour.rgb * glow * vColour.a, 1.0);
+  float r = sqrt(r2);
+  float glow = (max(0.0, exp(-r2 * 3.4) - 0.0334) * 0.55 + exp(-r * 5.0) * 0.9 + exp(-r2 * 60.0) * 0.8) * (1.0 - smoothstep(0.8, 1.0, r));
+  vec3 colour = mix(vColour.rgb, vec3(1.0, 0.95, 0.86), 0.55 * exp(-r * 8.0));
+  frag = vec4(colour * glow * vColour.a, 1.0);
+}
+`;
+
+// A galaxy's disc, seen from outside it: two arms of light winding out from the heart, as a log
+// spiral does, the light falling away more slowly than a plain glow so that the arms reach the outer
+// stars. From near or inside, it eases back into the plain glow.
+export const GLOW_DISC_FS = `${GLOW_HEAD}
+void main() {
+  float r2 = dot(vP, vP);
+  float glow = plainGlow(r2);
+  vec3 colour = vColour.rgb;
+  if (vArms > 0.0) {
+    float r = sqrt(r2);
+    float disc = exp(-r * 3.9) * (1.0 - smoothstep(0.82, 1.0, r));
+    float reach = smoothstep(0.05, 0.28, r) * (1.0 - smoothstep(0.55, 0.98, r));
+    float arms = 0.0;
+    if (reach > 0.0) {
+      float hand = vSeed > 0.5 ? 1.0 : -1.0;
+      float turn = atan(vP.y, vP.x) * hand - log(r) * 2.3 + vSeed * 6.2832;
+      float wave = 0.5 + 0.5 * cos(2.0 * turn);
+      arms = wave * wave * sqrt(wave) * (1.0 + 0.35 * cos(5.0 * turn + vSeed * 17.0));
+    }
+    glow = mix(glow, glow * 0.42 + disc * (0.5 + 2.1 * arms * reach), vArms);
+    colour = mix(colour, vec3(1.0, 0.93, 0.82), 0.4 * exp(-r * 7.0) * vArms);
+  }
+  frag = vec4(colour * glow * vColour.a, 1.0);
 }
 `;
 
