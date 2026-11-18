@@ -75,15 +75,37 @@ export function formGalaxies({ lightId, count, scores, indexes, traits, films, t
     for (const film of members) local[film] = -1;
 
     const byCentrality = [...members].sort((a, b) => centrality[b] - centrality[a]);
+    const top = distinguishingTraits({ members, indexes, traits, count, limit: 12 });
+    // A door is a film people may already know that is also one of the family's
+    // truest members: near the rest of it, and carrying what defines it. A famous
+    // film that only brushes the family's edge never leads it.
+    const lead = new Map(top.slice(0, 6).map(entry => [entry.trait, entry.share]));
+    const fit = new Map(members.map(film => {
+      let sum = 0;
+      for (const lightIndex of indexes) {
+        for (const { trait, raw } of lightIndex.traits(film, 64)) {
+          const share = lead.get(trait);
+          if (share) sum += share * raw / 255;
+        }
+      }
+      return [film, sum];
+    }));
+    const placeBy = value => new Map([...members].sort((a, b) => value(b) - value(a)).map((film, at) => [film, at / members.length]));
+    const fitPlace = placeBy(film => fit.get(film));
+    const centralPlace = placeBy(film => centrality[film]);
+    const truest = [...members]
+      .filter(film => fitPlace.get(film) < 0.4 && centralPlace.get(film) < 0.5)
+      .sort((a, b) => (fitPlace.get(a) + centralPlace.get(a)) - (fitPlace.get(b) + centralPlace.get(b)) || a - b);
+    const wellInside = truest.length >= 5 ? truest : byCentrality.slice(0, Math.max(5, Math.ceil(byCentrality.length * 0.6)));
     const doors = [];
-    // A door is a film people may already know that also sits well inside the family.
-    const wellInside = byCentrality.slice(0, Math.max(5, Math.ceil(byCentrality.length * 0.6)));
     const pick = test => { const film = wellInside.find(f => test(films[f]) && !doors.includes(f)); if (film !== undefined) doors.push(film); };
-    pick(f => f.renown >= 4);
-    pick(f => f.renown === 3);
-    pick(f => f.renown === 2);
+    pick(f => f.renown >= 3);
+    pick(f => f.renown >= 2);
+    pick(f => f.renown >= 2);
     pick(f => f.renown <= 1);
     pick(() => true);
+    // A family of little-known films still has its ways in: its truest members.
+    while (doors.length < Math.min(4, wellInside.length)) pick(() => true);
     const armList = [];
     for (let arm = 0; arm < Math.max(1, arms.count); arm += 1) {
       const armMembers = members.filter(film => armOf[film] === arm);
@@ -101,7 +123,7 @@ export function formGalaxies({ lightId, count, scores, indexes, traits, films, t
       medoid: byCentrality[0],
       typical: byCentrality.slice(0, 8),
       doors,
-      top: distinguishingTraits({ members, indexes, traits, count, limit: 12 }),
+      top,
       arms: armList,
     });
   }

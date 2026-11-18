@@ -46,7 +46,7 @@ export function cometFor(universe, { night, loved = [], visited = [], exclude = 
   const known = i => i >= 0 && i < count;
   const been = new Set([...loved, ...visited].filter(known));
   // Only a charted film, never one already reached, watched, saved or set aside.
-  const free = i => i >= 0 && i < base && !exclude.has(i) && !been.has(i);
+  const free = i => i >= 0 && i < base && !exclude.has(i) && !been.has(i) && !universe.films[i].cut;
   const shared = (from, star) => cometBond(universe, from, star);
   /** Among the films most like one in everything, a free one that shares something telling with it. */
   const nearOne = (from, renown, among) => {

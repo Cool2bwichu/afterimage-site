@@ -77,6 +77,10 @@ const ICONS = {
   comet: '<circle cx="16.6" cy="7.4" r="2.7"/><path d="M14.6 9.4 4 20"/><path d="M12.6 7.2 6.5 13.3" opacity=".6"/><path d="M16.8 11.4 10.7 17.5" opacity=".6"/>',
   bearing: '<circle cx="12" cy="12" r="8.5"/><path d="M12 3.5v2.6M12 17.9v2.6M3.5 12h2.6M17.9 12h2.6" opacity=".6"/><path d="m8.6 15.4 6.8-6.8"/><circle cx="15.4" cy="8.6" r="1.3"/>',
   together: '<path d="M8.5 4.5l1.3 3.7 3.7 1.3-3.7 1.3-1.3 3.7-1.3-3.7-3.7-1.3 3.7-1.3 1.3-3.7Z"/><path d="M16 11l1 2.8 2.8 1-2.8 1-1 2.8-1-2.8-2.8-1 2.8-1 1-2.8Z"/>',
+  chevron: '<path d="m6 9.5 6 6 6-6"/>',
+  play: '<circle cx="12" cy="12" r="9"/><path d="M10 8.6v6.8l5.6-3.4Z"/>',
+  screen: '<rect x="3.5" y="5" width="17" height="11.5" rx="1.6"/><path d="M8.5 20h7M12 16.5V20"/>',
+  clock: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
   wormhole: '<ellipse cx="12" cy="12" rx="9.5" ry="4.3"/><ellipse cx="12" cy="12.4" rx="5.4" ry="2.3" opacity=".75"/><ellipse cx="12" cy="12.7" rx="1.9" ry=".8" opacity=".55"/>',
 };
 

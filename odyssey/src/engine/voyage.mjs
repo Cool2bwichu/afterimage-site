@@ -7,6 +7,53 @@ import { topK } from './similarity.mjs';
 
 const WEIGHT = Object.fromEntries(LIGHTS.map(light => [light.id, light.weight]));
 
+// How much a shared trait counts as a reason two films are alike. Some traits are
+// true but say little: a decade, a country, a studio, a lone setting, a beat every
+// third story has. They can tip a close call, but they never make a ray on their own,
+// and they are named last.
+export const REASON = {
+  decade: 0.25, aspect: 0.25, country: 0.25, language: 0.25, studio: 0.25, era: 0.25,
+  opening: 0.25, arc: 0.25, role: 0.25,
+  frame: 0.5, icon: 0.5, placetype: 0.5, mood: 0.5, motif: 0.5, beat: 0.5,
+  register: 0.35,
+};
+export const reasonOf = record => REASON[record.k] ?? 1;
+
+// A ray is a film alike in one way that is also plausible overall: it is found among
+// the star's nearest films in white light. Wormholes are the deliberate exception.
+export const RAY_POOL = 160;
+
+// ── Sequels. Love The Godfather and the chart's first answer is The Godfather Part II, which
+// anyone would find without a chart. A film of the same series as one you love still comes,
+// but well behind films you would not have found on your own.
+export const SEQUEL_WEIGHT = 0.35;
+const seriesKeys = new WeakMap();
+/** A title as a series knows it: "The Godfather Part II" and "The Godfather" are both "godfather". */
+export function seriesKey(title) {
+  return String(title || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+    .replace(/^(the|a|an) /, '')
+    .replace(/\s*(:| - | – | part | chapter | episode ).*$/, '')
+    .replace(/[^a-z0-9 ]+/g, ' ')
+    .replace(/\s+(\d+|ii|iii|iv|v|vi|vii)$/, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+/** Whether two titles belong to one series: the same name, or one name continued ("Alien", "Aliens"; "Mad Max", "Mad Max 2"). */
+export function sameSeries(a, b) {
+  const x = seriesKey(a);
+  const y = seriesKey(b);
+  if (x.length < 3 || y.length < 3) return false;
+  if (x === y) return true;
+  const [short, long] = x.length < y.length ? [x, y] : [y, x];
+  return short.length >= 5 && long.startsWith(short) && /^(s|s? )/.test(long.slice(short.length)) && long.slice(short.length).length <= 12;
+}
+function keyOf(films, i) {
+  let keys = seriesKeys.get(films);
+  if (!keys) { keys = new Map(); seriesKeys.set(films, keys); }
+  if (!keys.has(i)) keys.set(i, seriesKey(films[i].t));
+  return keys.get(i);
+}
+
 /**
  * What two films share: [{ trait, share, light }], strongest first.
  * Veiled traits (endings, deaths) are left out unless asked for.
@@ -16,9 +63,9 @@ export function sharedTraits(universe, lightId, a, b, limit = 3, { veiled = fals
   const found = [];
   const lights = lightId === 'white' ? LIGHT_IDS : [lightId];
   for (const light of lights) {
-    for (const entry of model.index[light].shared(a, b, 8)) {
+    for (const entry of model.index[light].shared(a, b, 12)) {
       if (!veiled && traits[entry.trait].v) continue;
-      found.push({ trait: entry.trait, share: entry.share * (lightId === 'white' ? WEIGHT[light] : 1), light });
+      found.push({ trait: entry.trait, share: entry.share * (lightId === 'white' ? WEIGHT[light] : 1) * reasonOf(traits[entry.trait]), light });
     }
   }
   found.sort((x, y) => y.share - x.share);
@@ -52,17 +99,56 @@ export function closestLight(universe, a, b) {
   return best;
 }
 
+/** Films a star may lead to: never itself, never one set aside, never a re-edit of a film the chart holds. */
+const offerable = (universe, i, exclude) => j => j !== i && !(exclude && exclude.has(j)) && !universe.films[j].cut;
+
+/** How alike two films are under one light, counting each shared trait as the reason it is. */
+function reasonScore(universe, light, a, b) {
+  const { model, traits } = universe;
+  let score = 0;
+  for (const entry of model.index[light].shared(a, b, 64)) score += entry.share * reasonOf(traits[entry.trait]);
+  return score;
+}
+
 /**
- * The six rays of a star: under each light, the film it is most like.
+ * The films a star's ray may end at under one light, best first: [{ star, sim, shared }].
+ * Under the five lights of what a film is, they come from the star's nearest films in
+ * white light, ranked by what they share under that light (weak reasons counting for
+ * little) and a little by how near they are overall. Under hands, a shared maker is a
+ * fact and never absurd, so the whole chart is open.
+ * @param {{ k?: number, exclude?: Set<number>|null, around?: Array<{i:number, sim:number}>|null }} [options]
+ *   around: the star's white neighbours, when a caller already has them
+ */
+export function rayCandidates(universe, i, light, { k = 7, exclude = null, around = null } = {}) {
+  const { model } = universe;
+  const allow = offerable(universe, i, exclude);
+  const pool = light === 'hands'
+    ? model.neighbours('hands', i, 40, allow)
+    : (around || model.neighbours('white', i, RAY_POOL, allow));
+  const top = light === 'hands' ? 0 : (pool[0]?.sim || 0);
+  const scored = [];
+  for (const { i: j, sim: white } of pool) {
+    if (!allow(j)) continue;
+    const reason = reasonScore(universe, light, i, j);
+    if (reason <= 1e-6) continue;
+    scored.push({ star: j, sim: top > 0 ? reason * (0.6 + 0.4 * (white / top)) : reason });
+  }
+  scored.sort((x, y) => y.sim - x.sim);
+  return scored.slice(0, k).map(entry => ({ ...entry, shared: sharedTraits(universe, light, i, entry.star, 3) }));
+}
+
+/**
+ * The six rays of a star: under each light, the film it is most like, among the
+ * films that are plausible companions overall (rayCandidates).
  * No film ends two rays, so a star's system always shows six different films
  * (when the lights have that much to say).
  * @returns {Array<{ light, star, sim, shared, others }>} one entry per lit ray
  */
 export function prism(universe, i, { depth = 7, exclude = null } = {}) {
-  const { model } = universe;
+  const around = universe.model.neighbours('white', i, RAY_POOL, offerable(universe, i, exclude));
   const lists = LIGHT_IDS.map(light => ({
     light,
-    near: model.neighbours(light, i, depth, exclude ? j => !exclude.has(j) : null),
+    near: rayCandidates(universe, i, light, { k: depth, exclude, around }).map(entry => ({ i: entry.star, sim: entry.sim })),
   })).filter(entry => entry.near.length);
   lists.sort((x, y) => y.near[0].sim - x.near[0].sim);
   const taken = new Set();
@@ -125,11 +211,15 @@ export function gravity(universe, loved, { exclude = null, k = 24, deeper = 0, l
     }
   }
   const lovedSet = new Set(list);
+  const lovedTitles = list.map(i => films[i].t);
+  const lovedKeys = new Set(list.map(i => keyOf(films, i)));
   const total = new Float32Array(count);
   for (let j = 0; j < count; j += 1) {
-    if (lovedSet.has(j) || (exclude && exclude.has(j))) continue;
+    if (lovedSet.has(j) || (exclude && exclude.has(j)) || films[j].cut) continue;
     let score = first[j] + 0.6 * second[j] + 0.3 * third[j];
+    if (score <= 0) continue;
     if (deeper > 0) score *= 1 + deeper * 0.14 * (2 - (films[j].rn ?? 1));
+    if (lovedKeys.has(keyOf(films, j)) || lovedTitles.some(title => sameSeries(title, films[j].t))) score *= SEQUEL_WEIGHT;
     total[j] = score;
   }
   return topK(total, k).map(({ i: star, sim: score }) => ({

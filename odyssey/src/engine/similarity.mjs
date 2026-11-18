@@ -57,12 +57,14 @@ export function buildLightIndex({ count, ptr, idx, raw, idf, curves = null, curv
   const cursor = postPtr.slice(0, traitCount);
   const postFilm = new Uint32Array(nnz);
   const postWeight = new Float32Array(nnz);
+  const postRaw = new Uint8Array(nnz);
   for (let i = 0; i < count; i += 1) {
     for (let p = ptr[i]; p < ptr[i + 1]; p += 1) {
       const slot = cursor[idx[p]];
       cursor[idx[p]] += 1;
       postFilm[slot] = i;
       postWeight[slot] = weight[p];
+      postRaw[slot] = raw[p];
     }
   }
 
@@ -141,12 +143,18 @@ export function buildLightIndex({ count, ptr, idx, raw, idf, curves = null, curv
     return films;
   }
 
+  /** Each film carrying a trait, with how strongly the chart recorded it there (0..255). */
+  function eachCarrier(trait, visit) {
+    if (trait < 0 || trait >= traitCount) return;
+    for (let q = postPtr[trait]; q < postPtr[trait + 1]; q += 1) visit(postFilm[q], postRaw[q]);
+  }
+
   const has = (i, trait) => {
     for (let p = ptr[i]; p < ptr[i + 1]; p += 1) if (idx[p] === trait) return true;
     return false;
   };
 
-  return { count, evidence, scores, sim, shared, traits, carriers, has, scale: { median, lambda }, hasCurve: i => Boolean(curves && curves[i]) };
+  return { count, evidence, scores, sim, shared, traits, carriers, eachCarrier, has, scale: { median, lambda }, hasCurve: i => Boolean(curves && curves[i]) };
 }
 
 /** The k highest entries of a score array: [{ i, sim }], strongest first. */

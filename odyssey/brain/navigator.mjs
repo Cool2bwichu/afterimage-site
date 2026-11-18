@@ -5,7 +5,7 @@
 // Opus 5.5), and cleans what comes back. The same code runs in the browser
 // and on the companion server.
 import { LIGHT_IDS } from '../src/engine/lights.mjs';
-import { neighbourhood, between, taste } from '../src/engine/voyage.mjs';
+import { rayCandidates, RAY_POOL, between, taste } from '../src/engine/voyage.mjs';
 import { buildVocabulary } from './vocabulary.mjs';
 import { readPartial } from './partial.mjs';
 import { starFromReading, readingSlug } from './reading.mjs';
@@ -36,11 +36,15 @@ export function createNavigator({ universe, depth = null, ask, vocabulary = buil
   const inRange = star => Number.isInteger(star) && star >= 0 && star < universe.count;
   const need = (star, what) => { if (!inRange(star)) throw new NavigatorError('bad_input', `${what} is not a star on this chart.`); };
 
-  /** The neighbours a star's arrival is read against: a few per light. */
-  function candidatesFor(star, perLight = 5) {
+  /**
+   * The neighbours a star's arrival is read against: a few per light, the same
+   * plausible companions its rays are drawn from (see rayCandidates).
+   */
+  function candidatesFor(star, perLight = 6) {
+    const around = universe.model.neighbours('white', star, RAY_POOL, j => j !== star && !universe.films[j].cut);
     const candidates = {};
     for (const light of LIGHT_IDS) {
-      const near = neighbourhood(universe, light, star, perLight);
+      const near = rayCandidates(universe, star, light, { k: perLight, around });
       if (near.length) candidates[light] = near;
     }
     return candidates;

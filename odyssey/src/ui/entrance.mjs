@@ -6,10 +6,30 @@ import { h, icon, replace, plural } from './dom.mjs';
 import { poster } from './posters.mjs';
 
 
+const DESCRIBED_DOT = '#f3dcae';
+
+/** What a few words describe, if they read as a description the chart can light: two parts or more, or one in a sentence. */
+export function describedBy(search, query) {
+  const words = query.trim().split(/\s+/).filter(Boolean);
+  if (words.length < 2) return null;
+  const found = search.describe(query, { limit: 60 });
+  if (!found.films.length) return null;
+  const known = found.parts.filter(part => !part.word).length;
+  if (found.parts.length < 2 && !(known && words.length >= 4)) return null;
+  return found;
+}
+
+/** The parts of a description, in the words typed, and how many films carry them. */
+export function describedLine(found) {
+  const said = found.parts.map(part => part.words.split(', ')[0].replace(/^(?:a|an|the) /, ''));
+  const full = found.films.filter(entry => entry.matched.length === found.parts.length).length;
+  return `${said.join(' \u00b7 ')} \u2014 ${full ? `${full} carry all of it` : 'none carries all of it'}, the closest brightest`;
+}
+
 export function createEntrance(app) {
   const { universe, state, films, search, store } = app;
   const input = h('input.enter-input', {
-    type: 'search', autocomplete: 'off', spellcheck: 'false', placeholder: 'Name a film that stayed with you', 'aria-label': 'Name a film that stayed with you',
+    type: 'search', autocomplete: 'off', spellcheck: 'false', placeholder: 'Name a film, or describe one', 'aria-label': 'Name a film, or describe one',
     role: 'combobox', 'aria-autocomplete': 'list', 'aria-controls': 'enter-suggestions', 'aria-expanded': 'false',
   });
   const suggestions = h('div.enter-suggestions', { role: 'listbox', id: 'enter-suggestions', 'aria-label': 'Suggestions' });
@@ -43,15 +63,23 @@ export function createEntrance(app) {
     items = query ? search.films(query, 5).map(entry => entry.star) : [];
     // A kind of film ("heist", "western") lights up every film of that kind.
     const currents = query.length >= 2 ? search.traits(query, 2).filter(entry => entry.score >= 3 || (!items.length && entry.score >= 2)) : [];
+    // A description ("a heist goes wrong and the thief falls in love") lights the films that match it.
+    const described = describedBy(search, query);
+    const answered = items.some(star => search.answers(star, query));
     let n = 0;
     const option = (cls, onclick, ...children) => {
       const at = n;
       n += 1;
       return h(`button.enter-suggestion${cls}`, { type: 'button', role: 'option', id: `enter-option-${at}`, onclick, onpointerenter: () => setActive(at) }, ...children);
     };
-    const nodes = items.map(star => option('', () => begin(() => app.focusStar(star)),
+    const describeNode = () => option('.described', () => begin(() => app.describeFilm(query)),
+      h('span.search-dot', { style: { '--c': DESCRIBED_DOT } }),
+      h('span.search-text', h('span.search-name', 'Films that match your words'), h('span.search-sub', describedLine(described))));
+    const nodes = described && !answered ? [describeNode()] : [];
+    nodes.push(...items.map(star => option('', () => begin(() => app.focusStar(star)),
       h('span.search-poster', poster(films[star], { words: false })),
-      h('span.search-text', h('span.search-name', films[star].t, h('span.frow-year', String(films[star].y))), h('span.search-sub', films[star].d || ''))));
+      h('span.search-text', h('span.search-name', films[star].t, h('span.frow-year', String(films[star].y))), h('span.search-sub', films[star].d || '')))));
+    if (described && answered) nodes.push(describeNode());
     for (const { trait } of currents) {
       const record = universe.traits[trait];
       const light = lightById(LIGHT_IDS[record.l]);
@@ -61,10 +89,14 @@ export function createEntrance(app) {
     }
     // Offered only when nothing found already answers to what was typed.
     const kind = currents.some(entry => entry.score >= 3);
-    if (query.length >= 2 && seek(query) && !kind && !items.some(star => search.answers(star, query))) {
+    // A long description is not a title to chart.
+    const sentence = described && query.trim().split(/\s+/).length >= 5;
+    if (query.length >= 2 && seek(query) && !kind && !sentence && !answered) {
       nodes.push(option('.beyond', () => begin(() => { if (app.pilot.connected) app.chartFilm(query); else app.searchView.open({ query }); }),
         h('span.search-dot.spark', icon('spark', 18)),
-        h('span.search-text', h('span.search-name', `Chart “${query}”`), h('span.search-sub', 'Not on the chart? The Navigator can chart it from memory.'))));
+        h('span.search-text', h('span.search-name', `Chart “${query}”`), h('span.search-sub', app.pilot.connected
+          ? 'Not on the chart yet. Claude will chart it from memory now, and it stays.'
+          : 'Not on the chart yet. Claude can chart it from memory once it is connected.'))));
     }
     replace(suggestions, nodes);
     setActive(0);
@@ -94,7 +126,7 @@ export function createEntrance(app) {
       h('p.enter-line', 'Starlight is old light. So is cinema.'),
       h('div.enter-field', icon('search', 20), input, suggestions),
       ways,
-      h('p.enter-foot', `${universe.base.toLocaleString('en')} films charted as stars${beyond ? `, ${beyond.toLocaleString('en')} more found beyond the chart` : ''}. Six lights to see them by. Claude as your Navigator.`)));
+      h('p.enter-foot', `${universe.base.toLocaleString('en')} films, each a star, placed by how alike they are${beyond ? `, and ${beyond.toLocaleString('en')} more found beyond the chart` : ''}. Six lights to see them by. Claude as your guide.`)));
   app.root.querySelector('#app').append(layer);
 
   /** The last star a voyager reached, if they have been here before and it is still in the sky. */
@@ -107,19 +139,51 @@ export function createEntrance(app) {
     return -1;
   }
 
+  // Two doors for everyone, the way back for someone returning, and the rest behind one more.
+  let moreOpen = false;
+  const more = h('div.enter-more', { id: 'enter-more', hidden: true });
+  const moreToggle = h('button.enter-more-toggle', {
+    type: 'button', 'aria-expanded': 'false', 'aria-controls': 'enter-more',
+    onclick: () => { moreOpen = !moreOpen; showMore(); },
+  }, h('span', 'More ways to explore'), icon('chevron', 15));
+  function showMore() {
+    more.hidden = !moreOpen;
+    moreToggle.setAttribute('aria-expanded', String(moreOpen));
+    moreToggle.classList.toggle('open', moreOpen);
+  }
+
+  const door = (cls, glyph, name, line, action, title = '') => h(`button.enter-door${cls}`, { type: 'button', title: title || null, onclick: () => begin(action) },
+    h('span.enter-door-icon', icon(glyph, 22)),
+    h('span.enter-door-text', h('span.enter-door-name', name), h('span.enter-door-line', line)));
+  const way = (glyph, name, line, action) => h('button.enter-also', { type: 'button', onclick: () => begin(action) },
+    icon(glyph, 17), h('span.enter-also-text', h('span.enter-also-name', name), h('span.enter-also-line', line)));
+
   function drawWays() {
     const last = lastStar();
     const comet = app.tonight();
+    const loved = app.marks.loved.size;
+    const returning = last >= 0 || loved > 0 || app.marks.watchlist.size > 0;
     replace(ways,
-      last >= 0 ? h('button.enter-way.enter-back', { type: 'button', title: `Back to ${films[last].t}, where you were last`, onclick: () => begin(() => app.focusStar(last)) },
-        h('span.enter-back-poster', poster(films[last], { words: false, eager: true })),
-        h('span.enter-back-name', `Back to ${films[last].t}`)) : null,
-      comet && !comet.caught ? h('button.enter-way.enter-comet', { type: 'button', title: 'A film the chart thinks you are missing crosses the sky tonight', onclick: () => begin(() => app.showComet()) }, icon('comet', 18), h('span', 'Tonight\'s comet')) : null,
-      h('button.enter-way', { type: 'button', title: 'Six quick choices between two films, and the sky turns toward tonight\'s', onclick: () => begin(() => app.takeBearing()) }, icon('bearing', 18), h('span', 'Take a bearing')),
-      h('button.enter-way', { type: 'button', onclick: () => begin(() => app.panels.open('voyage')) }, icon('door', 18), h('span', 'Set out')),
-      h('button.enter-way', { type: 'button', onclick: () => begin(() => app.startDrift()) }, icon('drift', 18), h('span', 'Drift')),
-      h('button.enter-way', { type: 'button', onclick: () => begin(() => app.panels.open('course')) }, icon('compass', 18), h('span', 'Plot a course')),
-      h('button.enter-way', { type: 'button', onclick: () => begin(() => app.overview()) }, icon('home', 18), h('span', 'See the whole universe')));
+      h('div.enter-doors',
+        door('.enter-door-tonight', 'bearing', 'Help me choose tonight\u2019s film', 'Six quick choices between two films, then a film for tonight.', () => app.takeBearing()),
+        door('.enter-door-wander', 'home', 'Wander the universe', 'Every film a star, alike films close together. Go anywhere.', () => app.overview())),
+      returning || (comet && !comet.caught) ? h('div.enter-return',
+        last >= 0 ? h('button.enter-way.enter-back', { type: 'button', title: `Back to ${films[last].t}, where you were last`, onclick: () => begin(() => app.focusStar(last)) },
+          h('span.enter-back-poster', poster(films[last], { words: false, eager: true })),
+          h('span.enter-back-name', `Back to ${films[last].t}`)) : null,
+        comet && !comet.caught ? h('button.enter-way.enter-comet', { type: 'button', title: 'A film the chart thinks you are missing crosses the sky tonight', onclick: () => begin(() => app.showComet()) }, icon('comet', 18), h('span', 'Tonight\u2019s comet')) : null,
+        loved || app.marks.watchlist.size ? h('button.enter-way', { type: 'button', title: 'A few films for tonight: what the films you love pull toward you, and what you saved', onclick: () => begin(() => app.panels.open('tonight')) }, icon('moon', 17), h('span', 'Tonight, for you')) : null) : null,
+      moreToggle,
+      more);
+    replace(more,
+      way('door', 'Set out on a voyage', 'From a film you love, through doors to films you don\u2019t know yet.', () => app.panels.open('voyage')),
+      way('drift', 'Drift', 'Let the sky carry you from star to star.', () => app.startDrift()),
+      way('compass', 'Plot a course', 'Say what you\u2019re after, and get a route of films.', () => app.panels.open('course')),
+      way('clock', 'Lookback', 'The same films arranged by year, the present at the centre.', () => { app.overview(); app.setSky('time'); }),
+      way('constellation', 'Constellations', 'Figures hidden among the stars, waiting to be found.', () => app.panels.open('figures')),
+      way('nebula', 'Nebulae', 'Kinds of film the atlas named, wherever they live.', () => app.panels.open('nebulae')),
+      loved ? way('heart', 'Your sky', 'What you love, what you\u2019ve watched, and what it says about you.', () => app.panels.open('sky')) : null);
+    showMore();
   }
 
   return {
