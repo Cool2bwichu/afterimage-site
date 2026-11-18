@@ -1,14 +1,14 @@
-// Films the atlas does not hold, charted by Claude from memory when the chart is printed.
+// Films the atlas does not hold, folded into the printed chart from Claude's readings.
 //
 // ATLAS was built from a corpus that leaves out some of the most loved films there
-// are (Casablanca, Pulp Fiction, Amélie). A chart a film lover cannot find them on
-// is not one they will trust, so the films they will look for first are charted
-// from memory: Claude (Opus 5.5) wrote a star reading of each, in the same words a
-// Navigator uses to chart a film live (see brain/prompts.mjs), and each reading was
-// checked before it was kept (scripts/remembered/). They are kept, cleaned, in
-// universe/authored/remembered.json.
+// are (Casablanca, Pulp Fiction, Amélie). On the site such a film is charted live:
+// the first time someone looks for it with Claude connected, Claude charts it from
+// memory and it is kept (in their browser, and by the companion for everyone who
+// uses it). Readings gathered that way can be kept, cleaned, in
+// universe/authored/remembered.json, and then the compiler prints them into the
+// chart itself. Without that file nothing here does anything.
 //
-// Here each reading becomes a film of the chart: a record beside the atlas's own,
+// Each reading becomes a film of the chart: a record beside the atlas's own,
 // and one row of traits per light, weighted the way the compiler weights the same
 // traits for the films it reads from the atlas. They are marked as charted from
 // memory everywhere a visitor meets them.

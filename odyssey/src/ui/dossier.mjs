@@ -7,12 +7,14 @@ import { holdsArm } from '../engine/journey.mjs';
 import { closestLight, sharedTraits, traitsOf } from '../engine/voyage.mjs';
 import { TIME, TIME_RINGS } from '../engine/time.mjs';
 import { TEMPERS, TEMPER_COLOUR, bendsOf, temperOf, temperWord } from '../engine/temper.mjs';
+import { plainHook, safeToTell } from '../engine/plain.mjs';
 import { h, icon, replace, plural } from './dom.mjs';
 import { poster } from './posters.mjs';
 import { createGrip, restingHeight } from './grip.mjs';
 
 const SOURCES = {
   chart: ['charted', 'Computed from the chart: what the two films are recorded as sharing.'],
+  plain: ['in the chart\'s words', 'Written by the chart from what it records of these films. Claude reads a star when someone with Claude arrives at it, and then its words take this place.'],
   claude: ['read by Claude', 'Written by Claude as the Navigator, from its own knowledge of the films.'],
   ahead: ['read by Claude ahead of time', 'Written by Claude as the Navigator when the chart was printed, before you arrived.'],
   memory: ['charted by Claude from memory', 'This film is not on the printed chart. Claude described it from memory, so its place is a reading, not a record.'],
@@ -28,6 +30,19 @@ const firstSentences = (text, max = 250) => {
   const stop = cut.lastIndexOf('. ');
   return stop > 80 ? cut.slice(0, stop + 1) : `${cut.slice(0, cut.lastIndexOf(' '))}…`;
 };
+
+// Where to watch is asked of JustWatch in the visitor's own country, as their browser names it.
+const region = (() => {
+  const tags = typeof navigator !== 'undefined' ? [...(navigator.languages || []), navigator.language] : [];
+  const found = tags.map(tag => /^[a-z]{2,3}-([A-Z]{2})$/i.exec(String(tag || ''))).find(Boolean);
+  const code = found ? found[1].toLowerCase() : 'us';
+  return code === 'gb' ? 'uk' : code;
+})();
+/** The two ways from a film to tonight: its trailer, and where it can be watched. */
+export const watchLinks = film => [
+  h('a.watch-link', { href: `https://www.youtube.com/results?search_query=${encodeURIComponent(`${film.t} ${film.y} trailer`)}`, target: '_blank', rel: 'noopener noreferrer' }, icon('play', 15), h('span', 'Watch the trailer')),
+  h('a.watch-link', { href: `https://www.justwatch.com/${region}/search?q=${encodeURIComponent(film.t)}`, target: '_blank', rel: 'noopener noreferrer' }, icon('screen', 15), h('span', 'Where to watch')),
+];
 
 export function createDossier(app) {
   const { universe, state, films, cosmos, pilot } = app;
@@ -81,6 +96,19 @@ export function createDossier(app) {
     h('span.frow-go', icon(go, 15)));
   }
 
+  /** How a film treats you, in three words: its dread, its cruelty, and the most marked of the rest. */
+  const temperWords = film => {
+    const own = temperOf(film);
+    if (!own) return '';
+    const words = [];
+    if (own[0] >= 0) words.push(temperWord('dread', own[0]));
+    if (own[1] >= 0) words.push(temperWord('cruelty', own[1]));
+    const rest = [2, 3, 4].filter(n => own[n] >= 0).sort((x, y) => Math.abs(own[y] - 50) - Math.abs(own[x] - 50))[0];
+    if (rest !== undefined) words.push(temperWord(TEMPERS[rest].id, own[rest]));
+    return words.filter(Boolean).slice(0, 3).join(' · ');
+  };
+  const watchOf = watchLinks;
+
   // The plain facts of a film, and the ways out to the rest of the web.
   const metaOf = film => [String(film.y), film.d, (film.c || []).slice(0, 2).join(', '), film.rt ? `${film.rt} min` : ''].filter(Boolean).join(' · ');
   const linksOf = film => [
@@ -94,6 +122,7 @@ export function createDossier(app) {
     const film = films[parts.star];
     parts.meta.textContent = metaOf(film);
     replace(parts.links, linksOf(film));
+    replace(parts.watch, watchOf(film));
   }
 
   // ── A star.
@@ -112,14 +141,18 @@ export function createDossier(app) {
     const kicker = h('p.dossier-kicker');
     const meta = h('p.dossier-meta', metaOf(film));
     const hazeLine = h('p.dossier-haze', { hidden: true });
+    const temperLine = temperWords(film);
+    const watch = h('div.dossier-watch', watchOf(film));
     const head = h('header.dossier-head', { style: { '--hi': film.hi, '--lo': film.lo } },
       h('div.dossier-poster', poster(film, { eager: true, size: 'large' })),
       h('div.dossier-id',
         kicker,
         h('h2.dossier-title', film.t),
         meta,
+        temperLine ? h('p.dossier-temper', { title: 'How it treats you: its dread, its cruelty, and the most marked of the rest' }, temperLine) : null,
         hazeLine,
         deep ? h('p.dossier-deep', source('memory')) : null),
+      watch,
       h('div.dossier-acts', love, save, seen, aside),
       asideNote);
 
@@ -154,8 +187,8 @@ export function createDossier(app) {
           h('div.trait-chips', group.traits.map(({ trait }) => h('button.chip', { type: 'button', onclick: () => app.browse('trait', trait) }, name(trait)))));
       })) : null;
 
-    const shape = storyShape(film);
-    const recall = film.rc ? veiled('What stays with people', film.rc, deep ? 'memory' : 'atlas', 'This may give something away.') : null;
+    // What stays with people is said at the top, unless it sounds as if it gives the story away.
+    const recall = film.rc && !safeToTell(film.rc) ? veiled('What stays with people', film.rc, deep ? 'memory' : 'atlas', 'This may give something away.') : null;
 
     const links = h('p.ext-row', linksOf(film));
     const tools = section('tools', 'From here',
@@ -165,9 +198,10 @@ export function createDossier(app) {
         h('button.act', { type: 'button', onclick: () => app.share() }, icon('share', 17), h('span', 'Share'))),
       links);
 
-    parts = { star, kicker, meta, links, love, save, seen, aside, asideNote, voyage, essence, sight, rays, holes, temper: temperBox, deeper, haze: hazeLine };
-    // The rays come before anything that may give the story away. In Lookback the line of sight comes first.
-    replace(scroll, head, voyage, essence, sight, rays, holes, temperBox, recall, deeper, lines, traitsSection, shape, tools);
+    parts = { star, kicker, meta, links, watch, love, save, seen, aside, asideNote, voyage, essence, sight, rays, holes, temper: temperBox, deeper, haze: hazeLine };
+    // What it is and why it might be tonight's film come first; then where to go from it, and only then
+    // anything that may give the story away. In Lookback the line of sight comes before the rays.
+    replace(scroll, head, voyage, essence, sight, rays, holes, lines, temperBox, recall, traitsSection, deeper, tools);
     sheet.hidden = false;
     sheet.dataset.kind = 'star';
     sheet.setAttribute('aria-label', `${film.t}, ${film.y}`);
@@ -252,14 +286,13 @@ export function createDossier(app) {
 
   /** Why the atlas reads a film's temper as it does: its own notes, fetched when first asked for. */
   function reasons(star) {
-    const placeholder = TEMPERS.map(entry => h('p.temper-reason', h('strong', `${entry.name}. `), 'What the atlas saw in it.'));
-    const body = h('div.veil-text.temper-why', placeholder);
-    const label = h('span', 'Develop');
-    const lift = h('button.veil-lift', {
-      type: 'button', 'aria-label': 'Show why the atlas reads its temper so',
+    const body = h('div.temper-why');
+    const label = h('span', 'Why it reads so');
+    const ask = h('button.quiet.temper-ask', {
+      type: 'button', 'aria-label': 'Show why the atlas reads its temper so. Its notes may give the story away.',
       onclick: async () => {
-        lift.disabled = true;
-        label.textContent = 'Developing';
+        ask.disabled = true;
+        label.textContent = 'Fetching the atlas\'s notes';
         try {
           const notes = await app.deepen();
           if (!parts || parts.star !== star) return;
@@ -267,15 +300,14 @@ export function createDossier(app) {
           const why = (notes[star] && notes[star].ax) || [];
           const said = TEMPERS.map((entry, n) => (why[n] && own[n] >= 0 ? h('p.temper-reason', h('strong', `${entry.name}, ${own[n]}. `), why[n]) : null)).filter(Boolean);
           replace(body, said.length ? said : h('p.temper-reason', 'The atlas left no notes on this film.'));
-          wrap.classList.add('lifted');
+          ask.hidden = true;
         } catch {
-          lift.disabled = false;
+          ask.disabled = false;
           label.textContent = 'Could not fetch the notes. Try again';
         }
       },
-    }, icon('eye', 15), label);
-    const wrap = h('div.veil', body, lift);
-    return h('div.temper-reasons', h('p.temper-why-title', 'Why it reads so'), wrap, h('p.dsec-note', 'The atlas\'s own notes. They may give the story away.'));
+    }, label);
+    return h('div.temper-reasons', h('p.dsec-note', ask, h('span.temper-warn', 'The atlas\'s own notes. They may give the story away.')), body);
   }
 
   // ── Lookback: the line of sight through a film, back toward the horizon and forward toward the present.
@@ -312,28 +344,6 @@ export function createDossier(app) {
     const body = h('p.veil-text', text);
     const wrap = h('div.veil', body, h('button.veil-lift', { type: 'button', onclick: () => wrap.classList.add('lifted') }, icon('eye', 15), h('span', 'Develop')));
     return section('veil', h('span', title, source(kind)), wrap, h('p.dsec-note', warning));
-  }
-
-  function storyShape(film) {
-    const st = film.st;
-    if (!st || !Array.isArray(st.c)) return null;
-    const arc = universe.bundle.arcs[st.a];
-    const values = st.c;
-    const min = Math.min(...values);
-    const max = Math.max(...values);
-    const span = Math.max(1, max - min);
-    const points = values.map((v, n) => `${(n / (values.length - 1)) * 200},${46 - ((v - min) / span) * 40}`).join(' ');
-    const curve = h('div.shape-curve', { html: `<svg viewBox="0 0 200 52" preserveAspectRatio="none" aria-hidden="true"><polyline points="${points}" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/></svg>` });
-    const acts = ['early', 'midway', 'late'];
-    const turns = (st.b || []).slice(0, 9).map(([beat, ...count]) => {
-      const record = universe.bundle.beats[beat];
-      const when = count.indexOf(Math.max(...count));
-      return record ? h('span.turn', h('span.turn-when', acts[when] || ''), record.phrase) : null;
-    });
-    const body = h('div.veil-text', h('p.shape-arc', arc ? `${arc.name}: ${arc.line}.` : ''), curve, h('div.turns', turns));
-    const wrap = h('div.veil', body, h('button.veil-lift', { type: 'button', onclick: () => wrap.classList.add('lifted') }, icon('eye', 15), h('span', 'Develop')));
-    return section('shape', h('span', 'The shape of the story', source('chart')), wrap,
-      h('p.dsec-note', 'Read by a rough instrument from the plot summary. It gives the story away.'));
   }
 
   function place() {
@@ -402,7 +412,8 @@ export function createDossier(app) {
         jumps ? h('button.act.act-primary', { type: 'button', onclick: () => app.land() }, icon('flag', 16), h('span', 'Land here')) : null));
   }
 
-  // ── What the Navigator says of it, and the six rays.
+  // ── What the star is, in a line; and the six rays, each with why it leads where it does.
+  // Claude's words when Claude has read the star, and the chart's own until then.
   function arrival() {
     if (!parts || parts.star !== state.focus) return;
     const star = parts.star;
@@ -410,49 +421,46 @@ export function createDossier(app) {
     const deep = universe.isDeep(star);
     const a = state.arrival;
     const status = state.arrivalState;
-    const nodes = [];
+    const read = Boolean(a && a.essence);
     const by = a && a.ahead ? 'ahead' : 'claude';
+    const nodes = [];
 
-    if (a && a.essence) {
-      nodes.push(h('p.essence-text', a.essence), h('p.essence-by', source(by),
-        status === 'read' ? (pilot.connected ? h('button.quiet', { type: 'button', onclick: () => app.readArrival(true) }, a.ahead ? 'Read it now' : 'Read again') : null) : h('span.developing', 'developing')));
+    const hook = read ? a.essence : plainHook(universe, star);
+    if (hook) nodes.push(h('p.essence-text', { class: read ? '' : 'plain' }, hook));
+    const said = [];
+    if (status === 'asking' || status === 'draft') {
+      said.push(h('span.reading-quiet', h('span.reading-pulse'), h('span', read ? 'Claude is writing' : 'Claude is reading this star')),
+        h('button.quiet', { type: 'button', onclick: () => app.stopArrival() }, 'Stop'));
+    } else if (read) {
+      said.push(source(by));
+      if (status === 'read' && pilot.connected) said.push(h('button.quiet', { type: 'button', onclick: () => app.readArrival(true) }, a.ahead ? 'Read it now' : 'Read again'));
     } else {
-      if (status === 'asking' || status === 'draft') {
-        nodes.push(h('div.reading', h('span.reading-pulse'), h('span', 'The Navigator is reading this star'),
-          h('button.quiet', { type: 'button', onclick: () => app.stopArrival() }, 'Stop')));
-      }
-      if (film.x) nodes.push(h('p.synopsis', firstSentences(film.x)), h('p.essence-by', source(deep ? 'memory' : 'book')));
-      if (status === 'offline') {
-        nodes.push(pilot.canConnect
-          ? h('p.nav-off', 'The Navigator is not connected, so no one is reading this star to you. What you see is the chart.',
-            h('button.quiet', { type: 'button', onclick: () => app.panels.open('navigator') }, 'Connect'))
-          : h('p.nav-off', 'Claude is not answering in this view, so no one is reading this star to you. What you see is the chart.'));
-      } else if (status === 'waiting') {
-        nodes.push(h('p.nav-off', 'Finding the Navigator…'));
-      } else if (status === 'idle' && pilot.connected) {
-        nodes.push(h('button.act.act-read', { type: 'button', onclick: () => app.readArrival() }, icon('spark', 16), h('span', 'Ask the Navigator to read this star')));
-      } else if (status === 'failed') {
-        nodes.push(h('p.nav-off', state.arrivalNote, h('button.quiet', { type: 'button', onclick: () => app.readArrival(true) }, 'Try again')));
-      }
+      if (hook) said.push(source('plain'));
+      if (status === 'failed') said.push(h('span.nav-fail', state.arrivalNote), h('button.quiet', { type: 'button', onclick: () => app.readArrival(true) }, 'Try again'));
+      else if (pilot.connected) said.push(h('button.quiet', { type: 'button', onclick: () => app.readArrival() }, 'Ask Claude to read it'));
     }
+    if (said.length) nodes.push(h('p.essence-by', said));
+    if (film.rc && safeToTell(film.rc)) {
+      nodes.push(h('p.stays', h('span.stays-label', 'What stays with people'), h('span.stays-text', film.rc.replace(/;\s*/g, ' · '))));
+    }
+    if (film.x) nodes.push(h('p.synopsis', firstSentences(film.x, 170), source(deep ? 'memory' : 'book')));
     replace(parts.essence, nodes);
 
-    const anyRead = state.rays.some(ray => ray.read);
+    const readRays = state.rays.filter(ray => ray.read).length;
     const rows = state.rays.map(ray => {
       const light = lightById(ray.light);
       const shared = ray.shared.map(entry => traitName(entry.trait));
-      const body = ray.read
-        ? [h('span.frow-claim', ray.claim), ray.watch ? h('span.frow-watch', h('em', 'Watch for '), ray.watch.replace(/^watch for\s*/i, '')) : null]
+      const body = ray.claim
+        ? [h('span.frow-claim', { class: ray.read ? '' : 'plain' }, ray.claim), ray.watch ? h('span.frow-watch', h('em', 'Watch for'), ray.watch.replace(/^watch for\s*/i, '')) : null]
         : h('span.frow-shared', shared.length ? `Both: ${shared.join(' · ')}` : 'Nearest under this light');
-      return filmRow(ray.star, { light: ray.light, kicker: `${light.name} · ${light.asks.toLowerCase()}`, body, tag: source(ray.read ? by : 'chart') });
+      return filmRow(ray.star, { light: ray.light, kicker: `${light.name} · ${light.asks.toLowerCase()}`, body });
     });
     const beyond = a && a.beyond ? beyondCard(a.beyond, by) : null;
     const under = state.journey && !state.journey.landed;
+    const whose = !readRays ? source('plain') : readRays === state.rays.length ? source(by) : [source(by), source('plain')];
     replace(parts.rays,
-      h('h3.dsec-title', h('span', 'Six rays lead on from here')),
-      h('p.dsec-note', anyRead
-        ? 'Under each light, the film Claude chose as this one\'s truest companion.'
-        : 'Under each light, the film the chart places nearest. Follow one, or change the light and watch the universe re-form around this star.'),
+      h('h3.dsec-title', h('span', 'If you like this'), rows.length ? whose : null),
+      h('p.dsec-note', 'One film under each light, the nearest to this one in that way. Follow one, or change the light and watch the universe re-form around this star.'),
       rows.length ? rows : h('p.dsec-note', 'The chart has nothing near this star yet.'),
       beyond,
       under ? null : h('button.act.act-setout', { type: 'button', onclick: () => app.setOut(star) }, icon('door', 17), h('span', 'Set out on a voyage from here')));

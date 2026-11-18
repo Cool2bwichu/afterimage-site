@@ -23,6 +23,37 @@ export const reasonOf = record => REASON[record.k] ?? 1;
 // the star's nearest films in white light. Wormholes are the deliberate exception.
 export const RAY_POOL = 160;
 
+// ── Sequels. Love The Godfather and the chart's first answer is The Godfather Part II, which
+// anyone would find without a chart. A film of the same series as one you love still comes,
+// but well behind films you would not have found on your own.
+export const SEQUEL_WEIGHT = 0.35;
+const seriesKeys = new WeakMap();
+/** A title as a series knows it: "The Godfather Part II" and "The Godfather" are both "godfather". */
+export function seriesKey(title) {
+  return String(title || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+    .replace(/^(the|a|an) /, '')
+    .replace(/\s*(:| - | – | part | chapter | episode ).*$/, '')
+    .replace(/[^a-z0-9 ]+/g, ' ')
+    .replace(/\s+(\d+|ii|iii|iv|v|vi|vii)$/, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+/** Whether two titles belong to one series: the same name, or one name continued ("Alien", "Aliens"; "Mad Max", "Mad Max 2"). */
+export function sameSeries(a, b) {
+  const x = seriesKey(a);
+  const y = seriesKey(b);
+  if (x.length < 3 || y.length < 3) return false;
+  if (x === y) return true;
+  const [short, long] = x.length < y.length ? [x, y] : [y, x];
+  return short.length >= 5 && long.startsWith(short) && /^(s|s? )/.test(long.slice(short.length)) && long.slice(short.length).length <= 12;
+}
+function keyOf(films, i) {
+  let keys = seriesKeys.get(films);
+  if (!keys) { keys = new Map(); seriesKeys.set(films, keys); }
+  if (!keys.has(i)) keys.set(i, seriesKey(films[i].t));
+  return keys.get(i);
+}
+
 /**
  * What two films share: [{ trait, share, light }], strongest first.
  * Veiled traits (endings, deaths) are left out unless asked for.
@@ -180,11 +211,15 @@ export function gravity(universe, loved, { exclude = null, k = 24, deeper = 0, l
     }
   }
   const lovedSet = new Set(list);
+  const lovedTitles = list.map(i => films[i].t);
+  const lovedKeys = new Set(list.map(i => keyOf(films, i)));
   const total = new Float32Array(count);
   for (let j = 0; j < count; j += 1) {
     if (lovedSet.has(j) || (exclude && exclude.has(j)) || films[j].cut) continue;
     let score = first[j] + 0.6 * second[j] + 0.3 * third[j];
+    if (score <= 0) continue;
     if (deeper > 0) score *= 1 + deeper * 0.14 * (2 - (films[j].rn ?? 1));
+    if (lovedKeys.has(keyOf(films, j)) || lovedTitles.some(title => sameSeries(title, films[j].t))) score *= SEQUEL_WEIGHT;
     total[j] = score;
   }
   return topK(total, k).map(({ i: star, sim: score }) => ({

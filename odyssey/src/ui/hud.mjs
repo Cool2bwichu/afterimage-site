@@ -16,17 +16,19 @@ export function createHud(app) {
     h('span.brand-mark', 'AFTERIMAGE'), h('span.brand-sub', 'The Odyssey'));
   const backButton = h('button.hud-back', { type: 'button', title: 'Back to where you were (Backspace)', 'aria-label': 'Back to where you were', hidden: true, onclick: () => app.back() }, icon('back', 16));
 
-  const tool = (name, label, glyph, action, key = '') => {
+  // On a phone each tool keeps a one-word name under its icon: an icon alone is a riddle.
+  const tool = (name, label, glyph, action, key = '', short = label) => {
     const count = h('span.tool-count');
-    const button = h('button.tool', { type: 'button', title: key ? `${label} (${key})` : label, 'aria-label': label, 'aria-keyshortcuts': key || null, onclick: action }, icon(glyph), h('span.tool-label', label), count);
+    const button = h('button.tool', { type: 'button', title: key ? `${label} (${key})` : label, 'aria-label': label, 'aria-keyshortcuts': key || null, onclick: action },
+      icon(glyph), h('span.tool-label', label), h('span.tool-short', { 'aria-hidden': 'true' }, short), count);
     return { button, count, name };
   };
   const tools = {
-    search: tool('search', 'Find a film', 'search', () => app.searchView.open(), '/'),
-    voyage: tool('voyage', 'Set out', 'compass', () => app.panels.toggle(state.tool?.name === 'course' ? 'course' : 'voyage')),
-    sky: tool('sky', 'Your sky', 'heart', () => app.panels.toggle('sky')),
-    figures: tool('figures', 'Constellations', 'constellation', () => app.panels.toggle('figures')),
-    nebulae: tool('nebulae', 'Nebulae', 'nebula', () => app.panels.toggle('nebulae')),
+    search: tool('search', 'Find a film', 'search', () => app.searchView.open(), '/', 'Find'),
+    voyage: tool('voyage', 'Set out', 'compass', () => app.panels.toggle(state.tool?.name === 'course' ? 'course' : 'voyage'), '', 'Voyage'),
+    sky: tool('sky', 'Your sky', 'heart', () => app.panels.toggle('sky'), '', 'Yours'),
+    figures: tool('figures', 'Constellations', 'constellation', () => app.panels.toggle('figures'), '', 'Figures'),
+    nebulae: tool('nebulae', 'Nebulae', 'nebula', () => app.panels.toggle('nebulae'), '', 'Kinds'),
     drift: tool('drift', 'Drift', 'drift', () => (state.drift ? app.stopDrift() : app.startDrift()), 'D'),
   };
   const navDot = h('span.nav-dot');

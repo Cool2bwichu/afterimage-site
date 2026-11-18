@@ -73,8 +73,37 @@ const KINDS = new Map([
   [['sad', 'tearjerker', 'weepie', 'weepy'], ['melancholy']],
   [['time travel', 'time loop', 'time loops'], ['time out of joint']],
   [['suspense', 'suspenseful', 'tense'], ['thriller']],
+  // Moods, the way people ask for a film tonight.
+  [['romantic', 'romance', 'love story', 'love stories', 'date night'], ['a love affair']],
+  [['trippy', 'surreal', 'dreamy', 'strange', 'weird'], ['dreamlike']],
+  [['thought provoking', 'smart', 'clever', 'intelligent', 'mind bending', 'mindbending', 'philosophical'], ['cerebral']],
+  [['slow', 'quiet', 'meditative', 'calm', 'peaceful', 'still'], ['contemplative']],
+  [['gentle', 'kind', 'sweet', 'tender'], ['tender']],
+  [['fast', 'fast paced', 'adrenaline', 'exciting', 'thrilling', 'action packed', 'intense'], ['relentless']],
+  [['dark', 'grim', 'gritty', 'depressing', 'bleak'], ['bleak']],
+  [['happy', 'fun', 'light', 'lighthearted', 'light hearted', 'joyful', 'charming'], ['warm']],
+  [['sexy', 'erotic', 'steamy', 'sensual'], ['sensual']],
+  [['beautiful', 'gorgeous', 'stunning', 'visually stunning', 'beautifully shot'], ['painterly frames']],
+  [['hopeful', 'inspiring', 'inspirational', 'optimistic'], ['hopeful']],
+  [['moving', 'emotional', 'heartbreaking', 'tearjerking', 'make me cry', 'cry'], ['melancholy']],
+  [['unsettling', 'disturbing', 'menacing', 'sinister'], ['menacing']],
+  [['family', 'kids', 'for kids', 'family friendly', 'childrens', 'children'], ['children’s', 'children\'s']],
+  [['twist', 'twists', 'twisty', 'plot twist', 'puzzle'], ['a twist']],
+  [['absurd', 'silly', 'deadpan', 'quirky'], ['absurd']],
+  [['war', 'war film', 'war films', 'war movie'], ['soldiers and war']],
+  [['ghost', 'ghost story', 'ghost stories', 'haunted'], ['ghosts']],
+  [['epic', 'epics', 'sweeping'], ['epic']],
+  [['documentaries', 'docs', 'doc'], ['documentary']],
+  [['coming of age', 'teen', 'teens', 'teenage', 'growing up'], ['coming-of-age']],
+  [['friendship', 'buddy', 'buddies', 'friends'], ['friendship']],
 ].flatMap(([words, labels]) => words.map(word => [word, labels])));
-const kindOf = q => KINDS.get(q) || KINDS.get(q.replace(/ (films?|movies?|pictures?|cinema)$/, ''));
+// What people put around a mood when they ask for a film: "something funny", "a sad movie to watch tonight".
+const FILLER_BEFORE = /^(?:(?:i want|id like|i would like|im in the mood for|in the mood for|show me|give me|find me|looking for|recommend|suggest|something|anything|some|a|an|really|very|quite|kind of|sort of|pretty|good|great|nice|really good)\s+)+/;
+const FILLER_AFTER = /(?:\s+(?:films?|movies?|pictures?|cinema|flicks?|to watch|for tonight|tonight|please|now|to see))+$/;
+const kindOf = q => {
+  const bare = q.replace(FILLER_BEFORE, '').replace(FILLER_AFTER, '').trim();
+  return KINDS.get(q) || KINDS.get(q.replace(/ (films?|movies?|pictures?|cinema)$/, '')) || (bare && bare !== q ? KINDS.get(bare) : undefined);
+};
 
 /** A slug for a film: "paris-texas-1984". */
 export function slugOf(title, year) {
@@ -172,7 +201,7 @@ export function createSearch(universe) {
     const q = fold(query);
     if (q.length < 2) return [];
     // An everyday word for a kind of film leads to the chart's own word for it.
-    const kinds = kindOf(q) || [];
+    const kinds = (kindOf(q) || []).map(fold);
     if (q.length < 3 && !kinds.length) return [];
     const found = [];
     universe.traits.forEach((trait, id) => {

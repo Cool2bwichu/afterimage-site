@@ -11,6 +11,7 @@ import { CLEAR_SKY, cleanSeeing, describeSeeing, hazeOf, isClear, outside } from
 import { bearingResult, bearingStrength, createBearing, reasonOf } from '../engine/bearing.mjs';
 import { bondOf, decodeSky, encodeSky, skiesMeet, together } from '../engine/together.mjs';
 import { wormholes } from '../engine/wormhole.mjs';
+import { plainBond, plainClaim, plainHook, plainWatch } from '../engine/plain.mjs';
 import { attachControls, FOV, holdable } from '../cosmos/camera.mjs';
 import { createOrbits } from '../cosmos/orbits.mjs';
 import { createFigures } from '../cosmos/figures.mjs';
@@ -421,6 +422,8 @@ export function createApp({ root, universe, depth, deepen = () => Promise.reject
     const from = films[fromStar].t;
     const lead = { loved: `It came from near ${from}, which you love`, visited: `It came from near ${from}, where you had been` }[entry.why] || `Few have found it. It came from near ${from}`;
     if (!entry.light) return `${lead}.`;
+    const said = plainBond(universe, entry.light, fromStar, star);
+    if (said) return `${lead}. ${said}`;
     const shared = cometBond(universe, fromStar, star, entry.light).said.map(trait => universe.traits[trait].s || universe.traits[trait].t);
     return `${lead}, alike in ${lightById(entry.light).short}${shared.length ? `: ${shared.join(' · ')}` : ''}.`;
   }
@@ -471,8 +474,12 @@ export function createApp({ root, universe, depth, deepen = () => Promise.reject
   }, 60000);
 
   // ── Arriving at a star.
+  // Each ray says why it leads where it does in the chart's own words, until Claude has read the star.
   function computedRays(star) {
-    return prism(universe, star, { exclude: notFor }).map(ray => ({ light: ray.light, star: ray.star, shared: ray.shared, claim: '', watch: '', read: false }));
+    return prism(universe, star, { exclude: notFor }).map(ray => ({
+      light: ray.light, star: ray.star, shared: ray.shared,
+      claim: plainClaim(universe, ray.light, star, ray.star), watch: plainWatch(universe, ray.star), read: false,
+    }));
   }
   /** The wormholes at a star: never a film a ray or a ring already leads to, or one that is not offered. */
   function holesAt(star, shown = null) {
@@ -778,11 +785,14 @@ export function createApp({ root, universe, depth, deepen = () => Promise.reject
     return names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}` : names[0] || '';
   };
   /** Why a film answers tonight's bearing, in a line: the films chosen it is nearest, and what it shares with the first. */
-  function bearingReason(reason) {
-    const near = reason.near.map(star => films[star].t);
-    const shared = reason.shared.map(trait => universe.traits[trait].s || universe.traits[trait].t);
+  function bearingReason(reason, star = -1) {
+    const near = reason.near.map(other => films[other].t);
     if (!near.length) return '';
-    return `Near ${near.join(' and ')}, which you chose${shared.length ? ` \u00b7 ${shared.join(' \u00b7 ')}` : ''}`;
+    const lead = `Near ${near.join(' and ')}, which you chose`;
+    const said = star >= 0 ? plainBond(universe, closestLight(universe, reason.near[0], star).light, reason.near[0], star) : '';
+    if (said) return `${lead}. ${said}`;
+    const shared = reason.shared.map(trait => universe.traits[trait].s || universe.traits[trait].t);
+    return `${lead}${shared.length ? ` \u00b7 ${shared.join(' \u00b7 ')}` : ''}`;
   }
   /** Turns the sky toward a few films: their middle, close enough to see most of them. */
   function aimAt(stars) {
@@ -1013,7 +1023,7 @@ export function createApp({ root, universe, depth, deepen = () => Promise.reject
         kind, id, label: 'Tonight\'s bearing', result, choices,
         note: `Where your ${choices.length} choices point: toward ${bearingNames(choices)}, and away from the films passed over`,
         stars: new Set(result.stars), colour: BEARING, light: 'white', strength: result.strength,
-        rows: new Map(result.stars.map(star => [star, bearingReason(reasonOf(universe, star, choices, scoresOf))])),
+        rows: new Map(result.stars.map(star => [star, bearingReason(reasonOf(universe, star, choices, scoresOf), star)])),
       };
     }
     if (kind === 'kind') {
@@ -1587,18 +1597,19 @@ export function createApp({ root, universe, depth, deepen = () => Promise.reject
     app.hud?.setReturn(name);
   });
 
-  // The first time the sky is reached since the hands last changed, a word on how to move about it.
+  // The first time someone is out in the open sky (not at a star, where the page is the thing to read),
+  // a short word on how to move about it. Everything else is under ?.
   const HANDS_TOLD = 2;
   cosmos.camera.on(what => {
-    if (what !== 'arrived' || store.state.hands >= HANDS_TOLD || !state.entered) return;
+    if (what !== 'arrived' || store.state.hands >= HANDS_TOLD || !state.entered || state.focus >= 0) return;
     store.set('hands', HANDS_TOLD);
     const touch = small || window.matchMedia?.('(pointer: coarse)').matches;
-    app.hud?.toast('Moving around the sky', {
+    app.hud?.toast('Drag to turn the universe', {
       detail: touch
-        ? 'From far out, one finger turns the whole universe and tilts it. Nearer, among the galaxies, it moves you across. Pinch to come nearer, twist two fingers to turn, slide two fingers up or down together to tilt, and double-tap to come closer.'
-        : 'From far out, a drag turns the whole universe and tilts it; nearer, it moves you across (Shift-drag always does, and so do two fingers swiped sideways on a trackpad). Right-drag turns and tilts anywhere, the wheel brings you nearer, and a double-click comes closer there. Press ? for every key.',
+        ? 'Pinch to come nearer, and tap a star to open it.'
+        : 'Scroll to come nearer, click a star to open it, and press ? for every key.',
       tone: 'pale',
-      hold: 15000,
+      hold: 7000,
     });
   });
 
@@ -1638,13 +1649,22 @@ export function createApp({ root, universe, depth, deepen = () => Promise.reject
     drawWake();
   }
 
+  /** Tonight's bearing, if one was taken: the films it points to first, each with why. */
+  function tonightBearing(k = 3) {
+    const set = setOf('bearing', 0);
+    if (!set || !set.result) return null;
+    return set.result.stars.slice(0, k).map(star => ({ star, why: set.rows.get(star) || '' }));
+  }
+  /** A film in a line: Claude's, where Claude has read it, and the chart's otherwise. */
+  const hookOf = star => pilot.cachedArrival(star)?.essence || plainHook(universe, star);
+
   Object.assign(app, {
     focusStar, blur, setSky, goHome, openGalaxy, overview, toggle, reloadKept,
     setCurrent, showTrait, showRegister, showConstellation, showKind, bendTo, browse, setOf, widen,
     lookDeeper, chartFilm, beginVoyage, endVoyage, voyageTo, plotPassage,
     setOut, takeDoor, stepBack, land, endJourney, showKeptRoute, homeOf, openDoors,
     startDrift, stopDrift, checkConstellations, followAddress, back, share, hintOf,
-    tonight, catchComet, showComet, cometReason, setSeeing, outsideSeeing,
+    tonight, catchComet, showComet, cometReason, setSeeing, outsideSeeing, tonightBearing, hookOf,
     takeBearing, chooseBearing, skipBearing, undoBearing, taking: () => taking, bearingTaken: () => Boolean(keptBearing()),
     theirStars, theirName, addTheirs, dropTheirs, nameTheirs, setTheirs, bothSkies, sideOf, receiveSky, sendSky,
     throughWormhole, recentre,

@@ -129,12 +129,18 @@ companion, the browser never sends a prompt: it names an operation and names
 films by their slugs, and the few things a viewer types go into the prompt as
 data. See [../companion/README.md](../companion/README.md#the-odyssey).
 
-**Readings written ahead of time.** The Navigator can also read every star of
-the chart once, before anyone arrives (see below). Those readings ship beside the
-chart in `public/data/readings/`, a shard at a time, and every visitor hears
-Claude at every star whether or not a Navigator is connected. They are marked
-as read ahead of time, and a connected Navigator can read any star afresh. Until
-the pre-read has been run, the index there is empty and nothing changes.
+**Readings, one star at a time.** A star is read by Claude the moment someone
+with a Navigator arrives at it: a line on what the film is, and a sentence for
+each of its six rays. The reading is kept (in that browser, and by the companion
+for everyone it serves), so each film is read once, and nothing is ever read in
+bulk: what Claude spends follows what people actually look at. Until Claude has
+read a star, and wherever no Claude is connected, the chart speaks in its own
+words (`src/engine/plain.mjs`): the film's kind from its encyclopedia entry, how
+it treats you, where it is set and what it turns on, and for each ray what the
+two films share and where they part. Those words are marked as the chart's, and
+a remembered moment is only said where it does not sound as if it gives the
+story away. Readings can still be written ahead of time and shipped in
+`public/data/readings/` (see the end of this file), but none are, by choice.
 
 ## Run it
 
@@ -142,7 +148,7 @@ the pre-read has been run, the index there is empty and nothing changes.
 cd odyssey
 npm ci
 npm run dev        # http://localhost:5199
-npm test           # 137 tests: the chart, the engine, voyages and lists, Lookback, the comet, temper, seeing, bearings, together, wormholes, the hands, the open universe, the brain, the pilot, journals, readings
+npm test           # 170 tests: the chart, the engine, voyages and lists, Lookback, the comet, temper, seeing, bearings, together, wormholes, the hands, the open universe, the brain, the pilot, journals, readings, the chart's own words
 npm run build      # the static site, in dist/
 ```
 
@@ -160,7 +166,7 @@ site's origin in `AFTERIMAGE_ALLOWED_ORIGINS`. A deployment can also set
 | --- | --- |
 | `universe/` | The compiler: loads ATLAS, builds likeness under six lights, forms galaxies and arms, finds constellations, lays out each sky. `authored/` holds the hand-written names and vocabulary. |
 | `public/data/` | The compiled chart. Deterministic: the same corpus gives the same bytes. |
-| `src/engine/` | Likeness, search, gravity, passages, voyages and ranked lists (`journey.mjs`), Lookback (`time.mjs`), tonight's comet (`comet.mjs`), temper (`temper.mjs`), tonight's seeing (`seeing.mjs`), bearings (`bearing.mjs`), watching together (`together.mjs`), wormholes (`wormhole.mjs`), and the open universe (`addStars` is append-only, so charted films never move). Runs in the browser and in the companion. |
+| `src/engine/` | Likeness, search (titles, kinds of film and moods in everyday words), gravity (sequels kept behind), the chart's own words (`plain.mjs`), passages, voyages and ranked lists (`journey.mjs`), Lookback (`time.mjs`), tonight's comet (`comet.mjs`), temper (`temper.mjs`), tonight's seeing (`seeing.mjs`), bearings (`bearing.mjs`), watching together (`together.mjs`), wormholes (`wormhole.mjs`), and the open universe (`addStars` is append-only, so charted films never move). Runs in the browser and in the companion. |
 | `src/cosmos/` | The WebGL sky: renderer, shaders, the camera and the hands that move it (`camera.mjs`), labels, star systems, the comet. |
 | `src/ui/` | The interface: entrance, dossier, panels, posters, and what the browser remembers (`store.mjs`) and carries in a journal (`archive.mjs`). |
 | `src/nav/pilot.mjs` | Finds the Navigator (in the page, through the companion, or not at all) and places what it returns. |
@@ -178,9 +184,10 @@ npm run universe -- --atlas /path/to/film-atlas
 Without `--atlas` it looks for `film-atlas` beside this repository, or at
 `ATLAS_ROOT`.
 
-## Read the chart ahead of time
+## Read the chart ahead of time (optional, not used)
 
-The pre-read goes through a running companion, exactly as a browser would, so
+The site reads stars live, one at a time, and this is not needed. It is kept
+for a deployment that wants every star read before anyone arrives. The pre-read goes through a running companion, exactly as a browser would, so
 the companion writes every prompt and Claude answers on the companion's
 credentials. Run the companion from this checkout (so it holds the same chart),
 then:

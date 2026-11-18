@@ -104,6 +104,8 @@ export function formGalaxies({ lightId, count, scores, indexes, traits, films, t
     pick(f => f.renown >= 2);
     pick(f => f.renown <= 1);
     pick(() => true);
+    // A family of little-known films still has its ways in: its truest members.
+    while (doors.length < Math.min(4, wellInside.length)) pick(() => true);
     const armList = [];
     for (let arm = 0; arm < Math.max(1, arms.count); arm += 1) {
       const armMembers = members.filter(film => armOf[film] === arm);
