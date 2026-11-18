@@ -142,13 +142,24 @@ a remembered moment is only said where it does not sound as if it gives the
 story away. Readings can still be written ahead of time and shipped in
 `public/data/readings/` (see the end of this file), but none are, by choice.
 
+**Finding a film by describing it.** Typed into the threshold or the find box,
+a description ("a heist goes terribly wrong and the thief falls in love", "a
+slow sad film about grief set in Japan") is read by the chart into the parts it
+knows (`describe` in `src/engine/search.mjs`): moods, turns of plot, places,
+themes and decades, in everyday words as well as the chart's own, and any word
+no trait answers to is looked for in what is written about the films. The films
+that carry the most of it are lit, the closest brightest, and listed with the
+parts each one carries. Turns the chart keeps veiled count toward a match but
+are never named. With the Navigator connected, the same words go to Claude as a
+course, and Claude reads them itself, on the chart or beyond it.
+
 ## Run it
 
 ```sh
 cd odyssey
 npm ci
 npm run dev        # http://localhost:5199
-npm test           # 170 tests: the chart, the engine, voyages and lists, Lookback, the comet, temper, seeing, bearings, together, wormholes, the hands, the open universe, the brain, the pilot, journals, readings, the chart's own words
+npm test           # 178 tests: the chart, the engine, voyages and lists, Lookback, the comet, temper, seeing, bearings, together, wormholes, the hands, the open universe, the brain, the pilot, journals, readings, the chart's own words, descriptions
 npm run build      # the static site, in dist/
 ```
 

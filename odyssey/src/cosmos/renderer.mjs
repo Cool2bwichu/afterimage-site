@@ -252,7 +252,7 @@ export function createCosmos({ canvas, universe, reducedMotion = false, small = 
   // What lights a star up beyond its own renown.
   let focus = -1;
   let hover = -1;
-  let highlight = null; // Set<number> | null
+  let highlight = null; // Set<number> | Map<number, number> (graded) | null
   let rayEnds = new Set();
   const marks = { loved: new Set(), visited: new Set() };
   let dim = 0;
@@ -525,7 +525,8 @@ export function createCosmos({ canvas, universe, reducedMotion = false, small = 
   function refreshGlowGoals() {
     for (let i = 0; i < count; i += 1) {
       let value = 0;
-      if (highlight) value = highlight.has(i) ? 1 : 0;
+      // A graded set (a Map of how closely each film matches) lights the closest brightest, the faintest still above the dimmed sky.
+      if (highlight) value = highlight.has(i) ? (highlight instanceof Map ? 0.5 + 0.5 * Math.max(0, Math.min(1, highlight.get(i))) : 1) : 0;
       if (rayEnds.has(i)) value = Math.max(value, 1.25);
       if (i === hover) value = Math.max(value, 1.1) + 0.35;
       if (i === focus) value = 2;

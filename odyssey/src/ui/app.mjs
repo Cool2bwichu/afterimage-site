@@ -33,6 +33,7 @@ const SILVER = [0.61, 0.73, 0.73];
 const PALE = [0.8, 0.88, 1];
 const SEEING = '#c9d7f2'; // tonight's seeing: moonlight
 const WORMHOLE = '#e48cff'; // a wormhole: the short way through
+const DESCRIBED = '#f3dcae'; // a film described in words: candlelight
 const WORM = hexToRgb(WORMHOLE);
 // The whole universe in one look: how far back, how steeply, and how far the camera leans toward the viewer.
 export const OVERVIEW = { reach: 2.0, reachSmall: 3.4, pitch: 0.95, bias: 0.125 };
@@ -319,7 +320,7 @@ export function createApp({ root, universe, depth, deepen = () => Promise.reject
     if (state.journey) for (const stop of state.journey.path) if (!rays.has(stop.star)) rays.set(stop.star, '#f0c987');
     // In Lookback the kinds of film are named only in the decade you are in.
     const ring = state.sky !== TIME ? -1 : state.focus >= 0 ? universe.galaxyOf.time[state.focus] : state.galaxy;
-    labels.setContext({ focus: state.focus, rays, highlight: state.current ? state.current.lit || state.current.stars : null, loved: marks.loved, ring });
+    labels.setContext({ focus: state.focus, rays, highlight: state.current ? state.current.lit || (state.current.graded && state.current.strength) || state.current.stars : null, loved: marks.loved, ring });
   }
 
   function syncMarks() {
@@ -916,7 +917,8 @@ export function createApp({ root, universe, depth, deepen = () => Promise.reject
   function setCurrent(current) {
     state.current = current;
     framing = null; // a set framed before belongs to the set before
-    cosmos.setHighlight(current ? current.lit || current.stars : null); // lit: more than is listed (the films each loves, for two skies)
+    // lit: more than is listed (the films each loves, for two skies); a description lights its films by how closely each matches.
+    cosmos.setHighlight(current ? current.lit || (current.graded && current.strength) || current.stars : null);
     cosmos.setLines('figure', current && current.figure ? current.figure : []);
     const figure = current?.kind === 'constellation';
     cosmos.hushLines(['rays', 'wormhole', 'links', 'deep', 'sight'], figure ? 0.82 : 0);
@@ -1026,6 +1028,25 @@ export function createApp({ root, universe, depth, deepen = () => Promise.reject
         rows: new Map(result.stars.map(star => [star, bearingReason(reasonOf(universe, star, choices, scoresOf), star)])),
       };
     }
+    if (kind === 'describe') {
+      // A film described in words: the films that carry the most of it, the closest brightest.
+      const found = search.describe(String(id));
+      if (!found.films.length) return null;
+      const said = part => part.words.split(', ')[0].replace(/^(?:a|an|the) /, '');
+      const rows = new Map(found.films.map(entry => {
+        const missing = found.parts.filter((part, p) => !entry.matched.includes(p)).map(said);
+        return [entry.star, `${entry.matched.map(p => said(found.parts[p])).join(' · ')}${missing.length ? ` · not ${missing.join(', ')}` : ''}`];
+      }));
+      const full = found.films.filter(entry => entry.matched.length === found.parts.length).length;
+      return {
+        kind, id, label: `“${shortWords(String(id))}”`, found,
+        note: full ? `${plural(full, 'film')} here ${full === 1 ? 'carries' : 'carry'} all of it, and shine brightest; the dimmer stars carry some of it.`
+          : 'No film on the chart carries all of it; these carry the most, the closest brightest.',
+        stars: new Set(found.films.map(entry => entry.star)), colour: DESCRIBED, light: 'white', graded: true,
+        strength: new Map(found.films.map(entry => [entry.star, entry.degree])),
+        rows,
+      };
+    }
     if (kind === 'kind') {
       // A kind of film in Lookback: one galaxy of white light, followed back through every decade.
       const galaxy = (universe.galaxies.white || [])[id];
@@ -1101,6 +1122,27 @@ export function createApp({ root, universe, depth, deepen = () => Promise.reject
   const showConstellation = index => show(setOf('constellation', index));
   // A kind of film named at the horizon of Lookback: every film of that kind, lit from the present to the silent years.
   const showKind = g => show(setOf('kind', g), { frame: false });
+  /** A description as a heading: without "a film where", and cut at a word near 44 letters. */
+  function shortWords(text) {
+    const bare = text.trim().replace(/^(?:(?:i want|show me|find me|looking for)\s+)?(?:(?:a|an|the|some)\s+)?(?:film|movie|picture)s?\s+(?:where|about|in which|that|with|set)\s+/i, '') || text.trim();
+    if (bare.length <= 46) return bare;
+    const cut = bare.slice(0, 44);
+    return `${cut.slice(0, cut.lastIndexOf(' ') > 24 ? cut.lastIndexOf(' ') : 44).replace(/[\s,;:.]+$/, '')}…`;
+  }
+  /** A film described in words ("a heist goes wrong and the thief falls in love"): its matches lit, the sky turned toward the closest. */
+  function describeFilm(text) {
+    const query = String(text || '').trim();
+    if (!query) return null;
+    if (state.drift) stopDrift();
+    const set = show(setOf('describe', query), { frame: false });
+    if (!set) {
+      app.hud?.toast('Nothing on the chart answers to that yet', { detail: pilot.connected ? 'Ask the Navigator in Plot a course: it reads descriptions itself.' : 'Try fewer words, or a mood, a place or what happens.' });
+      return null;
+    }
+    aimAt(set.found.films.slice(0, 14).map(entry => entry.star));
+    app.panels.open('set');
+    return set;
+  }
   /** "Like this, but gentler": a star bent along one of its readings, lit and listed. */
   const bendTo = (star, temper, direction) => browse('bend', `${star}:${temper}:${direction}`);
   /** Lights a set and opens its list of films. */
@@ -1660,7 +1702,7 @@ export function createApp({ root, universe, depth, deepen = () => Promise.reject
 
   Object.assign(app, {
     focusStar, blur, setSky, goHome, openGalaxy, overview, toggle, reloadKept,
-    setCurrent, showTrait, showRegister, showConstellation, showKind, bendTo, browse, setOf, widen,
+    setCurrent, showTrait, showRegister, showConstellation, showKind, bendTo, browse, setOf, widen, describeFilm,
     lookDeeper, chartFilm, beginVoyage, endVoyage, voyageTo, plotPassage,
     setOut, takeDoor, stepBack, land, endJourney, showKeptRoute, homeOf, openDoors,
     startDrift, stopDrift, checkConstellations, followAddress, back, share, hintOf,

@@ -214,6 +214,7 @@ The viewer asks you to plot a course: a short voyage of films that answers what 
 
 How to choose:
 - The first film is the truest answer to the whole request. Each later film must also answer it, while varying what the request leaves open: era, country, register, scale.
+- A request may describe what happens in a film ("a heist goes wrong and the thief falls in love"). If it reads like one particular film the viewer is trying to name, and you can tell which, that film comes first; the rest match the description as closely, each in its own way.
 - Order the films so that each leg follows from the last. A viewer should feel why this film comes after that one.
 - Prefer a precise discovery to a canon default when both fit. At least two films should be ones most people have not seen.
 - Honour every hard constraint in the request (not too long, no horror, from the 1970s) on every film.

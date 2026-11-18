@@ -226,7 +226,7 @@ export function createLabels({ root, cosmos, universe, small = false, onStar, on
       const film = universe.films[i];
       let priority = (film.rn ?? 1) * 0.9 - away * 5 + (context.loved.has(i) ? 1.5 : 0) + (G[i] === UNLIT ? -2 : 0);
       if (context.highlight && !lit && !special) priority -= 30;
-      if (lit) priority += 6;
+      if (lit) priority += 6 + (context.highlight instanceof Map ? 6 * (context.highlight.get(i) || 0) : 0); // a graded set names its closest first
       if (context.rays.has(i)) priority += 100;
       if (i === context.hover || i === hoverFromLabel) priority += 150;
       if (i === context.focus) priority += 1000;

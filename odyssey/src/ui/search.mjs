@@ -6,11 +6,12 @@ import { UNLIT } from '../engine/universe.mjs';
 import { fold, seek } from '../engine/search.mjs';
 import { h, icon, replace, plural } from './dom.mjs';
 import { poster } from './posters.mjs';
+import { describedBy, describedLine } from './entrance.mjs';
 
 export function createSearchView(app) {
   const { universe, state, films, pilot, search } = app;
   const input = h('input.search-input', {
-    type: 'search', autocomplete: 'off', spellcheck: 'false', 'aria-label': 'Find a film', placeholder: 'A film, a maker, a mood…',
+    type: 'search', autocomplete: 'off', spellcheck: 'false', 'aria-label': 'Find a film', placeholder: 'A film, a maker, or describe one…',
     role: 'combobox', 'aria-autocomplete': 'list', 'aria-controls': 'find-results', 'aria-expanded': 'false',
   });
   const title = h('p.search-title');
@@ -67,7 +68,12 @@ export function createSearchView(app) {
       const found = search.films(query, 8);
       const beyond = found.filter(({ star }) => universe.isDeep(star)).length;
       const heading = pick ? 'Films' : !beyond ? 'On the chart' : beyond === found.length ? 'Found beyond the chart' : 'On the chart, and found beyond it';
+      // A description lights the films that match it: first, unless a film answers to the words themselves.
+      const described = pick ? null : describedBy(search, query);
+      const answered = found.some(({ star }) => search.answers(star, query));
+      if (described && !answered) groups.push(['Your words', [describeItem(query, described)]]);
       if (found.length) groups.push([heading, found.map(({ star }) => filmItem(star))]);
+      if (described && answered) groups.push(['Your words', [describeItem(query, described)]]);
       let kind = false;
       if (!pick) {
         const traits = search.traits(query, 4);
@@ -79,7 +85,8 @@ export function createSearchView(app) {
       }
       const exact = found.length && seek(films[found[0].star].t) === seek(query);
       // A kind of film the chart already knows is not a film to chart from memory.
-      if (query.length >= 2 && !exact && !(kind && !found.length)) groups.push(['Beyond the chart', [beyondItem(query)]]);
+      const sentence = described && query.split(/\s+/).length >= 5; // a long description is not a title to chart
+      if (query.length >= 2 && !exact && !sentence && !(kind && !found.length)) groups.push(['Beyond the chart', [beyondItem(query)]]);
     }
     const nodes = [];
     for (const [name, list] of groups) {
@@ -124,6 +131,17 @@ export function createSearchView(app) {
     };
   }
 
+  function describeItem(query, described) {
+    return {
+      kind: 'described',
+      go: () => app.describeFilm(query),
+      render: () => [
+        h('span.search-dot', { style: { '--c': '#f3dcae' } }),
+        h('span.search-text', h('span.search-name', 'Films that match your words'), h('span.search-sub', describedLine(described))),
+      ],
+    };
+  }
+
   function galaxyItem(galaxy) {
     return {
       kind: 'galaxy',
@@ -156,7 +174,7 @@ export function createSearchView(app) {
     pick = options.pick || null;
     title.textContent = options.title || '';
     title.hidden = !options.title;
-    input.placeholder = options.placeholder || 'A film, a maker, a mood…';
+    input.placeholder = options.placeholder || 'A film, a maker, or describe one…';
     input.value = options.query || '';
     active = 0;
     scrim.hidden = false;

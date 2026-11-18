@@ -10,6 +10,7 @@ import { decodeSky } from '../engine/together.mjs';
 import { h, icon, replace, plural } from './dom.mjs';
 import { poster } from './posters.mjs';
 import { source, watchLinks } from './dossier.mjs';
+import { fold } from '../engine/search.mjs';
 import { createGrip, restingHeight } from './grip.mjs';
 
 const MOODS = [
@@ -314,8 +315,9 @@ export function createPanels(app) {
   }
 
   // ── Plot a course.
-  function renderCourse() {
+  function renderCourse(data) {
     heading.textContent = 'Plot a course';
+    if (data && data.text) memo.courseText = data.text;
     const loved = [...app.marks.loved];
     const text = h('textarea.panel-input', { rows: '3', maxlength: '500', placeholder: 'What are you in the mood for?', 'aria-label': 'What are you in the mood for?' });
     text.value = memo.courseText;
@@ -385,6 +387,8 @@ export function createPanels(app) {
     }
     nodes.push(h('p.panel-note', 'Or ', h('button.quiet.quiet-first', { type: 'button', onclick: () => open('voyage') }, 'set out yourself, one door at a time')));
     replace(body, nodes);
+    // Words handed over from a description: Claude reads them at once.
+    if (data && data.go && memo.courseText.trim() && pilot.connected && !asking) plot();
   }
 
   function follow(course, stops, n) {
@@ -405,6 +409,7 @@ export function createPanels(app) {
     bend: () => 'Like this, but…',
     bearing: () => (set.id === 'live' ? 'A bearing being taken' : 'Where your choices point'),
     together: () => 'Watching together',
+    describe: () => 'Films that match your words',
   }[set.kind] || (() => 'A set of films'))();
   const setKey = set => `${set.kind}:${set.id}:${set.arm ?? ''}:${set.stars.size}:${set.light || ''}`;
 
@@ -440,6 +445,7 @@ export function createPanels(app) {
     if (memo.back && BACK_TO[memo.back]) nodes.push(h('button.panel-back', { type: 'button', onclick: () => open(memo.back) }, icon('back', 14), h('span', BACK_TO[memo.back])));
     nodes.push(h('p.set-kicker', { style: { '--c': set.colour || '#dec6a0' } }, h('span.kick-dot'), kindOf(set)));
     if (set.note) nodes.push(h('p.set-note', set.note));
+    if (set.kind === 'describe') nodes.push(...describedAs(set));
     if (set.kind === 'constellation' && !set.known) {
       const seen = [...set.stars].filter(star => app.marks.visited.has(star)).length;
       nodes.push(h('p.set-progress', h('span.pips', [...set.stars].map((star, n) => h('span.pip', { class: n < seen ? 'on' : '' }))), `${seen} of ${set.stars.size} stars visited`));
@@ -483,7 +489,7 @@ export function createPanels(app) {
     };
     nodes.push(h('div.set-rows', ranked.slice(0, list.shown).map(entry => filmRow(entry.star, {
       bodyNode: [why(entry) ? h('span.frow-shared', why(entry)) : null,
-        h('span.srow-meter', { title: set.kind === 'bend' || set.kind === 'bearing' ? `${Math.round(entry.strength * 100)}% as near as the nearest film here` : `Carries it ${Math.round(entry.strength * 100)}% as fully as the truest film here`, style: { '--w': `${Math.max(4, Math.round(entry.strength * 100))}%` } },
+        h('span.srow-meter', { title: set.kind === 'describe' ? `Matches ${Math.round(entry.strength * 100)}% as closely as the closest film here` : set.kind === 'bend' || set.kind === 'bearing' ? `${Math.round(entry.strength * 100)}% as near as the nearest film here` : `Carries it ${Math.round(entry.strength * 100)}% as fully as the truest film here`, style: { '--w': `${Math.max(4, Math.round(entry.strength * 100))}%` } },
           order === 'yours' ? h('span.srow-pull', { style: { '--w': `${Math.max(2, Math.round(entry.pull * 100))}%` } }) : null)],
       extra: badges(entry.star),
       onGo: () => go(entry.star),
@@ -495,6 +501,30 @@ export function createPanels(app) {
     if (!ranked.length) nodes.push(note(hazed ? 'Every film here is set aside, watched, or outside tonight\'s seeing.' : 'Every film here is set aside or watched.'));
     nodes.push(h('p.panel-note', h('button.quiet.quiet-first', { type: 'button', onclick: () => { app.setCurrent(null); close(); } }, 'Put the lights back')));
     replace(body, nodes);
+  }
+
+  /** How the chart read a description: each part in the words typed, with the chart's own word for it; and Claude, to read it too. */
+  function describedAs(set) {
+    const { parts, missed } = set.found;
+    const nodes = [h('p.described-kicker', 'Read as', source('chart'))];
+    nodes.push(h('div.trait-chips.described', parts.map(part => {
+      const said = part.words.split(', ')[0];
+      if (part.word) return h('span.chip.described-word', { title: 'Found in what is written about the films' }, `\u201c${said}\u201d`);
+      const record = universe.traits[part.traits[0]];
+      const named = record.t.replace(/^(?:a|an|the) /i, '');
+      const same = fold(named) === fold(said.replace(/^(?:a|an|the) /, ''));
+      return h('button.chip.tinted', {
+        type: 'button', style: { '--c': lightById(part.light).color },
+        title: `Light up every film carrying ${record.t}`, onclick: () => app.browse('trait', part.traits[0]),
+      }, same ? named : h('span', said, h('span.chip-as', ` as ${named}`)));
+    })));
+    if (missed.length) nodes.push(h('p.described-missed', `Nothing on the chart speaks of ${missed.slice(0, 3).map(word => `\u201c${word}\u201d`).join(' or ')}.`));
+    if (pilot.connected) {
+      nodes.push(h('div.panel-actions', h('button.act', { type: 'button', onclick: () => open('course', { text: set.id, go: true }) }, icon('spark', 16), h('span', 'Ask Claude to read it too'))));
+    } else if (pilot.canConnect) {
+      nodes.push(h('p.nav-off', 'With Claude connected, it reads your words itself and can reach films beyond the chart.', h('button.quiet', { type: 'button', onclick: () => open('navigator') }, 'Connect')));
+    }
+    return nodes;
   }
 
   function followTrail(set, ranked) {

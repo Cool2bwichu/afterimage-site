@@ -6,10 +6,30 @@ import { h, icon, replace, plural } from './dom.mjs';
 import { poster } from './posters.mjs';
 
 
+const DESCRIBED_DOT = '#f3dcae';
+
+/** What a few words describe, if they read as a description the chart can light: two parts or more, or one in a sentence. */
+export function describedBy(search, query) {
+  const words = query.trim().split(/\s+/).filter(Boolean);
+  if (words.length < 2) return null;
+  const found = search.describe(query, { limit: 60 });
+  if (!found.films.length) return null;
+  const known = found.parts.filter(part => !part.word).length;
+  if (found.parts.length < 2 && !(known && words.length >= 4)) return null;
+  return found;
+}
+
+/** The parts of a description, in the words typed, and how many films carry them. */
+export function describedLine(found) {
+  const said = found.parts.map(part => part.words.split(', ')[0].replace(/^(?:a|an|the) /, ''));
+  const full = found.films.filter(entry => entry.matched.length === found.parts.length).length;
+  return `${said.join(' \u00b7 ')} \u2014 ${full ? `${full} carry all of it` : 'none carries all of it'}, the closest brightest`;
+}
+
 export function createEntrance(app) {
   const { universe, state, films, search, store } = app;
   const input = h('input.enter-input', {
-    type: 'search', autocomplete: 'off', spellcheck: 'false', placeholder: 'Name a film that stayed with you', 'aria-label': 'Name a film that stayed with you',
+    type: 'search', autocomplete: 'off', spellcheck: 'false', placeholder: 'Name a film, or describe one', 'aria-label': 'Name a film, or describe one',
     role: 'combobox', 'aria-autocomplete': 'list', 'aria-controls': 'enter-suggestions', 'aria-expanded': 'false',
   });
   const suggestions = h('div.enter-suggestions', { role: 'listbox', id: 'enter-suggestions', 'aria-label': 'Suggestions' });
@@ -43,15 +63,23 @@ export function createEntrance(app) {
     items = query ? search.films(query, 5).map(entry => entry.star) : [];
     // A kind of film ("heist", "western") lights up every film of that kind.
     const currents = query.length >= 2 ? search.traits(query, 2).filter(entry => entry.score >= 3 || (!items.length && entry.score >= 2)) : [];
+    // A description ("a heist goes wrong and the thief falls in love") lights the films that match it.
+    const described = describedBy(search, query);
+    const answered = items.some(star => search.answers(star, query));
     let n = 0;
     const option = (cls, onclick, ...children) => {
       const at = n;
       n += 1;
       return h(`button.enter-suggestion${cls}`, { type: 'button', role: 'option', id: `enter-option-${at}`, onclick, onpointerenter: () => setActive(at) }, ...children);
     };
-    const nodes = items.map(star => option('', () => begin(() => app.focusStar(star)),
+    const describeNode = () => option('.described', () => begin(() => app.describeFilm(query)),
+      h('span.search-dot', { style: { '--c': DESCRIBED_DOT } }),
+      h('span.search-text', h('span.search-name', 'Films that match your words'), h('span.search-sub', describedLine(described))));
+    const nodes = described && !answered ? [describeNode()] : [];
+    nodes.push(...items.map(star => option('', () => begin(() => app.focusStar(star)),
       h('span.search-poster', poster(films[star], { words: false })),
-      h('span.search-text', h('span.search-name', films[star].t, h('span.frow-year', String(films[star].y))), h('span.search-sub', films[star].d || ''))));
+      h('span.search-text', h('span.search-name', films[star].t, h('span.frow-year', String(films[star].y))), h('span.search-sub', films[star].d || '')))));
+    if (described && answered) nodes.push(describeNode());
     for (const { trait } of currents) {
       const record = universe.traits[trait];
       const light = lightById(LIGHT_IDS[record.l]);
@@ -61,7 +89,9 @@ export function createEntrance(app) {
     }
     // Offered only when nothing found already answers to what was typed.
     const kind = currents.some(entry => entry.score >= 3);
-    if (query.length >= 2 && seek(query) && !kind && !items.some(star => search.answers(star, query))) {
+    // A long description is not a title to chart.
+    const sentence = described && query.trim().split(/\s+/).length >= 5;
+    if (query.length >= 2 && seek(query) && !kind && !sentence && !answered) {
       nodes.push(option('.beyond', () => begin(() => { if (app.pilot.connected) app.chartFilm(query); else app.searchView.open({ query }); }),
         h('span.search-dot.spark', icon('spark', 18)),
         h('span.search-text', h('span.search-name', `Chart “${query}”`), h('span.search-sub', app.pilot.connected
