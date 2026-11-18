@@ -10,6 +10,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadAtlas } from './lib/load.mjs';
+import { addRemembered, rememberedRecord } from './lib/remembered.mjs';
 import { buildModel, LINK_TYPES, LINK_SOURCES } from './lib/model.mjs';
 import { formGalaxies } from './lib/galaxies.mjs';
 import { layoutSky } from './lib/layout.mjs';
@@ -66,10 +67,13 @@ const directorName = name => (/^Q\d+$/.test(name || '') ? DIRECTORS[name] || '' 
 export function compileUniverse(root) {
   const started = Date.now();
   const atlas = loadAtlas(root);
-  const { count, extracted, packed, links, model } = buildModel(atlas);
+  // The loved films the atlas does not hold, charted by Claude from memory.
+  const remembered = addRemembered(atlas);
+  const { count, extracted, packed, links, model, corrected, memory } = buildModel(atlas);
   const { films } = atlas;
   const traits = packed.traits;
-  log(`films ${count} · traits ${traits.length} · drawn lines ${links.length} · ${Date.now() - started} ms`);
+  log(`films ${count} (${remembered} charted from memory) · traits ${traits.length} · drawn lines ${links.length} · ${corrected.dropped} slips put right in ${corrected.films} films · ${Date.now() - started} ms`);
+  if (memory.missed.length) log(`  tags no trait answered to: ${[...new Set(memory.missed)].slice(0, 20).join('; ')}${memory.missed.length > 20 ? ' …' : ''}`);
 
   // ── Each light's sky: galaxies, arms, positions.
   const positions = {};
@@ -160,6 +164,8 @@ export function compileUniverse(root) {
       hi: film.hi,
       lo: film.lo,
     };
+    if (film.cut) record.cut = 1;
+    if (film.remembered) Object.assign(record, rememberedRecord(film));
     if (film.runtime) record.rt = Math.round(film.runtime);
     const countries = film.country.map(q => atlas.label(q)).filter(Boolean).slice(0, 3);
     if (countries.length) record.c = countries;

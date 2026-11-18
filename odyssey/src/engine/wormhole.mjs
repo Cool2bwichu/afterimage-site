@@ -48,7 +48,7 @@ export function wormholes(universe, star, { exclude = null, k = 2 } = {}) {
   const white = model.scores('white', star);
   const found = new Map();
   for (const light of WORMHOLE_LIGHTS) {
-    const near = model.neighbours(light, star, NEAR, j => j < base && j !== star && !(exclude && exclude.has(j)));
+    const near = model.neighbours(light, star, NEAR, j => j < base && j !== star && !(exclude && exclude.has(j)) && !universe.films[j].cut);
     const top = near[0]?.sim || 1;
     for (const { i: j, sim } of near) {
       if (G[j] === G[star] || G[j] === 255) continue; // another galaxy, and a charted one

@@ -82,8 +82,10 @@ export function createApp({ root, universe, depth, deepen = () => Promise.reject
   let seeing = store.state.seeing && store.state.seeing.night === nightOf() ? cleanSeeing(store.state.seeing) : cleanSeeing(CLEAR_SKY);
   let haze = hazeOf(universe, seeing);
   // Films never offered as somewhere to go next: the ones set aside, the ones already watched, and tonight's haze.
+  // Re-edits of films the chart already holds are never offered either.
+  const recuts = universe.films.flatMap((film, i) => (film.cut ? [i] : []));
   let notFor = new Set();
-  const excluding = () => { notFor = new Set([...marks.hidden, ...marks.seen, ...haze]); };
+  const excluding = () => { notFor = new Set([...marks.hidden, ...marks.seen, ...haze, ...recuts]); };
   excluding();
 
   const app = {

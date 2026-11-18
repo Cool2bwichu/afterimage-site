@@ -2,6 +2,8 @@
 // traits under each light, their fortune curves, the lines ATLAS already drew
 // between them, and the likeness model built from all of it.
 import { extractFeatures, packFeatures } from './features.mjs';
+import { correctAtlas, correctFeatures } from '../authored/corrections.mjs';
+import { rememberedRows } from './remembered.mjs';
 import { createModel } from '../../src/engine/universe.mjs';
 import { standardise } from '../../src/engine/similarity.mjs';
 
@@ -40,7 +42,12 @@ export function drawnLinks(atlas) {
 
 export function buildModel(atlas) {
   const count = atlas.films.length;
+  // Slips in the record are put right before anything is drawn from it.
+  const corrected = correctAtlas(atlas);
   const extracted = extractFeatures(atlas);
+  const dropped = correctFeatures(extracted, corrected);
+  // Films charted from memory take their traits from their readings.
+  const memory = rememberedRows(extracted, atlas);
   const packed = packFeatures(extracted, count);
   const curves = extracted.stories.map(story => (story ? standardise(story.curve) : null));
   const links = drawnLinks(atlas);
@@ -51,5 +58,5 @@ export function buildModel(atlas) {
     curves,
     links: links.map(link => [link.a, link.b, link.strength]),
   });
-  return { count, extracted, packed, curves, links, model };
+  return { count, extracted, packed, curves, links, model, corrected: { films: corrected.size, dropped }, memory };
 }
